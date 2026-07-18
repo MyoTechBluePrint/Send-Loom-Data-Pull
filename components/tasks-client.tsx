@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Shell, GhostButton } from "@/components/shell";
+import { Shell } from "@/components/shell";
 import { Card, CardHeader } from "@/components/ui";
 import type { SalesTask } from "@/lib/data";
 
@@ -37,6 +37,29 @@ export function TasksClient({ tasks }: { tasks: SalesTask[] }) {
     }
   }
 
+  const [sheetFlash, setSheetFlash] = useState<string | null>(null);
+
+  async function copyTaskSheet(mode: "call_sheet" | "whatsapp") {
+    const res = await fetch("/api/packs", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: `Open tasks ${new Date().toLocaleDateString("en-GB")}`, from: "tasks" }),
+    });
+    const json = await res.json();
+    if (!json.ok) { setSheetFlash(json.error ?? "No linked contacts on open tasks yet"); return; }
+    const r = await fetch(`/api/packs/${json.id}/render`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode }),
+    });
+    const j = await r.json();
+    if (j.ok) {
+      await navigator.clipboard.writeText(j.text);
+      setSheetFlash(`Copied ${mode === "call_sheet" ? "call sheet" : "WhatsApp list"} · ${j.count} contacts · saved as pack`);
+      setTimeout(() => setSheetFlash(null), 3500);
+    } else {
+      setSheetFlash(j.error);
+    }
+  }
+
   async function remove(id: string) {
     await fetch(`/api/tasks/${id}`, { method: "DELETE" });
     router.refresh();
@@ -63,13 +86,17 @@ export function TasksClient({ tasks }: { tasks: SalesTask[] }) {
       subtitle="Live from the database · created manually or by automation nodes"
       actions={
         <>
-          <GhostButton>Filter: All assignees ▾</GhostButton>
+          <button onClick={() => copyTaskSheet("call_sheet")} className="rounded-lg border border-line bg-surface px-3.5 py-2 text-[13px] font-semibold text-ink-2 hover:bg-[#f0efec]">Copy call sheet</button>
+          <button onClick={() => copyTaskSheet("whatsapp")} className="rounded-lg border border-line bg-surface px-3.5 py-2 text-[13px] font-semibold text-ink-2 hover:bg-[#f0efec]">Copy WhatsApp list</button>
           <button onClick={() => setCreating(true)} className="rounded-lg bg-[#6d28d9] px-3.5 py-2 text-[13px] font-semibold text-white shadow-sm hover:bg-[#5b21b6]">
             New task
           </button>
         </>
       }
     >
+      {sheetFlash && (
+        <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{sheetFlash}</div>
+      )}
       {creating && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setCreating(false)}>
           <form onSubmit={createTask} onClick={(e) => e.stopPropagation()} className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl">

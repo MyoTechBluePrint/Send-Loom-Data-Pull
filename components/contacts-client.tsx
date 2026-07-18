@@ -35,6 +35,58 @@ export function ContactsClient({ contacts }: { contacts: Subscriber[] }) {
     }
   }
   const [filter, setFilter] = useState<(typeof filters)[number]>("All");
+  const [selected, setSelected] = useState<string[]>([]);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [flash, setFlash] = useState<string | null>(null);
+
+  function toggleSelect(id: string) {
+    setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+  }
+
+  async function bulk(action: "add_tag" | "create_task" | "suppress") {
+    let tag: string | undefined, taskType: string | undefined;
+    if (action === "add_tag") { tag = window.prompt("Tag to add") ?? undefined; if (!tag) return; }
+    if (action === "create_task") { taskType = window.prompt("Task type", "Call lead") ?? undefined; if (!taskType) return; }
+    if (action === "suppress" && !window.confirm(`Suppress ${selected.length} contacts? They are excluded from all sending (reversible via consent, never hard-deleted).`)) return;
+    setBulkBusy(true);
+    try {
+      const res = await fetch("/api/contacts/bulk", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contactIds: selected, action, tag, taskType }),
+      });
+      const json = await res.json();
+      if (json.ok) { setFlash(`Done: ${json.affected} contacts affected`); setSelected([]); router.refresh(); }
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  async function createPackFromSelection() {
+    const name = window.prompt("Pack name", "Selected contacts");
+    if (!name) return;
+    setBulkBusy(true);
+    try {
+      const res = await fetch("/api/packs", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, from: "contacts", contactIds: selected }),
+      });
+      const json = await res.json();
+      if (json.ok) window.location.href = `/packs/${json.id}`;
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  async function copySelectedEmails() {
+    const emails = contacts.filter((c) => selected.includes(c.id) && c.email.includes("@")).map((c) => c.email);
+    await navigator.clipboard.writeText(emails.join(", "));
+    fetch("/api/exports/log", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dataType: "contacts", source: "Contacts selection", format: "emails", contacts: emails.length, notes: "quick copy (suppression-filtered at table level only)" }),
+    });
+    setFlash(`Copied ${emails.length} emails`);
+    setTimeout(() => setFlash(null), 2500);
+  }
 
   const rows = useMemo(
     () =>
@@ -112,10 +164,32 @@ export function ContactsClient({ contacts }: { contacts: Subscriber[] }) {
         </div>
       </div>
 
+      {flash && (
+        <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800">{flash}</div>
+      )}
+      {selected.length > 0 && (
+        <div className="sticky top-20 z-20 mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-brand bg-white px-4 py-2.5 shadow-lg">
+          <span className="text-[13px] font-bold text-brand">{selected.length} selected</span>
+          <button disabled={bulkBusy} onClick={createPackFromSelection} className="rounded-lg bg-brand px-3 py-1.5 text-xs font-bold text-white hover:bg-[#5b21b6] disabled:opacity-50">Create Contact Pack</button>
+          <button disabled={bulkBusy} onClick={copySelectedEmails} className="rounded-lg bg-brand-soft px-3 py-1.5 text-xs font-bold text-brand hover:bg-[#ece2fa] disabled:opacity-50">Copy emails</button>
+          <button disabled={bulkBusy} onClick={() => bulk("add_tag")} className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink-2 hover:bg-[#f0efec] disabled:opacity-50">Add tag</button>
+          <button disabled={bulkBusy} onClick={() => bulk("create_task")} className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink-2 hover:bg-[#f0efec] disabled:opacity-50">Create tasks</button>
+          <button disabled={bulkBusy} onClick={() => bulk("suppress")} className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-100 disabled:opacity-50">Suppress</button>
+          <button onClick={() => setSelected([])} className="ml-auto text-xs font-semibold text-ink-3 hover:text-foreground">Clear</button>
+        </div>
+      )}
       <Card>
         <div className="overflow-x-auto scroll-thin"><table className="w-full min-w-[900px]">
           <thead className="border-b border-line">
             <tr>
+              <Th className="w-8">
+                <input
+                  type="checkbox"
+                  checked={rows.length > 0 && rows.every((r) => selected.includes(r.id))}
+                  onChange={(e) => setSelected(e.target.checked ? rows.map((r) => r.id) : [])}
+                  className="h-3.5 w-3.5 accent-[#6d28d9]"
+                />
+              </Th>
               <Th>Contact</Th>
               <Th>Consent</Th>
               <Th className="text-right">Score</Th>
@@ -129,6 +203,9 @@ export function ContactsClient({ contacts }: { contacts: Subscriber[] }) {
           <tbody className="divide-y divide-line">
             {rows.map((s) => (
               <tr key={s.id} className="hover:bg-[#fafaf8]">
+                <Td>
+                  <input type="checkbox" checked={selected.includes(s.id)} onChange={() => toggleSelect(s.id)} className="h-3.5 w-3.5 accent-[#6d28d9]" />
+                </Td>
                 <Td>
                   <Link href={`/subscribers/${s.id}`} className="font-medium hover:text-brand">{s.name}</Link>
                   <p className="text-xs text-ink-3">{s.email}</p>
@@ -156,7 +233,7 @@ export function ContactsClient({ contacts }: { contacts: Subscriber[] }) {
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-10 text-center text-sm text-ink-3">No contacts match.</td>
+                <td colSpan={9} className="px-4 py-10 text-center text-sm text-ink-3">No contacts match.</td>
               </tr>
             )}
           </tbody>

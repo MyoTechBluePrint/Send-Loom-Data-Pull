@@ -61,6 +61,32 @@ export function SegmentsClient({ segments }: { segments: Segment[] }) {
     return () => clearTimeout(t);
   }, [building, match, conditions]);
 
+  const [packFlash, setPackFlash] = useState<string | null>(null);
+
+  async function packFromAudience(id: string, name: string, copyEmails: boolean) {
+    const res = await fetch("/api/packs", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: `${name} pack`, from: "segment", segmentId: id }),
+    });
+    const json = await res.json();
+    if (!json.ok) { setPackFlash(json.error ?? "Failed"); return; }
+    if (copyEmails) {
+      const r = await fetch(`/api/packs/${json.id}/render`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "emails" }),
+      });
+      const j = await r.json();
+      if (j.ok) {
+        await navigator.clipboard.writeText(j.text);
+        setPackFlash(`Copied ${j.count} emails · pack saved`);
+        setTimeout(() => setPackFlash(null), 3000);
+        router.refresh();
+        return;
+      }
+    }
+    window.location.href = `/packs/${json.id}`;
+  }
+
   async function renameAudience(id: string, current: string) {
     const name = window.prompt("Rename audience", current);
     if (!name || name === current) return;
@@ -98,6 +124,9 @@ export function SegmentsClient({ segments }: { segments: Segment[] }) {
       subtitle="Dynamic audiences evaluated against the live contact database"
       actions={<PrimaryButton>New segment</PrimaryButton>}
     >
+      {packFlash && (
+        <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{packFlash}</div>
+      )}
       {saved && !building && (
         <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
           Audience saved and computed against the contact database.
@@ -136,10 +165,12 @@ export function SegmentsClient({ segments }: { segments: Segment[] }) {
                       <p className="mt-0.5 text-[13px] font-semibold">{play.campaign}</p>
                     </div>
                   </div>
-                  <div className="mt-3 flex items-center gap-2">
+                  <div className="mt-3 flex flex-wrap items-center gap-1.5">
                     <Link href="/campaigns/new" className="flex-1 rounded-lg bg-brand-soft px-3 py-1.5 text-center text-xs font-bold text-brand hover:bg-[#ece2fa]">
-                      Create campaign →
+                      Campaign →
                     </Link>
+                    <button onClick={() => packFromAudience(s.id, s.name, false)} className="rounded-lg border border-line px-2 py-1.5 text-[11px] font-semibold text-ink-2 hover:bg-[#f0efec]" title="Create Contact Pack">Pack</button>
+                    <button onClick={() => packFromAudience(s.id, s.name, true)} className="rounded-lg border border-line px-2 py-1.5 text-[11px] font-semibold text-ink-2 hover:bg-[#f0efec]" title="Copy emails (creates a pack + logs the export)">Copy ✉</button>
                     <button onClick={() => renameAudience(s.id, s.name)} className="rounded-lg border border-line px-2 py-1.5 text-[11px] font-semibold text-ink-2 hover:bg-[#f0efec]" title="Rename">Rename</button>
                     <button onClick={() => deleteAudience(s.id, s.name)} className="rounded-lg border border-line px-2 py-1.5 text-[11px] font-semibold text-ink-3 hover:bg-red-50 hover:text-red-700" title="Delete">✕</button>
                   </div>

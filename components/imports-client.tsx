@@ -2,6 +2,7 @@
 
 // Data Upload Centre. The wizard drives the real import pipeline:
 // POST /api/imports → review → confirm. Nothing here is simulated.
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Shell, GhostButton } from "@/components/shell";
@@ -399,6 +400,22 @@ export function ImportsClient({ batches }: { batches: ImportBatch[] }) {
                 <p className="mt-1 text-sm text-ink-2">
                   {result.imported} contacts created · {result.merged} merged · {result.skipped} skipped · {result.blocked} blocked
                 </p>
+                <div className="mt-4 flex flex-wrap justify-center gap-2">
+                  <Link href="/subscribers" className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink-2 hover:bg-[#f0efec]">View contacts</Link>
+                  <button
+                    onClick={async () => {
+                      const res = await fetch("/api/packs", {
+                        method: "POST", headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ name: "Latest import pack", from: "batch", batchId }),
+                      });
+                      const json = await res.json();
+                      if (json.ok) window.location.href = `/packs/${json.id}`;
+                    }}
+                    className="rounded-lg bg-brand-soft px-3 py-1.5 text-xs font-bold text-brand hover:bg-[#ece2fa]"
+                  >
+                    Create Contact Pack
+                  </button>
+                </div>
                 {result.segmentId && (
                   <p className="mx-auto mt-4 max-w-sm rounded-lg bg-brand-soft px-3 py-2 text-xs font-semibold text-brand">
                     Audience created from this batch · usable in campaigns now

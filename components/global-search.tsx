@@ -65,6 +65,18 @@ export function GlobalSearch() {
     }
   }
 
+  async function packFromSearch() {
+    const res = await fetch("/api/packs", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: `Search: ${q}`, from: "search", query: q }),
+    });
+    const json = await res.json();
+    if (json.ok) {
+      setOpen(false);
+      router.push(`/packs/${json.id}`);
+    }
+  }
+
   if (!open) return null;
 
   return (
@@ -115,6 +127,13 @@ export function GlobalSearch() {
             })()
           )}
         </div>
+        {groups.some((g) => g.label === "Contacts") && (
+          <div className="border-t border-line px-4 py-2.5">
+            <button onClick={packFromSearch} className="w-full rounded-lg bg-brand-soft px-3 py-2 text-xs font-bold text-brand hover:bg-[#ece2fa]">
+              Create Contact Pack from everyone matching "{q}" →
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
