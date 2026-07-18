@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { authenticateStore, unauthorized } from "@/lib/server/apiAuth";
-import { eventIngestionService, rejectEvent } from "@/lib/server/events";
+import { rejectEvent, type IncomingEvent } from "@/lib/server/events";
+import { enqueue } from "@/lib/server/queue";
 
 const EVENT_TYPES = [
   "product_viewed", "category_viewed", "search", "cart_add", "cart_remove",
@@ -32,20 +33,18 @@ export async function POST(req: NextRequest) {
   }
 
   const events = "events" in parsed.data ? parsed.data.events : [parsed.data];
-  const results = [];
   for (const e of events) {
-    results.push(
-      await eventIngestionService.process({
-        workspaceId: store.workspaceId,
-        storeId: store.id,
-        type: e.type,
-        email: e.email,
-        anonymousId: e.anonymousId,
-        payload: e.payload,
-        occurredAt: e.occurredAt ? new Date(e.occurredAt) : undefined,
-      })
-    );
+    const payload: IncomingEvent = {
+      workspaceId: store.workspaceId,
+      storeId: store.id,
+      type: e.type,
+      email: e.email,
+      anonymousId: e.anonymousId,
+      payload: e.payload,
+      occurredAt: e.occurredAt ? new Date(e.occurredAt) : undefined,
+    };
+    await enqueue({ name: "event.ingest", payload });
   }
 
-  return Response.json({ ok: true, processed: results.length, results });
+  return Response.json({ ok: true, accepted: events.length });
 }

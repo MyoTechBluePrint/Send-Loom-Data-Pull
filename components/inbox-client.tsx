@@ -156,8 +156,8 @@ export function InboxClient({ items }: { items: IntakeItemView[] }) {
               ["⇪", "File upload (CSV)", "Live · Data Uploads", "text-emerald-700"],
               ["▤", "Forms & quizzes", "Live", "text-emerald-700"],
               ["↯", "API / webhook", "Live · /api/v1/events", "text-emerald-700"],
-              ["◎", "WhatsApp forwarding number", "Planned · concept", "text-ink-3"],
-              ["✉", "Email-in address", "Planned · concept", "text-ink-3"],
+              ["◎", "WhatsApp relay webhook", "Endpoint live · number pending", "text-emerald-700"],
+              ["✉", "Email-in relay webhook", "Endpoint live · address pending", "text-emerald-700"],
             ].map(([icon, label, state, tone]) => (
               <li key={label as string} className="flex items-center justify-between px-5 py-2.5">
                 <span className="flex items-center gap-2.5 font-medium"><span className="w-6 text-center text-ink-3">{icon}</span>{label}</span>

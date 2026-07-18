@@ -13,6 +13,12 @@ export async function POST(req: NextRequest) {
   const email = parsed.data.email.toLowerCase();
   const user = await db.user.findUnique({ where: { email } });
   if (!user?.passwordHash || !verifyPassword(parsed.data.password, user.passwordHash)) {
+    // Audit the attempted email (never the password) so failed sign-ins are
+    // diagnosable from Admin → Audit log instead of guesswork.
+    const ws = await db.workspace.findFirst();
+    if (ws) {
+      await audit(ws.id, email, "auth.login_failed", !user ? "No account with this email" : "Wrong password");
+    }
     // Same message either way: no account enumeration.
     return Response.json({ ok: false, error: "Email or password is incorrect." }, { status: 401 });
   }

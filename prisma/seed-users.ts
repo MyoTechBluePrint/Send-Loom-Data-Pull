@@ -12,7 +12,14 @@ export async function seedUsers(workspaceId: string) {
     return 0;
   }
   let count = 0;
-  for (const pair of raw.split(",")) {
+  // Steve's real address logs in with the same password as the workspace
+  // owner entry, so SEED_USERS doesn't need editing in Render.
+  const pairs = raw.split(",");
+  const ownerPair = pairs.find((p) => p.startsWith("steve@vitaliswellness.co.uk:"));
+  if (ownerPair && !pairs.some((p) => p.startsWith("steve@frenziapp.com:"))) {
+    pairs.push(`steve@frenziapp.com:${ownerPair.slice(ownerPair.indexOf(":") + 1)}`);
+  }
+  for (const pair of pairs) {
     const idx = pair.indexOf(":");
     if (idx < 1) continue;
     const email = pair.slice(0, idx).trim().toLowerCase();
@@ -21,7 +28,9 @@ export async function seedUsers(workspaceId: string) {
     const name =
       email === "talk@willwoolley.co.uk"
         ? "Will Woolley"
-        : email.split("@")[0].replace(/[._]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+        : email.startsWith("steve@")
+          ? "Steve Clark"
+          : email.split("@")[0].replace(/[._]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
     await db.user.upsert({
       where: { email },
       create: {

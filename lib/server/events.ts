@@ -5,6 +5,7 @@
 import { db } from "./db";
 import { audit } from "./audit";
 import { recomputeLeadScore } from "./scoring";
+import { registerHandler } from "./queue";
 
 export type IncomingEvent = {
   workspaceId: string;
@@ -146,3 +147,9 @@ async function applyOrderRollup(contactId: string, payload: Record<string, unkno
 export async function rejectEvent(workspaceId: string, reason: string, raw: unknown) {
   await audit(workspaceId, "system", "event.rejected", `${reason} · ${JSON.stringify(raw).slice(0, 300)}`);
 }
+
+// Queue registration: callers enqueue "event.ingest" jobs; the queue decides
+// execution. Registered at module load so any importer wires the handler.
+registerHandler<IncomingEvent>("event.ingest", async (payload) => {
+  await eventIngestionService.process(payload);
+});
