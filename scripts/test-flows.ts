@@ -6,6 +6,7 @@ import { createBatchFromCsv, reviewBatch, confirmBatch, detectMapping } from "..
 import { eventIngestionService } from "../lib/server/events";
 import { recomputeLeadScore } from "../lib/server/scoring";
 import { evaluateSegment } from "../lib/server/segments";
+import { createIntakeFromText, approveRecord } from "../lib/server/extract";
 
 let passed = 0;
 let failed = 0;
@@ -125,6 +126,28 @@ async function main() {
     { field: "Lead score", operator: "is at least", value: "50", exclude: true },
   ]);
   check("exclusion rules subtract", segExcl.count < seg.count, `${segExcl.count} vs ${seg.count}`);
+
+  console.log("Universal Inbox extraction + approval");
+  const intake = await createIntakeFromText({
+    workspaceId: ws.id, kind: "whatsapp", actor: "test-script",
+    text: `Tessa Vine +44 7700 900${STAMP.slice(-3)} asked about NAD+ and a consultation. Call tomorrow.`,
+  });
+  check("one record extracted", intake.records.length === 1);
+  const rec = intake.records[0];
+  const f = JSON.parse(rec.fields);
+  check("name, phone, interests, task all found", f.name === "Tessa Vine" && !!f.phone && f.interests.includes("nad+") && !!f.taskNote);
+
+  const approval = await approveRecord(rec.id, "test-script");
+  check("approval created a contact", !!approval.contactId);
+  check("approval created a sales task", !!approval.taskId);
+  const tessa = await db.contact.findUnique({
+    where: { id: approval.contactId! },
+    include: { sources: true, consents: true, tags: { include: { tag: true } } },
+  });
+  check("phone-only contact allowed (no email)", tessa?.email === null);
+  check("intake source appended", tessa?.sources.some((s) => s.sourceType === "whatsapp") ?? false);
+  check("consent held pending, not granted", tessa?.consents.every((c) => c.status === "pending") ?? false);
+  check("interest tags applied", (tessa?.tags.length ?? 0) >= 1);
 
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);

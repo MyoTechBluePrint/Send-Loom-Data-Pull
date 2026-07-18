@@ -21,7 +21,7 @@ const EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
 const PHONE_RE = /(\+?\d[\d\s\-().]{7,}\d)/;
 const TASK_RE = /\b(call|ring|phone|follow up|book|send (?:a )?quote|whatsapp|email) (?:her|him|them|back)?\b[^.\n]*/i;
 const DUE_RE = /\b(today|tomorrow|tonight|this week|next week|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i;
-const STOPWORDS = new Set(["asked", "about", "call", "and", "the", "for", "wants", "interested", "in", "re", "hi", "hello", "from", "please", "can", "you"]);
+const STOPWORDS = new Set(["asked", "about", "call", "and", "the", "for", "wants", "interested", "in", "re", "hi", "hello", "from", "please", "can", "you", "walk-in", "enquiry", "note", "urgent"]);
 
 // Baseline interest dictionary; workspace keywords are merged in at runtime.
 const BASE_INTERESTS = [
@@ -38,14 +38,23 @@ async function interestDictionary(workspaceId: string): Promise<string[]> {
 }
 
 function guessName(text: string, email?: string, phone?: string): string | undefined {
-  // Look in the first line before the first identifier for 1-3 capitalised words.
+  // Look in the first line before the first identifier for capitalised words.
   let head = text.split("\n")[0];
   if (phone) head = head.split(phone)[0];
   if (email) head = head.split(email)[0];
-  const words = head
-    .replace(/[^\p{L}\s'-]/gu, " ")
-    .split(/\s+/)
-    .filter((w) => w.length > 1 && /^\p{Lu}/u.test(w) && !STOPWORDS.has(w.toLowerCase()));
+  const tokens = head.replace(/[^\p{L}\s'-]/gu, " ").split(/\s+/).filter(Boolean);
+  const isNameWord = (w: string) => w.length > 1 && /^\p{Lu}/u.test(w) && !STOPWORDS.has(w.toLowerCase());
+
+  // Prefer the run of capitalised words directly before the identifier
+  // ("Ben said his colleague Priya Nair <email>" → "Priya Nair").
+  const trailing: string[] = [];
+  for (let i = tokens.length - 1; i >= 0 && trailing.length < 3; i--) {
+    if (isNameWord(tokens[i])) trailing.unshift(tokens[i]);
+    else break;
+  }
+  if (trailing.length > 0) return trailing.join(" ");
+
+  const words = tokens.filter(isNameWord);
   if (words.length === 0) return undefined;
   return words.slice(0, 3).join(" ");
 }
@@ -63,8 +72,14 @@ export function extractFromText(text: string, dictionary: string[]): ExtractedFi
     }
   }
 
-  const taskMatch = text.match(TASK_RE)?.[0]?.trim();
-  const due = text.match(DUE_RE)?.[0];
+  // Task verbs preceded by a negation ("no email given") are not tasks.
+  let taskMatch: string | undefined;
+  const taskExec = TASK_RE.exec(text);
+  if (taskExec) {
+    const before = text.slice(Math.max(0, taskExec.index - 12), taskExec.index).toLowerCase();
+    if (!/\b(no|not|don't|dont|without)\s*$/.test(before)) taskMatch = taskExec[0].trim();
+  }
+  const due = taskMatch ? text.match(DUE_RE)?.[0] : undefined;
 
   return {
     name, email, phone,

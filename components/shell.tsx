@@ -95,6 +95,11 @@ export function Shell({ children, title, subtitle, actions }: { children: ReactN
       </aside>
 
       <div className="ml-60 flex-1">
+        <div className="flex items-center justify-center gap-2 bg-[#14121f] px-4 py-1.5 text-center text-[11px] font-medium text-white/80">
+          <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+          Staging demo · Vitalis seeded workspace · imports and pastes write real records
+          <Link href="/demo-notes" className="font-bold text-white underline underline-offset-2 hover:text-amber-200">What to try →</Link>
+        </div>
         <header className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-[rgba(247,247,245,0.85)] px-8 py-4 backdrop-blur max-xl:px-5">
           <div className="min-w-0">
             <h1 className="text-lg font-semibold tracking-tight">{title}</h1>

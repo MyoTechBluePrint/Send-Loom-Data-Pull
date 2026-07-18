@@ -66,6 +66,20 @@ global search) · S3 (imports, template assets) · SES default sending · OAuth2
 Stripe billing. Targets: 100k+ contacts per store, millions of events, <5s event-to-
 timeline latency, queue-based sending with per-domain throttling and reputation guards.
 
+## Universal Inbox (intake) flow
+
+Data arrives (paste / WhatsApp forward / email forward / note / file / form /
+api) → **IntakeItem** created with the raw payload preserved → extraction runs
+(deterministic rules; `lib/server/extract.ts`) → **ExtractedRecord**(s) with
+per-record confidence and duplicate detection → human review in /inbox →
+approve creates or merges a **Contact**, appends **ContactSource**, writes a
+*pending* **ConsentRecord** (intake never grants marketing consent), applies
+interest **Tags**, optionally creates a **SalesTask**, adds a **TimelineItem**,
+recomputes **LeadScore**, and writes **AuditLog** entries. Reject leaves only
+the intake trail. Planned entities for real channel ingestion: IntakeSource
+(forwarding addresses/numbers), IntakeAttachment, ExtractionJob (queue worker)
+— currently extraction runs inline, same seam as event ingestion.
+
 ## Build layers (agreed order)
 
 1. Import pipeline + source/consent ledger + contact DB + timelines

@@ -13,10 +13,11 @@ const provChip: Record<string, string> = {
 };
 
 export default async function AdminPage() {
-  const [providers, audit, batches] = await Promise.all([
+  const [providers, audit, batches, pendingIntake] = await Promise.all([
     getProvidersView(),
     getAuditView(),
     getImportBatchesView(),
+    (await import("@/lib/server/db")).db.intakeItem.count({ where: { status: { in: ["review", "partial"] } } }),
   ]);
   const risky = batches.filter((b) => b.status === "blocked" || b.status === "needs review");
 
@@ -31,7 +32,7 @@ export default async function AdminPage() {
           ["Import batches", String(batches.length), `${num(batches.reduce((s, b) => s + b.total, 0))} rows processed`],
           ["Blocked rows", num(batches.reduce((s, b) => s + b.blocked, 0)), "suppression + consent gates"],
           ["Providers healthy", `${providers.filter((p) => p.status === "healthy").length} / ${providers.length}`, providers.find((p) => p.status === "error") ? `${providers.find((p) => p.status === "error")!.name} needs re-auth` : "all connections OK"],
-          ["Risk queue", String(risky.length), "imports awaiting operator review"],
+          ["Risk queue", String(risky.length + pendingIntake), `${risky.length} imports · ${pendingIntake} inbox items awaiting review`],
         ].map(([k, v, d]) => (
           <Card key={k} className="px-5 py-4">
             <p className="text-xs font-medium text-ink-3">{k}</p>

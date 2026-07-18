@@ -6,7 +6,11 @@ import { db } from "../lib/server/db";
 async function main() {
   const workspaces = await db.workspace.count();
   if (workspaces > 0) {
-    console.log(`Database already seeded (${workspaces} workspace). Skipping.`);
+    console.log(`Database already seeded (${workspaces} workspace).`);
+    // Feature top-ups for databases seeded before newer features shipped.
+    const ws = await db.workspace.findFirstOrThrow();
+    const { seedIntake } = await import("../prisma/seed-intake");
+    await seedIntake(ws.id);
     return;
   }
   console.log("Empty database detected. Seeding demo workspace…");

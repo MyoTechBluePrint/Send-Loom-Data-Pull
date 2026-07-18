@@ -312,6 +312,9 @@ async function main() {
     await db.auditLog.create({ data: { workspaceId: ws.id, actorLabel, action, detail } });
   }
 
+  const { seedIntake } = await import("./seed-intake");
+  await seedIntake(ws.id);
+
   console.log("Seed complete.");
   console.log(`Workspace: ${ws.id}`);
   console.log(`Store API key: ${DEMO_API_KEY}`);
