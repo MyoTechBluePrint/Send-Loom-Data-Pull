@@ -8,6 +8,7 @@ function LoginForm() {
   const params = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -18,7 +19,7 @@ function LoginForm() {
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, rememberMe }),
       });
       const json = await res.json();
       if (!json.ok) {
@@ -63,6 +64,10 @@ function LoginForm() {
               autoComplete="current-password"
               className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand"
             />
+          </label>
+          <label className="mt-3 flex cursor-pointer items-center gap-2 text-xs text-ink-2">
+            <input type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} className="h-3.5 w-3.5 accent-[#6d28d9]" />
+            Keep me signed in for 30 days
           </label>
           <button
             type="submit" disabled={busy}

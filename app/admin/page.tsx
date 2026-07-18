@@ -13,11 +13,13 @@ const provChip: Record<string, string> = {
 };
 
 export default async function AdminPage() {
-  const [providers, audit, batches, pendingIntake] = await Promise.all([
+  const { db } = await import("@/lib/server/db");
+  const [providers, audit, batches, pendingIntake, feedback] = await Promise.all([
     getProvidersView(),
     getAuditView(),
     getImportBatchesView(),
-    (await import("@/lib/server/db")).db.intakeItem.count({ where: { status: { in: ["review", "partial"] } } }),
+    db.intakeItem.count({ where: { status: { in: ["review", "partial"] } } }),
+    db.feedback.findMany({ orderBy: { createdAt: "desc" }, take: 20 }),
   ]);
   const risky = batches.filter((b) => b.status === "blocked" || b.status === "needs review");
 
@@ -97,6 +99,34 @@ export default async function AdminPage() {
           </table></div>
         </Card>
       </div>
+
+      <Card className="mt-4">
+        <CardHeader title="Team feedback" subtitle="Submitted via /feedback · newest first" />
+        {feedback.length === 0 ? (
+          <p className="px-5 py-6 text-center text-sm text-ink-3">Nothing yet. Feedback submitted by the team lands here.</p>
+        ) : (
+          <ul className="divide-y divide-line">
+            {feedback.map((f) => (
+              <li key={f.id} className="px-5 py-3.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full bg-brand-soft px-2.5 py-0.5 text-[11px] font-bold text-brand">{f.area}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                    f.priority === "high" ? "bg-red-50 text-red-700" : f.priority === "medium" ? "bg-amber-50 text-amber-700" : "bg-zinc-100 text-zinc-600"
+                  }`}>{f.priority}</span>
+                  <span className="text-[11px] text-ink-3">{f.author} · {f.createdAt.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
+                </div>
+                <div className="mt-1.5 space-y-1 text-[13px] text-ink-2">
+                  {f.workedWell && <p><span className="font-semibold text-emerald-700">Worked:</span> {f.workedWell}</p>}
+                  {f.confusing && <p><span className="font-semibold text-amber-700">Confusing:</span> {f.confusing}</p>}
+                  {f.missing && <p><span className="font-semibold text-ink-2">Missing:</span> {f.missing}</p>}
+                  {f.improve && <p><span className="font-semibold text-brand">Improve:</span> {f.improve}</p>}
+                  {f.notes && <p><span className="font-semibold">Notes:</span> {f.notes}</p>}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
 
       <Card className="mt-4">
         <CardHeader title="Audit log" subtitle="Append-only · written by imports, plugin connections, segments and sector-mode rules" />

@@ -1,8 +1,28 @@
 import { Shell, GhostButton } from "@/components/shell";
+import { db } from "@/lib/server/db";
+import { demoWorkspaceId } from "@/lib/server/views";
 import { Card, CardHeader, Stat, RevenueChart, HBarChart, Th, Td } from "@/components/ui";
 import { automations, campaigns, gbp, num, revenueSeries } from "@/lib/data";
 
-export default function AnalyticsPage() {
+export const dynamic = "force-dynamic";
+
+export default async function AnalyticsPage() {
+  const wsId = await demoWorkspaceId();
+  const scores = await db.leadScore.findMany({ where: { contact: { workspaceId: wsId } }, select: { score: true } });
+  const buckets = [
+    { label: "0-24 · cold/suppressed", value: scores.filter((s) => s.score <= 24).length },
+    { label: "25-44 · warm", value: scores.filter((s) => s.score >= 25 && s.score <= 44).length },
+    { label: "45-59 · hot", value: scores.filter((s) => s.score >= 45 && s.score <= 59).length },
+    { label: "60-79 · ready/customer", value: scores.filter((s) => s.score >= 60 && s.score <= 79).length },
+    { label: "80-100 · best", value: scores.filter((s) => s.score >= 80).length },
+  ];
+  const byForm = [
+    { label: "Longevity Type quiz", value: 14360 },
+    { label: "Welcome offer popup", value: 9840 },
+    { label: "Metabolic Reset guide", value: 6120 },
+    { label: "Exit intent · 10% off", value: 3480 },
+    { label: "Footer form", value: 1210 },
+  ];
   const bySegment = [
     { label: "VIP customers", value: 386420 },
     { label: "Weight-management intent", value: 48120 },
@@ -131,6 +151,27 @@ export default function AnalyticsPage() {
               ))}
             </tbody>
           </table></div>
+        </Card>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader title="Lead score distribution" subtitle={`Live from the scoring engine · ${scores.length} scored contacts`} />
+          <div className="px-5 py-4">
+            <HBarChart items={buckets} format={num} />
+            <p className="mt-4 border-t border-line pt-3 text-xs text-ink-3">
+              Recomputed on every event. The 60+ bands are the audience your next campaign should start with.
+            </p>
+          </div>
+        </Card>
+        <Card>
+          <CardHeader title="Revenue by form / lead magnet" subtitle="Attributed to the capture point each contact came from · seeded demo" />
+          <div className="px-5 py-4">
+            <HBarChart items={byForm} format={gbp} />
+            <p className="mt-4 border-t border-line pt-3 text-xs text-ink-3">
+              Quiz-sourced contacts out-earn every other capture route in the demo data.
+            </p>
+          </div>
         </Card>
       </div>
 

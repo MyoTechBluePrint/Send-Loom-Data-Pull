@@ -4,7 +4,7 @@ import { db } from "@/lib/server/db";
 import { audit } from "@/lib/server/audit";
 import { createSessionToken, verifyPassword, checkRateLimit, SESSION_COOKIE } from "@/lib/server/auth";
 
-const Body = z.object({ email: z.string().email(), password: z.string().min(1) });
+const Body = z.object({ email: z.string().email(), password: z.string().min(1), rememberMe: z.boolean().optional() });
 
 export async function POST(req: NextRequest) {
   const parsed = Body.safeParse(await req.json().catch(() => null));
@@ -30,11 +30,12 @@ export async function POST(req: NextRequest) {
 
   await audit(user.workspaceId, email, "auth.login", "Signed in to staging");
 
-  const token = createSessionToken(email);
+  const days = parsed.data.rememberMe ? 30 : 7;
+  const token = createSessionToken(email, Date.now(), days);
   const res = Response.json({ ok: true, name: user.name });
   res.headers.set(
     "Set-Cookie",
-    `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${7 * 24 * 3600}${process.env.NODE_ENV === "production" ? "; Secure" : ""}`
+    `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${days * 24 * 3600}${process.env.NODE_ENV === "production" ? "; Secure" : ""}`
   );
   return res;
 }

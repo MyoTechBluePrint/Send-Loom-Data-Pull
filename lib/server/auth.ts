@@ -5,7 +5,6 @@
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 
 export const SESSION_COOKIE = "sendloom_session";
-const WEEK = 7 * 24 * 3600;
 
 function secret(): string {
   return process.env.SESSION_SECRET ?? "dev-secret-not-for-prod";
@@ -25,8 +24,8 @@ export function verifyPassword(password: string, stored: string): boolean {
   return candidate.length === expected.length && timingSafeEqual(candidate, expected);
 }
 
-export function createSessionToken(email: string, now = Date.now()): string {
-  const exp = Math.floor(now / 1000) + WEEK;
+export function createSessionToken(email: string, now = Date.now(), days = 7): string {
+  const exp = Math.floor(now / 1000) + days * 24 * 3600;
   const payload = `${Buffer.from(email).toString("base64url")}.${exp}`;
   const sig = createHmac("sha256", secret()).update(payload).digest("base64url");
   return `${payload}.${sig}`;

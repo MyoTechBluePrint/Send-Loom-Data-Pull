@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
 import { store } from "@/lib/data";
 import { Walkthrough, WALKTHROUGH_KEY } from "@/components/walkthrough";
+import { GlobalSearch } from "@/components/global-search";
 
 type Me = { name: string; roleLabel: string; env: string };
 
@@ -153,10 +154,20 @@ export function Shell({ children, title, subtitle, actions }: { children: ReactN
             <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
             {subtitle && <p className="mt-0.5 text-xs text-ink-3">{subtitle}</p>}
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-2.5">{actions}</div>
+          <div className="flex flex-wrap items-center justify-end gap-2.5">
+            <button
+              onClick={() => window.dispatchEvent(new Event("sendloom:search"))}
+              className="flex items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-[13px] text-ink-3 hover:bg-[#f0efec]"
+              title="Search (⌘K)"
+            >
+              ⌕ <span className="max-sm:hidden">Search</span> <kbd className="rounded border border-line px-1 text-[10px]">⌘K</kbd>
+            </button>
+            {actions}
+          </div>
         </header>
         <main className="px-5 py-6 xl:px-8">{children}</main>
         <Walkthrough />
+        <GlobalSearch />
       </div>
     </div>
   );
