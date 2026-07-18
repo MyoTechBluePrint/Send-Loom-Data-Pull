@@ -38,7 +38,7 @@ export default function DemoNotesPage() {
               <p className="mt-3 font-semibold text-amber-700">Seeded demo (labelled in the UI):</p>
               <p className="mt-1 text-ink-2">Campaign and automation performance numbers, revenue attribution charts, keyword volumes and CPC, prospect discovery list. No emails send yet; nothing here contacts a real person.</p>
               <p className="mt-3 font-semibold text-ink-2">Not built yet:</p>
-              <p className="mt-1 text-ink-2">Login/auth (this URL is the only gate), email sending, WhatsApp/email-in forwarding addresses, LLM assistant (extraction is deterministic rules, which is why it never invents data).</p>
+              <p className="mt-1 text-ink-2">Email sending, WhatsApp/email-in forwarding addresses, password reset (staging auth is invitation-only), LLM assistant (extraction is deterministic rules, which is why it never invents data).</p>
             </div>
           </Card>
           <Card>

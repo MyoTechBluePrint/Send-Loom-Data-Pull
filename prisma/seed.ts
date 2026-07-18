@@ -314,6 +314,8 @@ async function main() {
 
   const { seedIntake } = await import("./seed-intake");
   await seedIntake(ws.id);
+  const { seedUsers } = await import("./seed-users");
+  await seedUsers(ws.id);
 
   console.log("Seed complete.");
   console.log(`Workspace: ${ws.id}`);

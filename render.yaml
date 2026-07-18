@@ -15,6 +15,10 @@ services:
         value: file:/opt/render/project/src/data/sendloom.db
       - key: NODE_VERSION
         value: "22"
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: SEED_USERS
+        sync: false # "email:password,email:password" — set in the dashboard, never committed
     disk:
       name: sendloom-data
       mountPath: /opt/render/project/src/data

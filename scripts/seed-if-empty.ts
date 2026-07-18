@@ -11,6 +11,8 @@ async function main() {
     const ws = await db.workspace.findFirstOrThrow();
     const { seedIntake } = await import("../prisma/seed-intake");
     await seedIntake(ws.id);
+    const { seedUsers } = await import("../prisma/seed-users");
+    await seedUsers(ws.id);
     return;
   }
   console.log("Empty database detected. Seeding demo workspace…");

@@ -38,6 +38,7 @@ const nav: { section?: string; items: { href: string; label: string; icon: strin
       { href: "/analytics", label: "Analytics", icon: "∿" },
       { href: "/admin", label: "Admin", icon: "▣" },
       { href: "/settings", label: "Settings", icon: "⚙" },
+      { href: "/demo-notes", label: "Handover Guide", icon: "✦" },
     ],
   },
 ];
@@ -91,6 +92,15 @@ export function Shell({ children, title, subtitle, actions }: { children: ReactN
           <p className="mt-1.5 inline-block rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-white/70">
             Sector mode: {store.sectorMode}
           </p>
+          <button
+            onClick={async () => {
+              await fetch("/api/auth/logout", { method: "POST" });
+              window.location.href = "/login";
+            }}
+            className="mt-2 w-full rounded-md border border-white/15 px-2 py-1 text-[11px] font-semibold text-white/60 hover:bg-white/10 hover:text-white"
+          >
+            Sign out
+          </button>
         </div>
       </aside>
 
