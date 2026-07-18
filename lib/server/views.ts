@@ -1,0 +1,206 @@
+// Shapes Prisma rows into the view types the existing UI components consume
+// (lib/data.ts types). Keeps page rewiring to import swaps.
+import { db } from "./db";
+import type { Subscriber, TimelineEvent, ImportBatch, SalesTask, Segment, Keyword, SiteSearch, Opportunity, Provider } from "@/lib/data";
+
+export async function demoWorkspaceId(): Promise<string> {
+  const ws = await db.workspace.findFirstOrThrow();
+  return ws.id;
+}
+
+const consentView: Record<string, Subscriber["consent"]> = {
+  granted: "subscribed", withdrawn: "unsubscribed", pending: "pending", suppressed: "suppressed",
+};
+
+function relTime(d: Date | null): string {
+  if (!d) return "–";
+  const mins = Math.floor((Date.now() - d.getTime()) / 60000);
+  if (mins < 2) return "just now";
+  if (mins < 60) return `${mins} minutes ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} hour${hours > 1 ? "s" : ""} ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 31) return `${days} day${days > 1 ? "s" : ""} ago`;
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+}
+
+function dateStr(d: Date | null): string {
+  return d ? d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "Never";
+}
+
+export async function getContactsView(): Promise<Subscriber[]> {
+  const wsId = await demoWorkspaceId();
+  const contacts = await db.contact.findMany({
+    where: { workspaceId: wsId },
+    include: {
+      tags: { include: { tag: true } },
+      sources: { orderBy: { createdAt: "asc" } },
+      consents: { orderBy: { createdAt: "desc" } },
+      score: true,
+    },
+    orderBy: { lastActivityAt: "desc" },
+  });
+
+  return contacts.map((c) => {
+    const email = c.consents.find((x) => x.channel === "email");
+    const status = (c.score?.status ?? "cold") === "vip" ? "VIP" : ((c.score?.status ?? "cold") as Subscriber["status"]);
+    const chan = (ch: string) => c.consents.find((x) => x.channel === ch)?.status === "granted";
+    return {
+      id: c.id,
+      name: [c.firstName, c.lastName].filter(Boolean).join(" ") || c.email,
+      email: c.email,
+      phone: c.phone ?? undefined,
+      location: [c.city, c.country === "United Kingdom" ? "UK" : c.country === "Ireland" ? "IE" : c.country].filter(Boolean).join(", "),
+      consent: consentView[email?.status ?? "pending"],
+      source: c.sources[0]?.source ?? "Unknown",
+      lawfulBasis: email?.lawfulBasis ?? "Not recorded",
+      channels: { email: chan("email"), sms: chan("sms"), whatsapp: chan("whatsapp"), phone: chan("phone"), adExport: chan("ad_export") },
+      confidence: c.confidence,
+      signup: dateStr(c.createdAt),
+      tags: c.tags.map((t) => t.tag.name),
+      lists: [],
+      orders: c.ordersCount,
+      revenue: c.revenue,
+      aov: c.ordersCount ? c.revenue / c.ordersCount : 0,
+      lastOrder: dateStr(c.lastOrderAt),
+      lastActivity: relTime(c.lastActivityAt),
+      engagement: c.engagement as Subscriber["engagement"],
+      score: c.score?.score ?? 0,
+      status,
+      scoreReasons: c.score ? JSON.parse(c.score.reasons) : [],
+    };
+  });
+}
+
+export async function getContactView(id: string) {
+  const all = await getContactsView();
+  const contact = all.find((c) => c.id === id) ?? null;
+  if (!contact) return null;
+
+  const [timeline, enrichments, tasks] = await Promise.all([
+    db.timelineItem.findMany({ where: { contactId: id }, orderBy: { occurredAt: "desc" }, take: 40 }),
+    db.enrichmentRecord.findMany({ where: { contactId: id } }),
+    db.salesTask.findMany({ where: { contactId: id, status: "open" } }),
+  ]);
+
+  const events: TimelineEvent[] = timeline.map((t) => ({
+    time: relTime(t.occurredAt),
+    type: (t.type in TL_TYPE_MAP ? TL_TYPE_MAP[t.type] : "view") as TimelineEvent["type"],
+    title: t.title,
+    detail: t.detail ?? "",
+    value: t.value ?? undefined,
+  }));
+
+  return {
+    contact,
+    events,
+    enrichments: enrichments.map((e) => ({
+      provider: e.provider, fields: JSON.parse(e.fieldsAdded).join(", "),
+      confidence: e.confidence, when: dateStr(e.createdAt), cost: `£${e.cost.toFixed(3)}`,
+    })),
+    openTasks: tasks.map((t) => ({ type: t.type, note: t.note ?? "" })),
+  };
+}
+
+const TL_TYPE_MAP: Record<string, string> = {
+  product_viewed: "view", category_viewed: "view", view: "view",
+  search: "search", cart_add: "cart", cart: "cart",
+  checkout_started: "checkout", checkout: "checkout",
+  purchase_completed: "purchase", purchase: "purchase",
+  email_open: "email_open", email_click: "email_click", email_sent: "email_sent",
+  imported: "import", import: "import", consent_recorded: "signup", signup: "signup",
+  quiz_completed: "signup", guide_downloaded: "signup", newsletter_signup: "signup",
+  enrichment_completed: "enrich", task_created: "task", task: "task",
+  score_changed: "score", score: "score", automation: "automation",
+};
+
+const batchStatusView: Record<string, ImportBatch["status"]> = {
+  complete: "complete", needs_review: "needs review", review: "needs review",
+  mapping: "processing", importing: "processing", blocked: "blocked",
+};
+
+export async function getImportBatchesView(): Promise<ImportBatch[]> {
+  const wsId = await demoWorkspaceId();
+  const batches = await db.importBatch.findMany({ where: { workspaceId: wsId }, orderBy: { createdAt: "desc" } });
+  return batches.map((b) => ({
+    id: b.id, name: b.name, source: b.source, format: b.format.toUpperCase(),
+    date: dateStr(b.createdAt), uploadedBy: b.uploadedBy,
+    total: b.totalRows, ready: b.readyRows, duplicates: b.duplicateRows,
+    merged: b.mergedRows, blocked: b.blockedRows, missingConsent: b.missingConsentRows,
+    status: batchStatusView[b.status] ?? "complete", revenue: b.revenue,
+  }));
+}
+
+export async function getSegmentsView(): Promise<Segment[]> {
+  const wsId = await demoWorkspaceId();
+  const segments = await db.segment.findMany({ where: { workspaceId: wsId }, include: { rules: true }, orderBy: { createdAt: "asc" } });
+  return segments.map((s) => ({
+    id: s.id, name: s.name, description: s.description ?? "",
+    match: s.match as "all" | "any",
+    conditions: s.rules.map((r) => ({ field: r.field, operator: r.operator, value: r.value })),
+    count: s.count, revenue: s.revenue, updated: "Live",
+  }));
+}
+
+export async function getTasksView(): Promise<SalesTask[]> {
+  const wsId = await demoWorkspaceId();
+  const tasks = await db.salesTask.findMany({ where: { workspaceId: wsId }, orderBy: { dueAt: "asc" } });
+  return tasks.map((t) => ({
+    id: t.id, type: t.type, contact: t.contactLabel ?? "Unknown",
+    contactId: t.contactId ?? undefined,
+    due: t.dueAt ? (t.dueAt < new Date() && t.status === "open" ? "Yesterday" : relTime(t.dueAt).includes("ago") ? dateStr(t.dueAt) : "Today") : "–",
+    priority: t.priority as SalesTask["priority"],
+    status: t.status === "open" && t.dueAt && t.dueAt < new Date() ? "overdue" : (t.status as SalesTask["status"]),
+    note: t.note ?? "", assignee: t.assigneeLabel ?? "Unassigned",
+  }));
+}
+
+export async function getKeywordsView(): Promise<Keyword[]> {
+  const wsId = await demoWorkspaceId();
+  const keywords = await db.keyword.findMany({ where: { workspaceId: wsId }, include: { cluster: true } });
+  return keywords.map((k) => ({
+    term: k.term, cluster: k.cluster?.name ?? "–", volume: k.volume, trend: k.trend,
+    cpc: `£${k.cpc.toFixed(2)}`, seo: k.seoDifficulty,
+    intent: k.intent as Keyword["intent"],
+    review: k.review.replace("_", " ") as Keyword["review"],
+  }));
+}
+
+export async function getOpportunitiesView(): Promise<Opportunity[]> {
+  const wsId = await demoWorkspaceId();
+  const clusters = await db.keywordCluster.findMany({ where: { workspaceId: wsId, opportunityScore: { gt: 0 } }, orderBy: { opportunityScore: "desc" } });
+  return clusters.map((c) => ({
+    cluster: c.name, score: c.opportunityScore, demand: c.demandNote ?? "",
+    have: c.haveAssets ? JSON.parse(c.haveAssets) : [],
+    missing: c.missingAssets ? JSON.parse(c.missingAssets) : [],
+  }));
+}
+
+export async function getSiteSearchView(): Promise<SiteSearch[]> {
+  const wsId = await demoWorkspaceId();
+  const signals = await db.demandSignal.findMany({
+    where: { workspaceId: wsId, kind: "site_search_term" }, orderBy: { metric: "desc" },
+  });
+  return signals.map((s) => ({
+    term: s.term, searches: Math.round(s.metric), trend: s.trend,
+    conversion: s.conversion, revenue: s.revenue, note: s.note ?? undefined,
+  }));
+}
+
+export async function getProvidersView(): Promise<Provider[]> {
+  const wsId = await demoWorkspaceId();
+  const provs = await db.dataProvider.findMany({ where: { workspaceId: wsId } });
+  return provs.map((p) => ({
+    name: p.name,
+    type: p.type.split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join(" "),
+    status: p.status.replace("_", " ") as Provider["status"],
+    lastSync: p.lastSyncAt ? relTime(p.lastSyncAt) : "–",
+    note: p.note ?? "",
+  }));
+}
+
+export async function getAuditView() {
+  const wsId = await demoWorkspaceId();
+  const logs = await db.auditLog.findMany({ where: { workspaceId: wsId }, orderBy: { createdAt: "desc" }, take: 30 });
+  return logs.map((l) => ({ time: relTime(l.createdAt), who: l.actorLabel, what: l.detail ?? l.action }));
+}
