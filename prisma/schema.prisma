@@ -151,6 +151,9 @@ model ImportBatch {
   id          String   @id @default(cuid())
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  projectId   String?
+  project     ImportProject? @relation(fields: [projectId], references: [id])
+  classification String? // contact_list | customer_list | suppression_list | savvy_mango | woocommerce | mailchimp | klaviyo | whatsapp_export | keyword_file | sales_notes | unknown
   name        String
   source      String
   sourceType  String   @default("import")
@@ -606,6 +609,63 @@ model ExtractedRecord {
   createdAt  DateTime @default(now())
 
   @@index([intakeId, status])
+}
+
+// A frozen, cleaned group of contacts ready to copy/export. Suppressed and
+// unsubscribed contacts are excluded at build time and again at render time.
+model ContactPack {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  source      String // "Audience: VIP customers", "Import: Webinar · July", "Search: nad+", "Contacts selection"
+  contactIds  String // JSON array of eligible contact ids
+  total       Int      @default(0) // originally selected
+  eligible    Int      @default(0)
+  withEmail   Int      @default(0)
+  withPhone   Int      @default(0)
+  excludedSuppressed Int @default(0)
+  excludedUnsubscribed Int @default(0)
+  excludedNoRoute Int  @default(0)
+  duplicatesRemoved Int @default(0)
+  suggestedUse String?
+  simulated   Boolean  @default(false) // Savvy-style demo packs render no real rows
+  createdBy   String
+  createdAt   DateTime @default(now())
+
+  exports ExportLog[]
+}
+
+model ExportLog {
+  id          String   @id @default(cuid())
+  workspaceId String
+  packId      String?
+  pack        ContactPack? @relation(fields: [packId], references: [id])
+  user        String
+  dataType    String // pack | audience | tasks | search | import
+  source      String
+  format      String // emails | bcc | name_email | phones | whatsapp | call_sheet | outreach_rows | csv | mailchimp_csv | klaviyo_csv | crm_csv
+  contacts    Int      @default(0)
+  excludedSuppressed Int @default(0)
+  excludedUnsubscribed Int @default(0)
+  duplicatesRemoved Int @default(0)
+  batch       String? // "3 of 8 (size 50)"
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, createdAt])
+}
+
+// Groups multiple dropped files into one intake project (Mass Data Dropzone).
+model ImportProject {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  uploadedBy  String
+  simulated   Boolean  @default(false)
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  batches ImportBatch[]
 }
 
 model Feedback {

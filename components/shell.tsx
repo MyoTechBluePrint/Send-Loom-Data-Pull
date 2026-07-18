@@ -24,6 +24,7 @@ const nav: { section?: string; items: { href: string; label: string; icon: strin
     items: [
       { href: "/subscribers", label: "Contacts", icon: "◉" },
       { href: "/segments", label: "Audience Builder", icon: "◫" },
+      { href: "/packs", label: "Contact Packs", icon: "⧉" },
       { href: "/prospects", label: "Prospect Discovery", icon: "✧" },
     ],
   },
