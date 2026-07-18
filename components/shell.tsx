@@ -41,6 +41,7 @@ const nav: { section?: string; items: { href: string; label: string; icon: strin
     section: "Control",
     items: [
       { href: "/analytics", label: "Analytics", icon: "∿" },
+      { href: "/tracking", label: "Store Tracking", icon: "◉" },
       { href: "/providers", label: "API Providers", icon: "↯" },
       { href: "/admin", label: "Admin", icon: "▣" },
       { href: "/settings", label: "Settings", icon: "⚙" },

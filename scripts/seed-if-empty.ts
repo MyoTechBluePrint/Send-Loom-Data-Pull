@@ -13,8 +13,9 @@ async function main() {
     await seedIntake(ws.id);
     const { seedUsers } = await import("../prisma/seed-users");
     await seedUsers(ws.id);
-    const { seedGrowth } = await import("../prisma/seed-growth");
+    const { seedGrowth, seedStores } = await import("../prisma/seed-growth");
     await seedGrowth(ws.id);
+    await seedStores(ws.id);
     return;
   }
   console.log("Empty database detected. Seeding demo workspace…");

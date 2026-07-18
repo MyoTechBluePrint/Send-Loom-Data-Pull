@@ -7,6 +7,7 @@ import { eventIngestionService } from "../lib/server/events";
 import { recomputeLeadScore } from "../lib/server/scoring";
 import { evaluateSegment } from "../lib/server/segments";
 import { createIntakeFromText, approveRecord } from "../lib/server/extract";
+import { touchCart, sweepAbandoned } from "../lib/server/carts";
 import { sendCampaign } from "../lib/server/sending";
 import { checkRateLimit } from "../lib/server/auth";
 
@@ -172,6 +173,25 @@ async function main() {
   let allowed = 0;
   for (let i = 0; i < 12; i++) if (checkRateLimit(key)) allowed++;
   check("allows 10 then blocks", allowed === 10, `allowed ${allowed}`);
+
+  console.log("Cart lifecycle");
+  const store = await db.store.findFirstOrThrow({ where: { workspaceId: ws.id } });
+  const token = `test-cart-${STAMP}`;
+  await touchCart(store.id, "cart_add", { cartToken: token, items: [{ productId: "101", title: "Test", qty: 1, price: 68 }], total: 68 }, null);
+  let cart = await db.cart.findUnique({ where: { token } });
+  check("cart created open", cart?.status === "open");
+  await touchCart(store.id, "checkout_started", { cartToken: token, total: 68 }, null);
+  cart = await db.cart.findUnique({ where: { token } });
+  check("checkout started", cart?.status === "checkout_started");
+  // Backdate activity past the 30-minute checkout threshold, then sweep.
+  await db.cart.update({ where: { token }, data: { lastActivityAt: new Date(Date.now() - 45 * 60_000) } });
+  await sweepAbandoned(true);
+  cart = await db.cart.findUnique({ where: { token } });
+  check("swept to abandoned_checkout", cart?.status === "abandoned_checkout");
+  check("recovery token exists", !!cart?.recoveryToken);
+  await touchCart(store.id, "purchase_completed", { cartToken: token, total: 68 }, null);
+  cart = await db.cart.findUnique({ where: { token } });
+  check("purchase converts (not recovered: no link click)", cart?.status === "converted");
 
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
