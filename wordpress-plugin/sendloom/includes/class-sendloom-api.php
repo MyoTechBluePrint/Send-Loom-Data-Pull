@@ -29,7 +29,10 @@ class Sendloom_Api {
             ],
         ];
         if ($body !== null) {
-            $args['body'] = wp_json_encode($body);
+            $json           = wp_json_encode($body);
+            $args['body']   = $json;
+            // Sign the payload with the store key; Sendloom rejects mismatches.
+            $args['headers']['x-sendloom-signature'] = hash_hmac('sha256', $json, get_option('sendloom_api_key', ''));
         }
 
         $response = wp_remote_request(self::base_url() . $path, $args);

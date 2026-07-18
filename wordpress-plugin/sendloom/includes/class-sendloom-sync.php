@@ -22,8 +22,22 @@ class Sendloom_Sync {
         return $results;
     }
 
+    const MAX_PAGES = 50;
+
     public static function sync_customers() {
-        $customers = get_users(['role' => 'customer', 'number' => self::BATCH]);
+        $total = ['ok' => true, 'created' => 0, 'updated' => 0];
+        for ($page = 1; $page <= self::MAX_PAGES; $page++) {
+            $result = self::sync_customers_page($page);
+            if (empty($result['ok'])) { return $result; }
+            $total['created'] += $result['created'] ?? 0;
+            $total['updated'] += $result['updated'] ?? 0;
+            if (($result['count'] ?? 0) < self::BATCH) { break; }
+        }
+        return $total;
+    }
+
+    private static function sync_customers_page($page) {
+        $customers = get_users(['role' => 'customer', 'number' => self::BATCH, 'paged' => $page]);
         $payload   = [];
         foreach ($customers as $user) {
             $wc = new WC_Customer($user->ID);
@@ -44,11 +58,25 @@ class Sendloom_Sync {
                 'marketingConsent' => get_user_meta($user->ID, 'marketing_opt_in', true) === 'yes',
             ];
         }
-        return $payload ? Sendloom_Api::request('POST', '/api/v1/sync/customers', ['customers' => $payload]) : ['ok' => true, 'created' => 0];
+        if (!$payload) { return ['ok' => true, 'created' => 0, 'count' => 0]; }
+        $result          = Sendloom_Api::request('POST', '/api/v1/sync/customers', ['customers' => $payload]);
+        $result['count'] = count($payload);
+        return $result;
     }
 
     public static function sync_products() {
-        $products = wc_get_products(['limit' => self::BATCH]);
+        $total = ['ok' => true, 'upserted' => 0];
+        for ($page = 1; $page <= self::MAX_PAGES; $page++) {
+            $result = self::sync_products_page($page);
+            if (empty($result['ok'])) { return $result; }
+            $total['upserted'] += $result['upserted'] ?? 0;
+            if (($result['count'] ?? 0) < self::BATCH) { break; }
+        }
+        return $total;
+    }
+
+    private static function sync_products_page($page) {
+        $products = wc_get_products(['limit' => self::BATCH, 'page' => $page]);
         $payload  = [];
         foreach ($products as $product) {
             $payload[] = [
@@ -63,16 +91,33 @@ class Sendloom_Sync {
                 'inventory'  => $product->get_stock_quantity(),
             ];
         }
-        return $payload ? Sendloom_Api::request('POST', '/api/v1/sync/products', ['products' => $payload]) : ['ok' => true, 'upserted' => 0];
+        if (!$payload) { return ['ok' => true, 'upserted' => 0, 'count' => 0]; }
+        $result          = Sendloom_Api::request('POST', '/api/v1/sync/products', ['products' => $payload]);
+        $result['count'] = count($payload);
+        return $result;
     }
 
     public static function sync_orders() {
-        $orders  = wc_get_orders(['limit' => self::BATCH, 'orderby' => 'date', 'order' => 'DESC']);
+        $total = ['ok' => true, 'upserted' => 0];
+        for ($page = 1; $page <= self::MAX_PAGES; $page++) {
+            $result = self::sync_orders_page($page);
+            if (empty($result['ok'])) { return $result; }
+            $total['upserted'] += $result['upserted'] ?? 0;
+            if (($result['count'] ?? 0) < self::BATCH) { break; }
+        }
+        return $total;
+    }
+
+    private static function sync_orders_page($page) {
+        $orders  = wc_get_orders(['limit' => self::BATCH, 'paged' => $page, 'orderby' => 'date', 'order' => 'DESC']);
         $payload = [];
         foreach ($orders as $order) {
             $payload[] = self::order_payload($order);
         }
-        return $payload ? Sendloom_Api::request('POST', '/api/v1/sync/orders', ['orders' => $payload]) : ['ok' => true, 'upserted' => 0];
+        if (!$payload) { return ['ok' => true, 'upserted' => 0, 'count' => 0]; }
+        $result          = Sendloom_Api::request('POST', '/api/v1/sync/orders', ['orders' => $payload]);
+        $result['count'] = count($payload);
+        return $result;
     }
 
     public static function push_order($order_id) {

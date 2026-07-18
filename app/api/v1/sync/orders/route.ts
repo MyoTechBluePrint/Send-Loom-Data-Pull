@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/server/db";
-import { authenticateStore, unauthorized } from "@/lib/server/apiAuth";
+import { readSignedBody } from "@/lib/server/apiAuth";
 import { eventIngestionService } from "@/lib/server/events";
 
 const OrderSchema = z.object({
@@ -26,10 +26,11 @@ const OrderSchema = z.object({
 const Body = z.object({ orders: z.array(OrderSchema).max(500) });
 
 export async function POST(req: NextRequest) {
-  const store = await authenticateStore(req);
-  if (!store) return unauthorized();
+  const auth = await readSignedBody(req);
+  if (auth instanceof Response) return auth;
+  const { store, body } = auth;
 
-  const parsed = Body.safeParse(await req.json().catch(() => null));
+  const parsed = Body.safeParse(body);
   if (!parsed.success) return Response.json({ ok: false, error: parsed.error.flatten() }, { status: 400 });
 
   let upserted = 0;

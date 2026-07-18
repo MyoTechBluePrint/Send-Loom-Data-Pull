@@ -39,7 +39,13 @@ class SesProvider implements EmailProvider {
 }
 
 export function activeProvider(): EmailProvider {
-  if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY && process.env.SES_FROM_ADDRESS) {
+  // Staging safety: real sending requires BOTH the explicit env switch AND
+  // credentials. Anything else falls back to the dev transport, so no team
+  // member can trigger a live email from staging.
+  if (
+    process.env.EMAIL_SENDING_ENABLED === "true" &&
+    process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY && process.env.SES_FROM_ADDRESS
+  ) {
     return new SesProvider();
   }
   return new DevLogProvider();

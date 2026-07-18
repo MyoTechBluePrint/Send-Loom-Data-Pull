@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/server/db";
 import { audit } from "@/lib/server/audit";
-import { authenticateStore, unauthorized } from "@/lib/server/apiAuth";
+import { readSignedBody } from "@/lib/server/apiAuth";
 
 const Body = z.object({
   storeUrl: z.string().min(3),
@@ -11,10 +11,11 @@ const Body = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  const store = await authenticateStore(req);
-  if (!store) return unauthorized();
+  const auth = await readSignedBody(req);
+  if (auth instanceof Response) return auth;
+  const { store, body } = auth;
 
-  const parsed = Body.safeParse(await req.json().catch(() => null));
+  const parsed = Body.safeParse(body);
   if (!parsed.success) {
     return Response.json({ ok: false, error: parsed.error.flatten() }, { status: 400 });
   }

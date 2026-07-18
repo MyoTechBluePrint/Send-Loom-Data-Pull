@@ -2,13 +2,18 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/server/db";
 import { audit } from "@/lib/server/audit";
-import { createSessionToken, verifyPassword, SESSION_COOKIE } from "@/lib/server/auth";
+import { createSessionToken, verifyPassword, checkRateLimit, SESSION_COOKIE } from "@/lib/server/auth";
 
 const Body = z.object({ email: z.string().email(), password: z.string().min(1) });
 
 export async function POST(req: NextRequest) {
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return Response.json({ ok: false, error: "Enter an email and password." }, { status: 400 });
+
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "local";
+  if (!checkRateLimit(`login:${ip}:${parsed.data.email.toLowerCase()}`)) {
+    return Response.json({ ok: false, error: "Too many attempts. Try again in 15 minutes." }, { status: 429 });
+  }
 
   const email = parsed.data.email.toLowerCase();
   const user = await db.user.findUnique({ where: { email } });

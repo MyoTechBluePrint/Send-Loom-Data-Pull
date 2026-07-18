@@ -7,6 +7,8 @@ import { eventIngestionService } from "../lib/server/events";
 import { recomputeLeadScore } from "../lib/server/scoring";
 import { evaluateSegment } from "../lib/server/segments";
 import { createIntakeFromText, approveRecord } from "../lib/server/extract";
+import { sendCampaign } from "../lib/server/sending";
+import { checkRateLimit } from "../lib/server/auth";
 
 let passed = 0;
 let failed = 0;
@@ -148,6 +150,28 @@ async function main() {
   check("intake source appended", tessa?.sources.some((s) => s.sourceType === "whatsapp") ?? false);
   check("consent held pending, not granted", tessa?.consents.every((c) => c.status === "pending") ?? false);
   check("interest tags applied", (tessa?.tags.length ?? 0) >= 1);
+
+  console.log("Campaign send path");
+  const camp = await db.campaign.create({
+    data: { workspaceId: ws.id, name: `Send test ${STAMP}`, subject: "Test", status: "draft" },
+  });
+  const sendResult = await sendCampaign(camp.id, "test-script");
+  check("send succeeded via provider", sendResult.ok === true);
+  if (sendResult.ok) {
+    check("dev transport used (no SES creds)", sendResult.provider === "dev-log");
+    check("consent skips reported", sendResult.skippedConsent >= 1);
+    check("suppressed contacts skipped", sendResult.skippedSuppressed >= 1);
+    const sendRows = await db.campaignSend.count({ where: { campaignId: camp.id, status: "sent" } });
+    check("send rows recorded", sendRows === sendResult.sent);
+  }
+  const resent = await sendCampaign(camp.id, "test-script");
+  check("double-send blocked", resent.ok === false);
+
+  console.log("Auth rate limiting");
+  const key = `test:${STAMP}`;
+  let allowed = 0;
+  for (let i = 0; i < 12; i++) if (checkRateLimit(key)) allowed++;
+  check("allows 10 then blocks", allowed === 10, `allowed ${allowed}`);
 
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);

@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { authenticateStore, unauthorized } from "@/lib/server/apiAuth";
+import { readSignedBody } from "@/lib/server/apiAuth";
 import { rejectEvent, type IncomingEvent } from "@/lib/server/events";
 import { enqueue } from "@/lib/server/queue";
 
@@ -22,13 +22,13 @@ const EventSchema = z.object({
 const Body = z.union([EventSchema, z.object({ events: z.array(EventSchema).max(100) })]);
 
 export async function POST(req: NextRequest) {
-  const store = await authenticateStore(req);
-  if (!store) return unauthorized();
+  const auth = await readSignedBody(req);
+  if (auth instanceof Response) return auth;
+  const { store, body } = auth;
 
-  const raw = await req.json().catch(() => null);
-  const parsed = Body.safeParse(raw);
+  const parsed = Body.safeParse(body);
   if (!parsed.success) {
-    await rejectEvent(store.workspaceId, "event.validation_failed", raw);
+    await rejectEvent(store.workspaceId, "event.validation_failed", body);
     return Response.json({ ok: false, error: parsed.error.flatten() }, { status: 400 });
   }
 

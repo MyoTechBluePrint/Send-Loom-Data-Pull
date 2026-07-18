@@ -32,6 +32,20 @@ export function createSessionToken(email: string, now = Date.now()): string {
   return `${payload}.${sig}`;
 }
 
+// In-memory rate limiter (per-process; a real deployment moves this to Redis).
+const attempts = new Map<string, { count: number; resetAt: number }>();
+
+export function checkRateLimit(key: string, max = 10, windowMs = 15 * 60 * 1000): boolean {
+  const now = Date.now();
+  const entry = attempts.get(key);
+  if (!entry || entry.resetAt < now) {
+    attempts.set(key, { count: 1, resetAt: now + windowMs });
+    return true;
+  }
+  entry.count++;
+  return entry.count <= max;
+}
+
 export function verifySessionToken(token: string | undefined): string | null {
   if (!token) return null;
   const [emailB64, expStr, sig] = token.split(".");
