@@ -1,0 +1,30 @@
+/* Sendloom popup — fully scoped, theme-safe (Astra-tested selectors only). */
+#sendloom-popup .sendloom-popup-backdrop {
+  position: fixed; inset: 0; background: rgba(15, 12, 25, 0.55); z-index: 99998;
+}
+#sendloom-popup .sendloom-popup-card {
+  position: fixed; z-index: 99999; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(92vw, 380px); background: #fff; border-radius: 14px;
+  padding: 28px 24px; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.25);
+  font-family: inherit; text-align: center;
+}
+#sendloom-popup h3 { margin: 0 0 8px; font-size: 20px; line-height: 1.25; }
+#sendloom-popup p { margin: 0 0 16px; font-size: 14px; color: #555; }
+#sendloom-popup .sendloom-popup-form input[type="email"] {
+  width: 100%; box-sizing: border-box; padding: 10px 12px; font-size: 14px;
+  border: 1px solid #ddd; border-radius: 8px; margin-bottom: 10px;
+}
+#sendloom-popup .sendloom-popup-consent {
+  display: flex; gap: 8px; align-items: flex-start; text-align: left;
+  font-size: 11px; color: #777; margin-bottom: 12px;
+}
+#sendloom-popup .sendloom-popup-form button[type="submit"] {
+  width: 100%; padding: 11px 16px; font-size: 14px; font-weight: 600;
+  color: #fff; background: #6d28d9; border: 0; border-radius: 8px; cursor: pointer;
+}
+#sendloom-popup .sendloom-popup-form button[type="submit"]:hover { background: #5b21b6; }
+#sendloom-popup .sendloom-popup-close {
+  position: absolute; top: 8px; right: 12px; background: none; border: 0;
+  font-size: 22px; color: #999; cursor: pointer; line-height: 1;
+}

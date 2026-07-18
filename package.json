@@ -10,7 +10,8 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:reset": "prisma migrate reset --force",
     "test:flows": "tsx scripts/test-flows.ts",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "plugin:zip": "bash scripts/build-plugin.sh"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
