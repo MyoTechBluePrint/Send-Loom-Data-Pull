@@ -96,7 +96,26 @@ export default function TeamHandoverPage() {
           ))}
 
           <Card>
-            <CardHeader title="9 · Common mistakes" />
+            <CardHeader title="9 · How to move data in and out" />
+            <ol className="space-y-2 px-5 py-4 text-sm">
+              {[
+                "Data in: Data Dropzone → drop a CSV/TXT (or several). Sendloom tells you what it thinks each file is; correct it if wrong, then Map fields & import.",
+                "Suppression lists: use 'Import as suppression list'. It only blocks addresses; it never creates contacts.",
+                "Data out: any audience card → Pack, or select contacts → Create Contact Pack. A pack is a cleaned, frozen group with unsubscribed and suppressed people already removed.",
+                "Copy emails for Gmail (comma) or BCC for Outlook (semicolon) from the pack page. Big list? Turn on batch splitting (25/50/100) and copy one batch at a time.",
+                "Call sheets: Sales Tasks → Copy call sheet gives you name | phone | interest | notes | next action, ready to paste anywhere.",
+                "Downloads: CSV, CRM, Mailchimp or Klaviyo formats from the pack page. Every copy and download is logged in Export history, that's a feature, not surveillance.",
+              ].map((s, j) => (
+                <li key={j} className="flex gap-3">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-soft text-[11px] font-bold text-brand">{j + 1}</span>
+                  <span className="leading-relaxed text-ink-2">{s}</span>
+                </li>
+              ))}
+            </ol>
+          </Card>
+
+          <Card>
+            <CardHeader title="10 · Common mistakes" />
             <ul className="list-disc space-y-1.5 px-5 py-4 pl-9 text-sm text-ink-2">
               <li>Searching for someone who's still in the inbox queue: they only become a contact after you approve them.</li>
               <li>Expecting a new contact to be emailable: consent starts pending on purpose. That's the platform protecting you.</li>
@@ -106,7 +125,7 @@ export default function TeamHandoverPage() {
           </Card>
 
           <Card>
-            <CardHeader title="10 · What to test first" />
+            <CardHeader title="11 · What to test first" />
             <p className="px-5 py-4 text-sm leading-relaxed text-ink-2">
               The checklist on the right, top to bottom. It's ordered so each step teaches the next one. When you finish, spend ten
               minutes clicking anywhere you like and leave feedback on whatever felt slow, confusing or pointless.

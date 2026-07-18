@@ -1,4 +1,5 @@
 import { Shell, GhostButton } from "@/components/shell";
+import { Donut } from "@/components/ui";
 import { db } from "@/lib/server/db";
 import { demoWorkspaceId } from "@/lib/server/views";
 import { Card, CardHeader, Stat, RevenueChart, HBarChart, Th, Td } from "@/components/ui";
@@ -9,6 +10,33 @@ export const dynamic = "force-dynamic";
 export default async function AnalyticsPage() {
   const wsId = await demoWorkspaceId();
   const scores = await db.leadScore.findMany({ where: { contact: { workspaceId: wsId } }, select: { score: true } });
+  const consents = await db.contact.findMany({
+    where: { workspaceId: wsId },
+    select: { phone: true, consents: { where: { channel: "email" }, orderBy: { createdAt: "desc" }, take: 1 } },
+  });
+  const contactability = {
+    granted: consents.filter((c) => c.consents[0]?.status === "granted").length,
+    pending: consents.filter((c) => !c.consents[0] || c.consents[0].status === "pending").length,
+    unsub: consents.filter((c) => c.consents[0]?.status === "withdrawn").length,
+    suppressed: consents.filter((c) => c.consents[0]?.status === "suppressed").length,
+  };
+  const sourceRows = await db.contactSource.findMany({
+    where: { contact: { workspaceId: wsId } },
+    include: { contact: { select: { email: true, phone: true, revenue: true, ordersCount: true } } },
+  });
+  const bySrc = new Map<string, { n: number; email: number; phone: number; revenue: number; buyers: number }>();
+  for (const s of sourceRows) {
+    const b = bySrc.get(s.sourceType) ?? { n: 0, email: 0, phone: 0, revenue: 0, buyers: 0 };
+    b.n++; if (s.contact.email) b.email++; if (s.contact.phone) b.phone++;
+    b.revenue += s.contact.revenue; if (s.contact.ordersCount > 0) b.buyers++;
+    bySrc.set(s.sourceType, b);
+  }
+  const sourceScores = [...bySrc.entries()].map(([type, b]) => {
+    const score = Math.min(100, Math.round(
+      (b.email / b.n) * 35 + (b.phone / b.n) * 20 + (b.buyers / b.n) * 30 + Math.min(15, b.revenue / 200)
+    ));
+    return { type, ...b, score };
+  }).sort((a, b) => b.score - a.score);
   const buckets = [
     { label: "0-24 · cold/suppressed", value: scores.filter((s) => s.score <= 24).length },
     { label: "25-44 · warm", value: scores.filter((s) => s.score >= 25 && s.score <= 44).length },
@@ -151,6 +179,39 @@ export default async function AnalyticsPage() {
               ))}
             </tbody>
           </table></div>
+        </Card>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader title="Contactability" subtitle="Live from consent records · latest email-channel state per contact" />
+          <div className="px-5 py-4">
+            <Donut
+              centreLabel="contacts"
+              items={[
+                { label: "Email allowed", value: contactability.granted, color: "var(--s2)" },
+                { label: "Needs permission", value: contactability.pending, color: "var(--s3)" },
+                { label: "Unsubscribed", value: contactability.unsub, color: "#c3c2b7" },
+                { label: "Suppressed", value: contactability.suppressed, color: "var(--s6, #e34948)" },
+              ]}
+            />
+          </div>
+        </Card>
+        <Card>
+          <CardHeader title="Source scores" subtitle="Live · coverage, buyers and revenue per source type" />
+          <div className="space-y-2.5 px-5 py-4">
+            {sourceScores.slice(0, 6).map((s) => (
+              <div key={s.type} className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-[13px] font-medium capitalize">{s.type.replace(/_/g, " ")}</p>
+                  <p className="text-[11px] text-ink-3">{s.n} contacts · {Math.round((s.email / s.n) * 100)}% email · {Math.round((s.phone / s.n) * 100)}% phone · {s.buyers} buyers</p>
+                </div>
+                <span className={`tabular shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${s.score >= 70 ? "bg-emerald-50 text-emerald-700" : s.score >= 45 ? "bg-amber-50 text-amber-700" : "bg-zinc-100 text-zinc-600"}`}>
+                  {s.score}/100
+                </span>
+              </div>
+            ))}
+          </div>
         </Card>
       </div>
 

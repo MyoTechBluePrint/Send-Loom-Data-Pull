@@ -60,6 +60,103 @@ export function ImportsClient({ batches }: { batches: ImportBatch[] }) {
   const [createSegment, setCreateSegment] = useState(true);
   const [result, setResult] = useState<{ imported: number; merged: number; skipped: number; blocked: number; segmentId: string | null } | null>(null);
 
+  type Job = {
+    id: number; fileName: string; size: number; status: string;
+    label?: string; confidence?: number; destination?: string; note?: string;
+    emails?: number; phones?: number; rows?: number; text?: string; kind?: string;
+  };
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [dragOver, setDragOver] = useState(false);
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const MAX_BROWSER_BYTES = 4 * 1024 * 1024;
+
+  async function handleFiles(files: FileList | File[]) {
+    const list = Array.from(files);
+    if (list.length === 0) return;
+    let pid = projectId;
+    if (list.length > 1 && !pid) {
+      const res = await fetch("/api/imports/project", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: `Dropzone · ${new Date().toLocaleDateString("en-GB")} (${list.length} files)` }),
+      });
+      const json = await res.json();
+      if (json.ok) { pid = json.id; setProjectId(json.id); }
+    }
+    for (const file of list) {
+      const id = Date.now() + Math.random();
+      const base: Job = { id, fileName: file.name, size: file.size, status: "scanning" };
+      setJobs((j) => [base, ...j]);
+      if (file.size > MAX_BROWSER_BYTES) {
+        setJobs((j) => j.map((x) => x.id === id ? { ...x, status: "too_large", note: "Over 4MB: browser parsing capped. Background import jobs are the documented V2 path (ARCHITECTURE.md)." } : x));
+        continue;
+      }
+      if (/\.(xlsx|xls)$/i.test(file.name)) {
+        setJobs((j) => j.map((x) => x.id === id ? { ...x, status: "unsupported", note: "XLSX parser pending: export as CSV for now. The job card and pipeline are ready for it." } : x));
+        continue;
+      }
+      try {
+        const text = await file.text();
+        const res = await fetch("/api/imports/classify", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fileName: file.name, sample: text.slice(0, 100_000) }),
+        });
+        const json = await res.json();
+        if (!json.ok) throw new Error("classify failed");
+        setJobs((j) => j.map((x) => x.id === id ? {
+          ...x, status: "ready",
+          label: json.classification.label, kind: json.classification.kind,
+          confidence: json.classification.confidence,
+          destination: json.classification.destination, note: json.classification.note,
+          emails: json.stats.emails, phones: json.stats.phones, rows: json.stats.rowsSampled,
+          text,
+        } : x));
+      } catch {
+        setJobs((j) => j.map((x) => x.id === id ? { ...x, status: "failed", note: "Could not read this file." } : x));
+      }
+    }
+  }
+
+  async function jobToWizard(job: Job) {
+    const json = await call("/api/imports", {
+      name: job.fileName.replace(/\.[^.]+$/, ""),
+      source: `Dropzone upload · ${job.label ?? "file"}`,
+      sourceType: job.kind === "savvy_mango" ? "savvy_mango" : "import",
+      csv: job.text,
+      projectId: projectId ?? undefined,
+      classification: job.kind,
+    });
+    setBatchId(json.batchId);
+    setColumns(json.columns);
+    setMapping(json.mapping);
+    setPreview(json.preview);
+    setTotalRows(json.totalRows);
+    setWizard(true);
+    setStep(1);
+    setJobs((j) => j.map((x) => x.id === job.id ? { ...x, status: "mapping" } : x));
+  }
+
+  async function jobToInbox(job: Job) {
+    const res = await fetch("/api/intake", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: job.kind === "whatsapp_export" ? "whatsapp" : "note", text: (job.text ?? "").slice(0, 20_000) }),
+    });
+    if ((await res.json()).ok) {
+      setJobs((j) => j.map((x) => x.id === job.id ? { ...x, status: "sent_to_inbox" } : x));
+    }
+  }
+
+  async function jobToSuppression(job: Job) {
+    const res = await fetch("/api/imports/suppress", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: job.text ?? "", source: job.fileName }),
+    });
+    const json = await res.json();
+    if (json.ok) {
+      setJobs((j) => j.map((x) => x.id === job.id ? { ...x, status: "suppressed", note: `${json.added} emails added to the suppression list. No contacts created.` } : x));
+      router.refresh();
+    }
+  }
+
   async function call(url: string, body: unknown) {
     setBusy(true);
     setError(null);
@@ -114,8 +211,8 @@ export function ImportsClient({ batches }: { batches: ImportBatch[] }) {
 
   return (
     <Shell
-      title="Data Upload Centre"
-      subtitle="Import, map, clean and tag audience data · every record keeps its source"
+      title="Mass Data Dropzone"
+      subtitle="Drop almost anything · Sendloom classifies, cleans, maps and organises it before import"
       actions={
         wizard ? (
           <button onClick={() => { setWizard(false); router.refresh(); }} className="rounded-lg border border-line bg-surface px-3.5 py-2 text-[13px] font-semibold text-ink-2 hover:bg-[#f0efec]">
@@ -137,6 +234,88 @@ export function ImportsClient({ batches }: { batches: ImportBatch[] }) {
 
       {!wizard ? (
         <>
+          <div
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files); }}
+            className={`mb-4 rounded-2xl border-2 border-dashed px-6 py-10 text-center transition-colors ${dragOver ? "border-brand bg-brand-soft" : "border-line bg-surface"}`}
+          >
+            <p className="text-2xl">⇪</p>
+            <h2 className="mt-2 text-base font-semibold">Drop your data here</h2>
+            <p className="mx-auto mt-1 max-w-xl text-[13px] leading-relaxed text-ink-2">
+              Contacts, prospects, customer files, exported lists, suppression lists, WhatsApp exports or messy spreadsheets.
+              Sendloom classifies, cleans, maps and organises them before anything is imported.
+            </p>
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+              <label className="cursor-pointer rounded-lg bg-brand px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#5b21b6]">
+                Upload files
+                <input type="file" multiple accept=".csv,.txt,.xlsx" className="hidden" onChange={(e) => e.target.files && handleFiles(e.target.files)} />
+              </label>
+              <button onClick={() => { setWizard(true); setStep(0); setResult(null); }} className="rounded-lg border border-line bg-surface px-4 py-2 text-[13px] font-semibold text-ink-2 hover:bg-[#f0efec]">
+                Try the demo file
+              </button>
+              <span className="text-xs text-ink-3">CSV and TXT parse now · XLSX/PDF/images are architecture-ready</span>
+            </div>
+          </div>
+
+          {jobs.length > 0 && (
+            <div className="mb-4 space-y-2.5">
+              {jobs.map((job) => (
+                <Card key={job.id} className="px-4 py-3.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded bg-[#f0efec] px-2 py-1 text-[11px] font-bold text-ink-2">{job.fileName}</span>
+                    <span className="text-[11px] text-ink-3">{(job.size / 1024).toFixed(0)} KB</span>
+                    {job.label && (
+                      <span className="rounded-full bg-brand-soft px-2.5 py-0.5 text-[11px] font-bold text-brand">
+                        We think this is: {job.label} · {job.confidence}%
+                      </span>
+                    )}
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                      job.status === "ready" ? "bg-emerald-50 text-emerald-700"
+                      : job.status === "sent_to_inbox" || job.status === "suppressed" || job.status === "mapping" ? "bg-blue-50 text-blue-700"
+                      : job.status === "scanning" ? "bg-amber-50 text-amber-700"
+                      : "bg-zinc-100 text-zinc-500"
+                    }`}>{job.status.replace(/_/g, " ")}</span>
+                  </div>
+                  {(job.destination || job.note) && (
+                    <p className="mt-1.5 text-xs text-ink-2">
+                      {job.destination && <>→ <b>{job.destination}</b> · </>}
+                      {job.emails !== undefined && <>{job.emails} emails · {job.phones} phones · ~{job.rows} rows · </>}
+                      {job.note}
+                    </p>
+                  )}
+                  {job.status === "ready" && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {job.kind === "suppression_list" ? (
+                        <button onClick={() => jobToSuppression(job)} className="rounded-lg bg-red-50 px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-100">
+                          Import as suppression list
+                        </button>
+                      ) : job.kind === "whatsapp_export" || job.kind === "sales_notes" ? (
+                        <button onClick={() => jobToInbox(job)} className="rounded-lg bg-brand px-3 py-1.5 text-xs font-bold text-white hover:bg-[#5b21b6]">
+                          Send to Universal Inbox for extraction
+                        </button>
+                      ) : (
+                        <button onClick={() => jobToWizard(job)} className="rounded-lg bg-brand px-3 py-1.5 text-xs font-bold text-white hover:bg-[#5b21b6]">
+                          Map fields & import →
+                        </button>
+                      )}
+                      {job.kind !== "suppression_list" && (
+                        <button onClick={() => jobToSuppression(job)} className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink-2 hover:bg-[#f0efec]" title="Treat as suppression list instead">
+                          It's a suppression list
+                        </button>
+                      )}
+                      {job.kind !== "whatsapp_export" && job.kind !== "sales_notes" && (
+                        <button onClick={() => jobToInbox(job)} className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink-2 hover:bg-[#f0efec]" title="Route to Universal Inbox extraction instead">
+                          It's messy notes
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </Card>
+              ))}
+            </div>
+          )}
+
           <div className="mb-4 grid grid-cols-2 gap-4 xl:grid-cols-4">
             <Card className="px-5 py-4">
               <p className="text-xs font-medium text-ink-3">Import batches</p>

@@ -29,6 +29,15 @@ const DETECTORS: [RegExp, PlatformField][] = [
   [/^(tags?)$/i, "tags"],
   [/note/i, "notes"],
   [/(order|purchase)[-_ ]?(value|total)/i, "orderValue"],
+  // Spanish-style labels
+  [/^nombre$/i, "firstName"],
+  [/^apellidos?$/i, "lastName"],
+  [/^correo/i, "email"],
+  [/^tel[eé]fono$/i, "phone"],
+  [/^ciudad$/i, "city"],
+  [/^pa[ií]s$/i, "country"],
+  [/^notas$/i, "notes"],
+  [/^(company|business|organisation|organization|empresa)$/i, "custom"],
 ];
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -46,7 +55,7 @@ export function detectMapping(columns: string[]): Record<string, PlatformField> 
 
 export async function createBatchFromCsv(opts: {
   workspaceId: string; name: string; source: string; sourceType: string;
-  uploadedBy: string; csv: string;
+  uploadedBy: string; csv: string; projectId?: string; classification?: string;
 }) {
   const parsed = Papa.parse<Record<string, string>>(opts.csv.trim(), { header: true, skipEmptyLines: true });
   if (parsed.errors.length > 3) {
@@ -59,6 +68,7 @@ export async function createBatchFromCsv(opts: {
     data: {
       workspaceId: opts.workspaceId, name: opts.name, source: opts.source,
       sourceType: opts.sourceType, uploadedBy: opts.uploadedBy,
+      projectId: opts.projectId ?? null, classification: opts.classification ?? null,
       status: "mapping", mapping: JSON.stringify(mapping), totalRows: parsed.data.length,
     },
   });

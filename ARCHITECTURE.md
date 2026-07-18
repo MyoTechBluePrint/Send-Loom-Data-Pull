@@ -66,6 +66,19 @@ global search) · S3 (imports, template assets) · SES default sending · OAuth2
 Stripe billing. Targets: 100k+ contacts per store, millions of events, <5s event-to-
 timeline latency, queue-based sending with per-domain throttling and reputation guards.
 
+## Data movement layer (packs + dropzone)
+
+ContactPack freezes a cleaned contact group (dedupe + suppression/unsub
+exclusion at build AND render time); ExportLog records every copy/download
+with counts and exclusions; ImportProject groups multi-file Dropzone uploads;
+ImportBatch carries classification (classify.ts header/name/content
+signatures). Suppression-list files route to SuppressionRecords only.
+Savvy Mango vault: simulated aggregates only until the lawful-basis review
+passes (STAGING.md); the real path reuses the batch pipeline with
+sourceType=savvy_mango and enforced source tagging. V2 for >4MB files:
+background ImportJob workers over the queue seam, chunked parsing, progress
+polling — the UI job cards and statuses are already shaped for it.
+
 ## Universal Inbox (intake) flow
 
 Data arrives (paste / WhatsApp forward / email forward / note / file / form /

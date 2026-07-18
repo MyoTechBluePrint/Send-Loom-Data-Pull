@@ -8,6 +8,8 @@ const Body = z.object({
   source: z.string().min(1),
   sourceType: z.string().default("import"),
   csv: z.string().min(1).max(5_000_000),
+  projectId: z.string().optional(),
+  classification: z.string().max(40).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -23,6 +25,8 @@ export async function POST(req: NextRequest) {
       sourceType: parsed.data.sourceType,
       uploadedBy: "steve@vitaliswellness.co.uk",
       csv: parsed.data.csv,
+      projectId: parsed.data.projectId,
+      classification: parsed.data.classification,
     });
     return Response.json({ ok: true, ...result });
   } catch (e) {

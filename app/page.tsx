@@ -88,12 +88,14 @@ export default async function Dashboard() {
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3.5">
           <p className="text-xs font-bold uppercase tracking-wide text-brand">Start here</p>
           {[
+            ["Upload a file", "/imports"],
             ["Review intake", "/inbox"],
             ["Try Paste Anything", "/inbox"],
             ["Open hot leads", "/subscribers"],
             ["Create a test audience", "/segments"],
             ["Check Demand Radar", "/demand"],
             ["Complete a sales task", "/tasks"],
+            ["Copy or export a list", "/packs"],
             ["Leave feedback", "/feedback"],
           ].map(([label, href]) => (
             <Link key={label} href={href} className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-ink-2 shadow-sm hover:text-brand">

@@ -134,6 +134,70 @@ export function Sparkline({ data, color = "var(--s1)" }: { data: number[]; color
   );
 }
 
+// Donut with centre total + legend. Series colours from the validated palette.
+export function Donut({ items, centreLabel }: { items: { label: string; value: number; color: string }[]; centreLabel: string }) {
+  const total = items.reduce((s, i) => s + i.value, 0) || 1;
+  const R = 42, C = 2 * Math.PI * R;
+  let offset = 0;
+  return (
+    <div className="flex flex-wrap items-center gap-5">
+      <svg viewBox="0 0 120 120" className="h-32 w-32 shrink-0" role="img" aria-label={centreLabel}>
+        {items.map((it) => {
+          const frac = it.value / total;
+          const dash = `${frac * C - 2} ${C - frac * C + 2}`;
+          const el = (
+            <circle
+              key={it.label} cx="60" cy="60" r={R} fill="none"
+              stroke={it.color} strokeWidth="14"
+              strokeDasharray={dash} strokeDashoffset={-offset * C + C / 4}
+            />
+          );
+          offset += frac;
+          return el;
+        })}
+        <text x="60" y="57" textAnchor="middle" fontSize="16" fontWeight="700" fill="var(--foreground)" className="tabular">
+          {total.toLocaleString("en-GB")}
+        </text>
+        <text x="60" y="72" textAnchor="middle" fontSize="8" fill="var(--ink-3)">{centreLabel}</text>
+      </svg>
+      <ul className="min-w-0 flex-1 space-y-1.5">
+        {items.map((it) => (
+          <li key={it.label} className="flex items-center justify-between gap-3 text-xs">
+            <span className="flex min-w-0 items-center gap-1.5">
+              <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: it.color }} />
+              <span className="truncate font-medium text-ink-2">{it.label}</span>
+            </span>
+            <span className="tabular shrink-0 font-semibold">{it.value.toLocaleString("en-GB")} · {Math.round((it.value / total) * 100)}%</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// Horizontal funnel: each stage a bar scaled to the first stage.
+export function Funnel({ stages }: { stages: { label: string; value: number }[] }) {
+  const max = stages[0]?.value || 1;
+  return (
+    <div className="space-y-2">
+      {stages.map((s, i) => (
+        <div key={s.label}>
+          <div className="mb-0.5 flex items-baseline justify-between gap-3 text-xs">
+            <span className="min-w-0 flex-1 truncate font-medium text-ink-2">{s.label}</span>
+            <span className="tabular shrink-0 font-semibold">
+              {s.value.toLocaleString("en-GB")}
+              {i > 0 && <span className="ml-1 font-normal text-ink-3">({Math.round((s.value / max) * 100)}%)</span>}
+            </span>
+          </div>
+          <div className="h-3 w-full rounded-full bg-[#f0efec]">
+            <div className="h-3 rounded-full" style={{ width: `${Math.max(2, (s.value / max) * 100)}%`, background: `color-mix(in oklab, var(--s1) ${100 - i * 12}%, #86b6ef)` }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function Th({ children, className = "" }: { children: ReactNode; className?: string }) {
   return <th className={`px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-3 ${className}`}>{children}</th>;
 }

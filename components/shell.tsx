@@ -15,7 +15,7 @@ const nav: { section?: string; items: { href: string; label: string; icon: strin
     section: "Capture",
     items: [
       { href: "/inbox", label: "Universal Inbox", icon: "⤓" },
-      { href: "/imports", label: "Data Uploads", icon: "⇪" },
+      { href: "/imports", label: "Data Dropzone", icon: "⇪" },
       { href: "/forms", label: "Forms & Quizzes", icon: "▤" },
     ],
   },
@@ -41,6 +41,7 @@ const nav: { section?: string; items: { href: string; label: string; icon: strin
     section: "Control",
     items: [
       { href: "/analytics", label: "Analytics", icon: "∿" },
+      { href: "/providers", label: "API Providers", icon: "↯" },
       { href: "/admin", label: "Admin", icon: "▣" },
       { href: "/settings", label: "Settings", icon: "⚙" },
       { href: "/team-handover", label: "Handover Guide", icon: "✦" },
