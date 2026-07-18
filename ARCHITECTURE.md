@@ -1,6 +1,14 @@
-# Sendloom · Technical Architecture Plan
+# Sendloom · Technical Architecture
 
-Status: prototype is UI + mock data only. This document is the plan for the real build.
+Status after V3: the foundation below is BUILT and running locally. Prisma
+schema in [prisma/schema.prisma](prisma/schema.prisma) (SQLite for dev,
+Postgres-compatible; one-line datasource switch for production). Services in
+`lib/server/`: `imports.ts` (pipeline), `events.ts` (queue-ready ingestion),
+`scoring.ts` (transparent rules), `segments.ts` (rule engine with exclusions),
+`views.ts` (DB → UI shapes). Store API in `app/api/v1/`, plugin in
+`wordpress-plugin/sendloom/`. Flow tests: `npm run test:flows` (24 checks).
+Still seeded demo: campaign/automation performance, analytics aggregates,
+prospects, keyword volumes. Remaining plan below.
 
 ## Core entities
 

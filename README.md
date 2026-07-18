@@ -1,36 +1,59 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Sendloom
 
-## Getting Started
+Growth intelligence platform for WooCommerce: data uploads with a source and
+consent ledger, contact intelligence, lead scoring, keyword/demand radar,
+segments, campaigns, automations, sales tasks and revenue attribution.
 
-First, run the development server:
+**Status: V3 foundation.** The UI is complete; imports, contacts, scoring,
+events, segments, tasks, demand signals and audit run on a real database.
+Campaign/automation performance numbers are seeded demo data (flagged `isDemo`
+in the schema). No email sending yet.
+
+## Setup
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npx prisma migrate dev   # creates prisma/dev.db (SQLite locally)
+npm run db:seed          # seeds the Vitalis demo workspace
+npm run dev              # http://localhost:3009
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The dev database is SQLite (no local Postgres needed). Production targets
+PostgreSQL: change `provider` in [prisma/schema.prisma](prisma/schema.prisma)
+and set `DATABASE_URL`, then re-run migrations. The schema avoids
+SQLite-specific features.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Command | What it does |
+|---|---|
+| `npm run dev` | Dev server on port 3009 |
+| `npm run build` | Production build (must stay green) |
+| `npm run db:migrate` | Run/create Prisma migrations |
+| `npm run db:seed` | Seed the demo workspace |
+| `npm run db:reset` | Drop, re-migrate and re-seed |
+| `npm run test:flows` | End-to-end flow tests (import, dedupe, consent, suppression, events, scoring, segments) |
 
-## Learn More
+## Try the real pipeline
 
-To learn more about Next.js, take a look at the following resources:
+1. Open **Data Uploads → New import** and run the demo CSV: it parses, maps,
+   quality-checks and writes real contacts with source + consent ledger rows.
+2. Open **Contacts**: the new records are there, scored, with timelines.
+3. Send an event as the store would:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+curl -X POST localhost:3009/api/v1/events \
+  -H "x-sendloom-key: slm_live_demo_vitalis_4f2a" \
+  -H "Content-Type: application/json" \
+  -d '{"type":"search","email":"emma.richardson@gmail.com","payload":{"term":"nad+","resultCount":4}}'
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+The event stores, appears on Emma's timeline, updates Demand Radar's site
+search data and recomputes her lead score.
 
-## Deploy on Vercel
+## Docs
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- [ARCHITECTURE.md](ARCHITECTURE.md) — data model, services, provider layer, scaling plan
+- [API.md](API.md) — endpoint reference (plugin API + internal API)
+- [PLUGIN.md](PLUGIN.md) — WooCommerce plugin install and local walkthrough
+- [COVERAGE.md](COVERAGE.md) — client-brief coverage checklist (V1/V2)
