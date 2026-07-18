@@ -1,84 +1,138 @@
 import Link from "next/link";
 import { Shell } from "@/components/shell";
 import { Card, CardHeader } from "@/components/ui";
+import { FirstDayChecklist } from "@/components/first-day-checklist";
+
+const HOW_TOS: { title: string; steps: string[] }[] = [
+  {
+    title: "How to add a contact",
+    steps: [
+      "Contacts → Add contact (top right).",
+      "Name is required; give an email OR a phone number. Make them up.",
+      "The new contact gets a source ledger entry ('Manual · staging') and consent set to pending, so they can never be emailed by accident.",
+    ],
+  },
+  {
+    title: "How to use Paste Anything",
+    steps: [
+      "Universal Inbox → paste something messy, like: 'Sarah 07700 900123 wants collagen advice, call Friday'.",
+      "Click Extract data. Check the coloured chips: name, phone, interests, task.",
+      "Approve to create the contact (and the call task). Reject if the extraction got it wrong. Both are fine, that's the point of review.",
+    ],
+  },
+  {
+    title: "How to create a sales task",
+    steps: [
+      "Sales Tasks → New task.",
+      "Pick the task type, who it's about, priority and due date.",
+      "Tick the circle to complete it; use Delete on anything you created while testing.",
+    ],
+  },
+  {
+    title: "How to create an audience",
+    steps: [
+      "Audience Builder → Build an audience.",
+      "Add rules (for example Lead score is at least 60). The count on the right updates live from the real database.",
+      "The NOT button turns a rule into an exclusion. Save it and it appears as a card with a suggested play.",
+    ],
+  },
+  {
+    title: "How to use Demand Radar",
+    steps: [
+      "Demand Radar → Keyword intent shows what the market searches for; the Review column is the compliance state for sensitive terms.",
+      "Site search shows what visitors typed on the demo store, including searches with no results (missed demand).",
+      "Opportunities lists the gaps: demand that exists with no product, page or flow behind it.",
+    ],
+  },
+  {
+    title: "How to leave useful feedback",
+    steps: [
+      "Feedback link in the sidebar, or the Feedback page.",
+      "One thing per submission beats one giant essay; say where you were and what you expected to happen.",
+      "'The Approve button on the inbox didn't tell me what it did' is perfect feedback. 'It's fine' is not.",
+    ],
+  },
+];
 
 export default function TeamHandoverPage() {
   return (
-    <Shell title="Handover guide" subtitle="Written for Will · no jargon · 10 minutes to read, less to try">
+    <Shell title="Handover guide" subtitle="Written for Will · plain English · start with the checklist on the right">
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <div className="space-y-4 xl:col-span-2">
           <Card>
-            <CardHeader title="What Sendloom is" />
+            <CardHeader title="1 · What Sendloom is" />
             <p className="px-5 py-4 text-sm leading-relaxed text-ink-2">
-              Sendloom takes messy customer data (spreadsheets, WhatsApp messages, enquiry emails, store orders), organises it into contacts with a clear record of where each person came from, scores who's worth attention, shows what the market is searching for, and turns all of it into audiences, campaigns and follow-up tasks. The one-liner: <b>turn messy data, customer behaviour and market demand into revenue.</b>
+              Sendloom takes messy customer data (spreadsheets, WhatsApp messages, enquiry emails, store orders), turns it into
+              contacts with a clear record of where each person came from, scores who deserves attention, shows what the market is
+              searching for, and turns all of it into audiences, campaigns and follow-up tasks. One line: <b>turn messy data,
+              customer behaviour and market demand into revenue.</b>
             </p>
           </Card>
 
           <Card>
-            <CardHeader title="What this staging version is" />
+            <CardHeader title="2 · What this staging version is (and isn't)" />
             <div className="px-5 py-4 text-sm leading-relaxed text-ink-2">
-              <p>A demo workspace for a made-up wellness brand ("Vitalis"). It's for you to click around, break things and tell us what's confusing. Three rules:</p>
-              <ul className="mt-2 list-disc space-y-1 pl-5">
-                <li><b>No real customer data.</b> Make people up.</li>
-                <li><b>No emails ever leave this system.</b> "Send" uses a test transport, nothing is delivered to anyone.</li>
-                <li>Charts with a "Demo" label are seeded example numbers, not real performance.</li>
+              <ul className="list-disc space-y-1.5 pl-5">
+                <li><b>Demo workspace</b> for a made-up wellness brand, "Vitalis". Break things freely.</li>
+                <li><b>No real emails ever send.</b> Campaign sends use a test transport; the button says Demo send because that's what it is.</li>
+                <li><b>Demo-labelled numbers</b> (campaign performance charts, keyword volumes) are seeded examples. Everything else you touch is a real database record.</li>
+                <li><b>Never upload real customer data.</b> Invented people only. If it's in your real phone book, it doesn't go in here.</li>
               </ul>
             </div>
           </Card>
 
+          {HOW_TOS.map((h, i) => (
+            <Card key={h.title}>
+              <CardHeader title={`${i + 3} · ${h.title}`} />
+              <ol className="space-y-2 px-5 py-4 text-sm">
+                {h.steps.map((s, j) => (
+                  <li key={j} className="flex gap-3">
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-soft text-[11px] font-bold text-brand">{j + 1}</span>
+                    <span className="leading-relaxed text-ink-2">{s}</span>
+                  </li>
+                ))}
+              </ol>
+            </Card>
+          ))}
+
           <Card>
-            <CardHeader title="Try these, in order" subtitle="Each one is a real workflow writing real records to the staging database" />
-            <ol className="space-y-3.5 px-5 py-4 text-sm">
-              {[
-                ["Take the tour", "Sidebar → Restart walkthrough if you skipped it on first login."],
-                ["Paste a messy lead", "Universal Inbox → paste something like 'Sarah 07700 900123 wants collagen advice, call Friday' → Extract data → Approve. Watch it become a contact with tags and a call task."],
-                ["Review what's waiting", "Universal Inbox has a WhatsApp forward already waiting. Approve Maria, reject anything that looks wrong."],
-                ["Run the demo import", "Data Uploads → New import → use the demo file. Watch the quality engine block the dodgy rows and explain why."],
-                ["Open a contact", "Contacts → Emma Richardson. Read 'Why this contact matters', the score reasons and the source ledger. That page is the heart of the product."],
-                ["Build an audience", "Audience Builder → Build an audience. The estimate updates live as you add rules. Save it."],
-                ["Send a test campaign", "Campaigns → 'Send now' on a draft. It reports exactly who was skipped and why (no consent, suppressed). Nothing is really emailed."],
-                ["Complete a task", "Sales Tasks → tick one off. Check Admin afterwards: everything you did is in the audit log."],
-                ["Tell us what you think", "Feedback link in the sidebar. Brutal honesty is the useful kind."],
-              ].map(([title, copy], i) => (
-                <li key={i} className="flex gap-3">
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-bold text-brand">{i + 1}</span>
-                  <p className="leading-relaxed"><b>{title}.</b> {copy}</p>
-                </li>
-              ))}
-            </ol>
+            <CardHeader title="9 · Common mistakes" />
+            <ul className="list-disc space-y-1.5 px-5 py-4 pl-9 text-sm text-ink-2">
+              <li>Searching for someone who's still in the inbox queue: they only become a contact after you approve them.</li>
+              <li>Expecting a new contact to be emailable: consent starts pending on purpose. That's the platform protecting you.</li>
+              <li>Thinking Demo send emails a real person: it never does. It records who would have received it and who was skipped.</li>
+              <li>Being polite in feedback. Blunt is useful.</li>
+            </ul>
+          </Card>
+
+          <Card>
+            <CardHeader title="10 · What to test first" />
+            <p className="px-5 py-4 text-sm leading-relaxed text-ink-2">
+              The checklist on the right, top to bottom. It's ordered so each step teaches the next one. When you finish, spend ten
+              minutes clicking anywhere you like and leave feedback on whatever felt slow, confusing or pointless.
+            </p>
           </Card>
         </div>
 
         <div className="space-y-4 self-start">
+          <FirstDayChecklist />
           <Card>
-            <CardHeader title="Your access" subtitle="Worker Admin · staging" />
+            <CardHeader title="Your access" subtitle="Worker Admin · Operator · staging" />
             <div className="px-5 py-4 text-[13px] leading-relaxed">
-              <p className="text-ink-2">You can test everything: add demo contacts, run imports, approve inbox items, build audiences, create draft campaigns, run test sends, and manage tasks.</p>
-              <p className="mt-2 font-semibold text-ink-2">Locked on staging for everyone:</p>
+              <p className="text-ink-2">Test everything: demo contacts, imports, inbox approvals, audiences, draft campaigns, demo sends, tasks, and admin monitoring.</p>
+              <p className="mt-2 font-semibold text-ink-2">Locked on staging:</p>
               <ul className="mt-1 list-disc space-y-0.5 pl-5 text-ink-2">
-                <li>Live email sending (test transport only)</li>
-                <li>Billing and plan changes</li>
-                <li>Production integrations and secrets</li>
+                <li>Live email sending, billing, production secrets</li>
+                <li>Feedback triage and demo reset (owner tools)</li>
                 <li>Deleting the workspace or audit history</li>
               </ul>
             </div>
           </Card>
           <Card>
-            <CardHeader title="The feedback we want" />
-            <ul className="list-disc space-y-1.5 px-5 py-4 pl-9 text-[13px] text-ink-2">
-              <li>Where did you get lost, even for a second?</li>
-              <li>What would you use every day? What would you never touch?</li>
-              <li>What's missing before this could run a real store's marketing?</li>
-              <li>Does "source ledger" make sense at a glance, or does it need a better name?</li>
-            </ul>
-            <div className="border-t border-line px-5 py-3">
-              <Link href="/feedback" className="text-[13px] font-bold text-brand hover:underline">Leave feedback →</Link>
-            </div>
-          </Card>
-          <Card>
             <CardHeader title="More detail" />
             <p className="px-5 py-4 text-[13px] text-ink-2">
-              The technical what's-real-what's-demo breakdown lives on the <Link href="/demo-notes" className="font-semibold text-brand hover:underline">demo notes</Link> page.
+              Technical what's-real-what's-demo: <Link href="/demo-notes" className="font-semibold text-brand hover:underline">demo notes</Link>.
+              Anything broken or confusing: <Link href="/feedback" className="font-semibold text-brand hover:underline">feedback</Link>.
             </p>
           </Card>
         </div>

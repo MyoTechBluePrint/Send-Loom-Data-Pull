@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Shell, PrimaryButton, GhostButton } from "@/components/shell";
+import { useRouter } from "next/navigation";
+import { Shell } from "@/components/shell";
 import { Card } from "@/components/ui";
 
 type Block =
@@ -28,7 +29,23 @@ const palette: { type: Block["type"]; label: string; icon: string }[] = [
 let nextId = 100;
 
 export default function CampaignBuilder() {
+  const router = useRouter();
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [subjectLine, setSubjectLine] = useState("What NAD+ actually does");
   const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
+
+  async function saveDraft() {
+    setSavingDraft(true);
+    try {
+      const res = await fetch("/api/campaigns", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: subjectLine || "Untitled campaign", subject: subjectLine }),
+      });
+      if ((await res.json()).ok) router.push("/campaigns");
+    } finally {
+      setSavingDraft(false);
+    }
+  }
   const [selected, setSelected] = useState<number | null>(2);
   const [blocks, setBlocks] = useState<Block[]>([
     { id: 1, type: "logo" },
@@ -70,9 +87,10 @@ export default function CampaignBuilder() {
       subtitle="NAD+ education push · Draft · audience: Longevity interest (9,204)"
       actions={
         <>
-          <GhostButton>Send test</GhostButton>
-          <GhostButton>Schedule</GhostButton>
-          <PrimaryButton>Review & send</PrimaryButton>
+          <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700">Staging · demo sends only</span>
+          <button onClick={saveDraft} disabled={savingDraft} className="rounded-lg bg-[#6d28d9] px-3.5 py-2 text-[13px] font-semibold text-white shadow-sm hover:bg-[#5b21b6] disabled:opacity-50">
+            {savingDraft ? "Saving…" : "Save as draft"}
+          </button>
         </>
       }
     >
@@ -206,7 +224,7 @@ export default function CampaignBuilder() {
               </label>
               <label className="block">
                 <span className="text-xs font-medium text-ink-3">Subject line</span>
-                <input defaultValue="What NAD+ actually does" className="mt-1 w-full rounded-lg border border-line bg-surface px-2.5 py-2 outline-none focus:border-brand" />
+                <input value={subjectLine} onChange={(e) => setSubjectLine(e.target.value)} className="mt-1 w-full rounded-lg border border-line bg-surface px-2.5 py-2 outline-none focus:border-brand" />
               </label>
               <label className="block">
                 <span className="text-xs font-medium text-ink-3">Preview text</span>

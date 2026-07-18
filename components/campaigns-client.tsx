@@ -107,7 +107,7 @@ export function CampaignsClient({ campaigns }: { campaigns: Campaign[] }) {
                         onClick={() => send(c.id)}
                         className="rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#5b21b6] disabled:opacity-50"
                       >
-                        {sending === c.id ? "Sending…" : "Send now"}
+                        {sending === c.id ? "Sending…" : "Demo send"}
                       </button>
                       <button onClick={() => duplicate(c.id)} className="rounded-lg border border-line px-2 py-1.5 text-[11px] font-semibold text-ink-2 hover:bg-[#f0efec]" title="Duplicate">⧉</button>
                       <button onClick={() => removeDraft(c.id, c.name)} className="rounded-lg border border-line px-2 py-1.5 text-[11px] font-semibold text-ink-3 hover:bg-red-50 hover:text-red-700" title="Delete draft">✕</button>
@@ -123,7 +123,7 @@ export function CampaignsClient({ campaigns }: { campaigns: Campaign[] }) {
           </tbody>
         </table></div>
         <p className="border-t border-line px-4 py-3 text-xs text-ink-3">
-          "Send now" uses the active provider. Without SES credentials that's the <b>dev transport</b>: sends are recorded and tracked (opens/clicks feed lead scores) but no real email leaves the platform.
+          "Demo send" uses the active provider. Without SES credentials that's the <b>dev transport</b>: sends are recorded and tracked (opens/clicks feed lead scores) but no real email leaves the platform.
         </p>
       </Card>
     </Shell>

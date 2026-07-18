@@ -2,11 +2,14 @@
 
 // Global search palette: ⌘K / Ctrl+K anywhere, or the header button.
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 type Group = { label: string; items: { title: string; detail: string; href: string }[] };
 
 export function GlobalSearch() {
+  const router = useRouter();
+  const [highlight, setHighlight] = useState(0);
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [groups, setGroups] = useState<Group[]>([]);
@@ -42,13 +45,25 @@ export function GlobalSearch() {
       try {
         const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
         const json = await res.json();
-        if (json.ok) setGroups(json.groups);
+        if (json.ok) { setGroups(json.groups); setHighlight(0); }
       } finally {
         setBusy(false);
       }
     }, 250);
     return () => clearTimeout(t);
   }, [q, open]);
+
+  const flat = groups.flatMap((g) => g.items);
+
+  function onKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "ArrowDown") { e.preventDefault(); setHighlight((h) => Math.min(h + 1, flat.length - 1)); }
+    if (e.key === "ArrowUp") { e.preventDefault(); setHighlight((h) => Math.max(h - 1, 0)); }
+    if (e.key === "Enter" && flat[highlight]) {
+      e.preventDefault();
+      setOpen(false);
+      router.push(flat[highlight].href);
+    }
+  }
 
   if (!open) return null;
 
@@ -61,6 +76,7 @@ export function GlobalSearch() {
             ref={inputRef}
             value={q}
             onChange={(e) => setQ(e.target.value)}
+            onKeyDown={onKeyDown}
             placeholder="Search contacts, campaigns, audiences, tasks, keywords…"
             className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-ink-3"
           />
@@ -72,24 +88,31 @@ export function GlobalSearch() {
           ) : busy && groups.length === 0 ? (
             <p className="px-4 py-8 text-center text-sm text-ink-3">Searching…</p>
           ) : groups.length === 0 ? (
-            <p className="px-4 py-8 text-center text-sm text-ink-3">No matches for "{q}".</p>
+            <p className="px-4 py-8 text-center text-sm text-ink-3">No matches for "{q}". Try a name, email, phone, interest, campaign or keyword. People still in the inbox queue only appear once approved.</p>
           ) : (
-            groups.map((g) => (
-              <div key={g.label} className="py-1.5">
-                <p className="px-4 pb-1 pt-2 text-[10px] font-bold uppercase tracking-widest text-ink-3">{g.label}</p>
-                {g.items.map((item, i) => (
-                  <Link
-                    key={i}
-                    href={item.href}
-                    onClick={() => setOpen(false)}
-                    className="flex items-baseline justify-between gap-3 px-4 py-2 hover:bg-brand-soft"
-                  >
-                    <span className="min-w-0 truncate text-sm font-medium">{item.title}</span>
-                    <span className="shrink-0 text-xs text-ink-3">{item.detail}</span>
-                  </Link>
-                ))}
-              </div>
-            ))
+            (() => {
+              let idx = -1;
+              return groups.map((g) => (
+                <div key={g.label} className="py-1.5">
+                  <p className="px-4 pb-1 pt-2 text-[10px] font-bold uppercase tracking-widest text-ink-3">{g.label}</p>
+                  {g.items.map((item, i) => {
+                    idx++;
+                    const isHl = idx === highlight;
+                    return (
+                      <Link
+                        key={i}
+                        href={item.href}
+                        onClick={() => setOpen(false)}
+                        className={`flex items-baseline justify-between gap-3 px-4 py-2 ${isHl ? "bg-brand-soft" : "hover:bg-brand-soft"}`}
+                      >
+                        <span className="min-w-0 truncate text-sm font-medium">{item.title}</span>
+                        <span className="shrink-0 text-xs text-ink-3">{item.detail}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              ));
+            })()
           )}
         </div>
       </div>

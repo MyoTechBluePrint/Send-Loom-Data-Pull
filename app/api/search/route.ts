@@ -2,12 +2,25 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/server/db";
 import { demoWorkspaceId } from "@/lib/server/views";
+import { can, currentUser } from "@/lib/server/permissions";
 
 export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams.get("q")?.trim() ?? "";
   if (q.length < 2) return Response.json({ ok: true, groups: [] });
 
   const wsId = await demoWorkspaceId();
+  const user = await currentUser();
+
+  const PAGES = [
+    { title: "Handover guide", detail: "How everything works", href: "/team-handover" },
+    { title: "Demo notes", detail: "What's real vs seeded", href: "/demo-notes" },
+    { title: "Feedback", detail: "Tell us what's confusing", href: "/feedback" },
+    { title: "Universal Inbox", detail: "Paste anything", href: "/inbox" },
+    { title: "Data Uploads", detail: "CSV imports", href: "/imports" },
+    { title: "Audience Builder", detail: "Dynamic segments", href: "/segments" },
+    { title: "Demand Radar", detail: "Keyword intent", href: "/demand" },
+    { title: "Admin", detail: "Monitoring, audit, feedback", href: "/admin" },
+  ].filter((pg) => pg.title.toLowerCase().includes(q.toLowerCase()) || pg.detail.toLowerCase().includes(q.toLowerCase()));
 
   const [contacts, campaigns, segments, tasks, keywords] = await Promise.all([
     db.contact.findMany({
@@ -25,6 +38,13 @@ export async function GET(req: NextRequest) {
     db.salesTask.findMany({ where: { workspaceId: wsId, OR: [{ type: { contains: q } }, { contactLabel: { contains: q } }, { note: { contains: q } }] }, take: 4 }),
     db.keyword.findMany({ where: { workspaceId: wsId, term: { contains: q } }, take: 4 }),
   ]);
+
+  const feedbackItems = user && can(user.role, "triage_feedback")
+    ? await db.feedback.findMany({
+        where: { workspaceId: wsId, OR: [{ area: { contains: q } }, { confusing: { contains: q } }, { improve: { contains: q } }, { notes: { contains: q } }] },
+        take: 4,
+      })
+    : [];
 
   const groups = [
     {
@@ -51,6 +71,11 @@ export async function GET(req: NextRequest) {
       label: "Keywords",
       items: keywords.map((k) => ({ title: k.term, detail: `${k.volume.toLocaleString("en-GB")}/mo · ${k.review.replace("_", " ")}`, href: "/demand" })),
     },
+    {
+      label: "Feedback (owner)",
+      items: feedbackItems.map((f) => ({ title: `${f.area} · ${f.priority}`, detail: (f.improve ?? f.confusing ?? f.notes ?? "").slice(0, 60), href: "/admin" })),
+    },
+    { label: "Pages", items: PAGES },
   ].filter((g) => g.items.length > 0);
 
   return Response.json({ ok: true, groups });
