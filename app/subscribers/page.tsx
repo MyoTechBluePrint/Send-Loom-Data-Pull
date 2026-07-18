@@ -28,8 +28,8 @@ export default function SubscribersPage() {
 
   return (
     <Shell
-      title="Subscribers"
-      subtitle={`${num(18432)} contacts · 94.1% deliverable`}
+      title="Contacts"
+      subtitle={`${num(24817)} contacts · 94.1% deliverable · every record source-tagged`}
       actions={
         <>
           <GhostButton>Import CSV</GhostButton>
@@ -66,6 +66,7 @@ export default function SubscribersPage() {
             <tr>
               <Th>Contact</Th>
               <Th>Consent</Th>
+              <Th className="text-right">Score</Th>
               <Th>Tags</Th>
               <Th>Source</Th>
               <Th className="text-right">Orders</Th>
@@ -81,6 +82,11 @@ export default function SubscribersPage() {
                   <p className="text-xs text-ink-3">{s.email}</p>
                 </Td>
                 <Td><Badge value={s.consent} /></Td>
+                <Td className="text-right">
+                  <span className={`tabular inline-block min-w-8 rounded-full px-2 py-0.5 text-center text-[11px] font-bold ${
+                    s.score >= 70 ? "bg-emerald-50 text-emerald-700" : s.score >= 40 ? "bg-amber-50 text-amber-700" : "bg-zinc-100 text-zinc-500"
+                  }`}>{s.score}</span>
+                </Td>
                 <Td>
                   <div className="flex flex-wrap gap-1">
                     {s.tags.length === 0 && <span className="text-xs text-ink-3">–</span>}
@@ -97,13 +103,13 @@ export default function SubscribersPage() {
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-sm text-ink-3">No contacts match.</td>
+                <td colSpan={8} className="px-4 py-10 text-center text-sm text-ink-3">No contacts match.</td>
               </tr>
             )}
           </tbody>
         </table>
         <div className="flex items-center justify-between border-t border-line px-4 py-3 text-xs text-ink-3">
-          <span>Showing {rows.length} of {num(18432)} contacts</span>
+          <span>Showing {rows.length} of {num(24817)} contacts</span>
           <span>Bulk actions: tag · add to list · suppress · delete (GDPR erasure)</span>
         </div>
       </Card>
