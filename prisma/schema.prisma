@@ -608,6 +608,22 @@ model ExtractedRecord {
   @@index([intakeId, status])
 }
 
+model Feedback {
+  id          String   @id @default(cuid())
+  workspaceId String
+  area        String
+  workedWell  String?
+  confusing   String?
+  missing     String?
+  improve     String?
+  priority    String   @default("medium") // low | medium | high
+  notes       String?
+  author      String
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, createdAt])
+}
+
 model AuditLog {
   id          String   @id @default(cuid())
   workspaceId String

@@ -2,8 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { store } from "@/lib/data";
+import { Walkthrough, WALKTHROUGH_KEY } from "@/components/walkthrough";
+
+type Me = { name: string; roleLabel: string; env: string };
 
 const nav: { section?: string; items: { href: string; label: string; icon: string }[] }[] = [
   { items: [{ href: "/", label: "Dashboard", icon: "◧" }] },
@@ -38,13 +41,17 @@ const nav: { section?: string; items: { href: string; label: string; icon: strin
       { href: "/analytics", label: "Analytics", icon: "∿" },
       { href: "/admin", label: "Admin", icon: "▣" },
       { href: "/settings", label: "Settings", icon: "⚙" },
-      { href: "/demo-notes", label: "Handover Guide", icon: "✦" },
+      { href: "/team-handover", label: "Handover Guide", icon: "✦" },
     ],
   },
 ];
 
 export function Shell({ children, title, subtitle, actions }: { children: ReactNode; title: string; subtitle?: string; actions?: ReactNode }) {
   const pathname = usePathname();
+  const [me, setMe] = useState<Me | null>(null);
+  useEffect(() => {
+    fetch("/api/auth/me").then((r) => (r.ok ? r.json() : null)).then((j) => j?.ok && setMe(j)).catch(() => {});
+  }, []);
   return (
     <div className="flex min-h-screen">
       <aside className="fixed inset-y-0 left-0 flex w-60 flex-col border-r border-[#262433] bg-[#14121f] text-white">
@@ -81,6 +88,36 @@ export function Shell({ children, title, subtitle, actions }: { children: ReactN
             </div>
           ))}
         </nav>
+        <div className="mx-3 mb-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="truncate text-xs font-semibold">{me?.name ?? "Signed in"}</p>
+              <p className="text-[10px] text-white/50">{me ? `${me.roleLabel} · ${me.env}` : "Staging"}</p>
+            </div>
+            <button
+              onClick={async () => {
+                await fetch("/api/auth/logout", { method: "POST" });
+                window.location.href = "/login";
+              }}
+              className="shrink-0 rounded-md border border-white/15 px-2 py-1 text-[10px] font-semibold text-white/60 hover:bg-white/10 hover:text-white"
+            >
+              Sign out
+            </button>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 border-t border-white/10 pt-2">
+            <Link href="/team-handover" className="text-[10px] font-semibold text-white/60 hover:text-white">Handover guide</Link>
+            <button
+              onClick={() => {
+                localStorage.removeItem(WALKTHROUGH_KEY);
+                window.dispatchEvent(new Event("sendloom:walkthrough"));
+              }}
+              className="text-[10px] font-semibold text-white/60 hover:text-white"
+            >
+              Restart walkthrough
+            </button>
+            <Link href="/feedback" className="text-[10px] font-semibold text-white/60 hover:text-white">Feedback</Link>
+          </div>
+        </div>
         <div className="mx-3 mb-4 rounded-lg border border-white/10 bg-white/5 px-3 py-3">
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-emerald-400" />
@@ -92,23 +129,14 @@ export function Shell({ children, title, subtitle, actions }: { children: ReactN
           <p className="mt-1.5 inline-block rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-white/70">
             Sector mode: {store.sectorMode}
           </p>
-          <button
-            onClick={async () => {
-              await fetch("/api/auth/logout", { method: "POST" });
-              window.location.href = "/login";
-            }}
-            className="mt-2 w-full rounded-md border border-white/15 px-2 py-1 text-[11px] font-semibold text-white/60 hover:bg-white/10 hover:text-white"
-          >
-            Sign out
-          </button>
         </div>
       </aside>
 
       <div className="ml-60 flex-1">
         <div className="flex items-center justify-center gap-2 bg-[#14121f] px-4 py-1.5 text-center text-[11px] font-medium text-white/80">
           <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-          Staging demo · Vitalis seeded workspace · imports and pastes write real records
-          <Link href="/demo-notes" className="font-bold text-white underline underline-offset-2 hover:text-amber-200">What to try →</Link>
+          Sendloom Staging · Demo data only · No live sending
+          <Link href="/team-handover" className="font-bold text-white underline underline-offset-2 hover:text-amber-200">What to try →</Link>
         </div>
         <header className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-[rgba(247,247,245,0.85)] px-8 py-4 backdrop-blur max-xl:px-5">
           <div className="min-w-0">
@@ -118,6 +146,7 @@ export function Shell({ children, title, subtitle, actions }: { children: ReactN
           <div className="flex flex-wrap items-center justify-end gap-2.5">{actions}</div>
         </header>
         <main className="px-5 py-6 xl:px-8">{children}</main>
+        <Walkthrough />
       </div>
     </div>
   );
