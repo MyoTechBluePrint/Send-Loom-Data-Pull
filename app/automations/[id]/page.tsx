@@ -14,6 +14,8 @@ const nodeChrome: Record<AutomationNode["kind"], { border: string; chip: string;
   condition: { border: "border-amber-300", chip: "bg-amber-50 text-amber-700", icon: "?" },
   split: { border: "border-amber-300", chip: "bg-amber-50 text-amber-700", icon: "⑂" },
   webhook: { border: "border-line", chip: "bg-zinc-100 text-zinc-600", icon: "↯" },
+  task: { border: "border-emerald-300", chip: "bg-emerald-50 text-emerald-700", icon: "☑" },
+  tag: { border: "border-line", chip: "bg-zinc-100 text-zinc-600", icon: "#" },
   exit: { border: "border-line", chip: "bg-zinc-100 text-zinc-600", icon: "⏹" },
 };
 

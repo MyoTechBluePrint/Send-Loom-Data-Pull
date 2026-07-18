@@ -22,7 +22,7 @@ export default function CampaignReport() {
   ];
 
   const links = [
-    { label: "/collections/sale", value: Math.round(clicks * 0.46) },
+    { label: "/products/nad-cellular-complex", value: Math.round(clicks * 0.46) },
     { label: "Hero product block", value: Math.round(clicks * 0.27) },
     { label: "Recommended products", value: Math.round(clicks * 0.17) },
     { label: "Footer / other", value: Math.round(clicks * 0.1) },
@@ -85,10 +85,10 @@ export default function CampaignReport() {
           </thead>
           <tbody className="divide-y divide-line text-sm">
             {[
-              ["#42901", "Emma Richardson", "Linen Duvet Set, Pillowcase pair", "16 Jul, 10:12", 214.0],
-              ["#42897", "Grace Adeyemi", "Marble Table Lamp", "16 Jul, 09:48", 149.0],
-              ["#42894", "Sofia Marchetti", "Oak Diffuser ×2, Fig Candle", "16 Jul, 09:31", 96.5],
-              ["#42890", "Marcus Delaney", "Stoneware Dinner Set", "16 Jul, 09:20", 185.0],
+              ["#42901", "Emma Richardson", "NAD+ Cellular Complex ×2, Deep Sleep Magnesium", "16 Jul, 10:12", 214.0],
+              ["#42897", "Grace Adeyemi", "Longevity Stack bundle", "16 Jul, 09:48", 149.0],
+              ["#42894", "Sofia Marchetti", "Deep Sleep Magnesium ×2", "16 Jul, 09:31", 96.5],
+              ["#42890", "Marcus Delaney", "Recovery Complex, Marine Collagen", "16 Jul, 09:20", 185.0],
             ].map((r, i) => (
               <tr key={i} className="hover:bg-[#fafaf8]">
                 <td className="px-4 py-3 font-medium text-brand">{r[0]}</td>

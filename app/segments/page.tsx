@@ -7,7 +7,8 @@ import { gbp, num, segments, type Condition } from "@/lib/data";
 
 const fieldOptions = [
   "Total spend", "Order count", "Last order", "Purchased product", "Purchased category",
-  "Email engagement", "Coupon usage", "Consent", "Country", "Cart abandoned", "Viewed product",
+  "Email engagement", "Consent", "Country", "Cart abandoned", "Viewed product",
+  "Keyword searched", "Quiz result", "Lead score", "Import batch", "Source", "Tag", "Booked consultation",
 ];
 const operatorOptions = ["is", "is not", "is greater than", "is less than", "is at least", "is exactly", "is more than", "opened in last", "used on"];
 
@@ -23,8 +24,8 @@ export default function SegmentsPage() {
 
   return (
     <Shell
-      title="Segments"
-      subtitle="Dynamic audiences that update in real time as store events arrive"
+      title="Audiences"
+      subtitle="Dynamic audiences from store events, imports, keyword intent, quiz results and lead scores"
       actions={<PrimaryButton>New segment</PrimaryButton>}
     >
       {!building ? (
@@ -128,7 +129,7 @@ export default function SegmentsPage() {
               </div>
 
               <button
-                onClick={() => setConditions([...conditions, { field: "Purchased category", operator: "is", value: "Home Fragrance" }])}
+                onClick={() => setConditions([...conditions, { field: "Keyword searched", operator: "is in cluster", value: "Weight management" }])}
                 className="mt-4 text-[13px] font-semibold text-brand hover:underline"
               >
                 + Add condition
@@ -146,9 +147,9 @@ export default function SegmentsPage() {
             <CardHeader title="Live estimate" />
             <div className="px-5 py-5">
               <p className="tabular text-3xl font-semibold tracking-tight">{num(estimate)}</p>
-              <p className="mt-1 text-xs text-ink-3">contacts currently match ({((estimate / 18432) * 100).toFixed(1)}% of audience)</p>
+              <p className="mt-1 text-xs text-ink-3">contacts currently match ({((estimate / 24817) * 100).toFixed(1)}% of audience)</p>
               <div className="mt-4 h-2 w-full rounded-full bg-[#f0efec]">
-                <div className="h-2 rounded-full bg-brand" style={{ width: `${Math.min(100, (estimate / 18432) * 100 * 4)}%` }} />
+                <div className="h-2 rounded-full bg-brand" style={{ width: `${Math.min(100, (estimate / 24817) * 100 * 4)}%` }} />
               </div>
               <p className="mt-5 text-xs leading-relaxed text-ink-2">
                 Estimates re-run against synced WooCommerce data as you edit. Segments are usable in campaigns, automations and popup targeting.

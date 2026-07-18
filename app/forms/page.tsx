@@ -45,9 +45,9 @@ export default function FormsPage() {
             <p className="border-b border-line px-4 py-3 text-xs font-semibold uppercase tracking-wide text-ink-3">Live preview · Welcome offer</p>
             <div className="bg-[#efeae2] p-6">
               <div className="mx-auto max-w-64 rounded-xl bg-white p-5 text-center shadow-lg">
-                <p className="font-serif text-lg tracking-[0.2em] text-[#3a3532]">AURELIA</p>
+                <p className="font-serif text-lg tracking-[0.2em] text-[#3a3532]">VITALIS</p>
                 <p className="mt-2 text-sm font-semibold text-[#2b2724]">Get 15% off your first order</p>
-                <p className="mt-1 text-xs text-[#8a837c]">Join for slow-living inspiration and early access.</p>
+                <p className="mt-1 text-xs text-[#8a837c]">Evidence-led wellness, early access and practitioner Q&As.</p>
                 <div className="mt-3 rounded-md border border-[#ddd6cd] px-3 py-2 text-left text-xs text-[#a09a93]">you@email.com</div>
                 <div className="mt-2 rounded-md bg-[#2b2724] px-3 py-2 text-xs font-semibold text-white">Claim my code</div>
                 <p className="mt-2 text-[9px] text-[#a09a93]">Double opt-in · unsubscribe anytime</p>
@@ -57,7 +57,7 @@ export default function FormsPage() {
           <Card className="px-4 py-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-ink-3">This month</p>
             <p className="tabular mt-2 text-2xl font-semibold">2,189 signups</p>
-            <p className="mt-1 text-xs text-[#006300]">↑ 5.9% vs June · best performer: Spin-to-win (11.0%)</p>
+            <p className="mt-1 text-xs text-[#006300]">↑ 5.9% vs June · best performer: Longevity Type quiz (19.1%)</p>
           </Card>
         </div>
       </div>

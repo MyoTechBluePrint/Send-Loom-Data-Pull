@@ -32,11 +32,11 @@ export default function CampaignBuilder() {
   const [selected, setSelected] = useState<number | null>(2);
   const [blocks, setBlocks] = useState<Block[]>([
     { id: 1, type: "logo" },
-    { id: 2, type: "heading", text: "The Mid-Season Sale is on" },
-    { id: 3, type: "text", text: "Hi {{ first_name }}, for the next five days take 20% off across bedding, lighting and home fragrance with code {{ discount_code }}." },
+    { id: 2, type: "heading", text: "Cellular energy, explained" },
+    { id: 3, type: "text", text: "Hi {{ first_name }}, here's what NAD+ actually does, what the research says, and 15% off your first bottle with code {{ discount_code }}." },
     { id: 4, type: "countdown" },
-    { id: 5, type: "product", title: "Linen Duvet Set · Sage", price: "£129 £103.20" },
-    { id: 6, type: "button", text: "Shop the sale" },
+    { id: 5, type: "product", title: "NAD+ Cellular Complex", price: "£68 £57.80" },
+    { id: 6, type: "button", text: "Read the guide" },
     { id: 7, type: "divider" },
     { id: 8, type: "recommended" },
   ]);
@@ -47,7 +47,7 @@ export default function CampaignBuilder() {
       type === "heading" ? { ...base, type, text: "New heading" }
       : type === "text" ? { ...base, type, text: "Write something…" }
       : type === "button" ? { ...base, type, text: "Call to action" }
-      : type === "product" ? { ...base, type, title: "Oak Diffuser", price: "£38" }
+      : type === "product" ? { ...base, type, title: "Marine Collagen Peptides", price: "£42" }
       : ({ ...base, type } as Block);
     setBlocks((prev) => [...prev, b]);
     setSelected(b.id);
@@ -67,7 +67,7 @@ export default function CampaignBuilder() {
   return (
     <Shell
       title="Create campaign"
-      subtitle="Mid-season sale · Draft · audience: All subscribers (16,204)"
+      subtitle="NAD+ education push · Draft · audience: Longevity interest (9,204)"
       actions={
         <>
           <GhostButton>Send test</GhostButton>
@@ -113,7 +113,7 @@ export default function CampaignBuilder() {
                 </button>
               ))}
             </div>
-            <p className="text-xs text-ink-3">Subject: <span className="font-medium text-foreground">20% off ends Sunday</span></p>
+            <p className="text-xs text-ink-3">Subject: <span className="font-medium text-foreground">What NAD+ actually does</span></p>
           </div>
 
           <div className={`mx-auto transition-all ${device === "mobile" ? "max-w-[380px]" : "max-w-[600px]"}`}>
@@ -131,7 +131,7 @@ export default function CampaignBuilder() {
                   </div>
 
                   {b.type === "logo" && (
-                    <p className="text-center font-serif text-xl tracking-[0.25em] text-[#3a3532]">AURELIA</p>
+                    <p className="text-center font-serif text-xl tracking-[0.25em] text-[#3a3532]">VITALIS</p>
                   )}
                   {b.type === "heading" && <h2 className="text-center text-2xl font-semibold tracking-tight text-[#2b2724]">{b.text}</h2>}
                   {b.type === "text" && (
@@ -148,7 +148,7 @@ export default function CampaignBuilder() {
                   )}
                   {b.type === "product" && (
                     <div className="flex items-center gap-4 rounded-lg border border-[#eceae6] p-3">
-                      <div className="h-20 w-20 shrink-0 rounded-md bg-gradient-to-br from-[#dfe8dd] to-[#b9c8b4]" />
+                      <div className="h-20 w-20 shrink-0 rounded-md bg-gradient-to-br from-[#dde4e8] to-[#b4c2c8]" />
                       <div>
                         <p className="text-sm font-semibold text-[#2b2724]">{b.title}</p>
                         <p className="mt-0.5 text-sm text-[#5a544f]">
@@ -185,7 +185,7 @@ export default function CampaignBuilder() {
                 </div>
               ))}
               <p className="border-t border-[#eceae6] px-8 py-4 text-center text-[10px] text-[#a09a93]">
-                Aurelia Home & Living · 14 Portland Mews, London · {"{{ unsubscribe }}"} · {"{{ preferences }}"}
+                Vitalis Wellness & Longevity · 8 Harley Mews, London · {"{{ unsubscribe }}"} · {"{{ preferences }}"}
               </p>
             </div>
           </div>
@@ -199,18 +199,18 @@ export default function CampaignBuilder() {
               <label className="block">
                 <span className="text-xs font-medium text-ink-3">Audience</span>
                 <select className="mt-1 w-full rounded-lg border border-line bg-surface px-2.5 py-2 outline-none focus:border-brand">
-                  <option>All subscribers (16,204)</option>
+                  <option>Longevity interest (9,204)</option>
                   <option>VIP customers (412)</option>
-                  <option>Engaged non-buyers (1,466)</option>
+                  <option>Weight-management intent (1,966)</option>
                 </select>
               </label>
               <label className="block">
                 <span className="text-xs font-medium text-ink-3">Subject line</span>
-                <input defaultValue="20% off ends Sunday" className="mt-1 w-full rounded-lg border border-line bg-surface px-2.5 py-2 outline-none focus:border-brand" />
+                <input defaultValue="What NAD+ actually does" className="mt-1 w-full rounded-lg border border-line bg-surface px-2.5 py-2 outline-none focus:border-brand" />
               </label>
               <label className="block">
                 <span className="text-xs font-medium text-ink-3">Preview text</span>
-                <input defaultValue="Five days only, across the whole store" className="mt-1 w-full rounded-lg border border-line bg-surface px-2.5 py-2 outline-none focus:border-brand" />
+                <input defaultValue="The research, the honest caveats, and 15% off" className="mt-1 w-full rounded-lg border border-line bg-surface px-2.5 py-2 outline-none focus:border-brand" />
               </label>
               <label className="flex items-center justify-between rounded-lg border border-line px-3 py-2.5">
                 <span className="font-medium">A/B test subject line</span>

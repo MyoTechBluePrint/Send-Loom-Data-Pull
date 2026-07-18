@@ -11,7 +11,7 @@ export default function SettingsPage() {
   const [tab, setTab] = useState<(typeof tabs)[number]>("Store connection");
 
   return (
-    <Shell title="Settings" subtitle="Workspace: Aurelia Home & Living">
+    <Shell title="Settings" subtitle="Workspace: Vitalis Wellness & Longevity">
       <div className="mb-5 flex flex-wrap gap-1 rounded-lg border border-line bg-surface p-1">
         {tabs.map((t) => (
           <button
@@ -116,10 +116,10 @@ export default function SettingsPage() {
           <table className="w-full">
             <tbody className="divide-y divide-line text-sm">
               {[
-                ["Steve Clark", "steve@aureliahome.co.uk", "Owner", "2FA on"],
-                ["Hannah Morris", "hannah@aureliahome.co.uk", "Marketing Manager", "2FA on"],
+                ["Steve Clark", "steve@vitaliswellness.co.uk", "Owner", "2FA on"],
+                ["Hannah Morris", "hannah@vitaliswellness.co.uk", "Marketing Manager", "2FA on"],
                 ["Studio North", "hello@studionorth.co", "Content Editor", "2FA off"],
-                ["Finance shared", "accounts@aureliahome.co.uk", "Viewer", "2FA on"],
+                ["Finance shared", "accounts@vitaliswellness.co.uk", "Viewer", "2FA on"],
               ].map(([n, e, r, tfa]) => (
                 <tr key={e as string} className="hover:bg-[#fafaf8]">
                   <td className="px-5 py-3">
@@ -185,7 +185,7 @@ export default function SettingsPage() {
             <CardHeader title="Outbound webhooks" action={<GhostButton>Add endpoint</GhostButton>} />
             <div className="space-y-3 px-5 py-4 text-sm">
               <div className="rounded-lg border border-line px-3.5 py-2.5">
-                <code className="text-xs font-semibold">https://hooks.aureliahome.co.uk/sendloom</code>
+                <code className="text-xs font-semibold">https://hooks.vitaliswellness.co.uk/sendloom</code>
                 <p className="mt-1 text-xs text-ink-3">Events: subscriber.created, campaign.sent, automation.completed · signed (HMAC)</p>
               </div>
               <p className="text-xs text-ink-3">Delivery retries with exponential backoff · last 100 deliveries visible with payloads.</p>
@@ -202,7 +202,7 @@ export default function SettingsPage() {
               {[
                 ["Double opt-in", "On for all forms"],
                 ["Consent logging", "IP + timestamp + form snapshot"],
-                ["Preference centre", "Live at aureliahome.co.uk/preferences"],
+                ["Preference centre", "Live at vitaliswellness.co.uk/preferences"],
                 ["Right to erasure", "One-click, cascades to backups in 30 days"],
                 ["Data export", "Per-contact JSON/CSV"],
                 ["Cookie consent", "Tracking script waits for consent signal"],

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Shell, PrimaryButton, GhostButton } from "@/components/shell";
 import { Card, CardHeader, Stat, Badge, RevenueChart, HBarChart, Th, Td } from "@/components/ui";
-import { automations, campaigns, gbp, notifications, num, revenueSeries, store, topAutomationsByRevenue } from "@/lib/data";
+import { aiSuggestions, automations, campaigns, dataQuality, gbp, notifications, num, revenueSeries, store, topAutomationsByRevenue } from "@/lib/data";
 
 export default function Dashboard() {
   const totalAutoRevenue = automations.reduce((s, a) => s + a.revenue, 0);
@@ -22,6 +22,48 @@ export default function Dashboard() {
         <Stat label="Recovered carts" value="523" delta="↑ 22.7%" />
         <Stat label="New subscribers" value={num(2189)} delta="↑ 5.9%" />
       </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-4 xl:grid-cols-4">
+        <Link href="/subscribers">
+          <Card className="h-full px-5 py-4 transition-shadow hover:shadow-md">
+            <p className="text-xs font-medium text-ink-3">Hot leads ready for follow-up</p>
+            <p className="tabular mt-1.5 text-2xl font-semibold text-orange-600">37</p>
+            <p className="mt-1 text-xs text-ink-3">score 70+ without a purchase · 6 sales tasks open</p>
+          </Card>
+        </Link>
+        <Link href="/imports">
+          <Card className="h-full px-5 py-4 transition-shadow hover:shadow-md">
+            <p className="text-xs font-medium text-ink-3">Imported this month</p>
+            <p className="tabular mt-1.5 text-2xl font-semibold">{num(17640)}</p>
+            <p className="mt-1 text-xs text-ink-3">92% passed quality review · 1 batch blocked</p>
+          </Card>
+        </Link>
+        <Link href="/demand">
+          <Card className="h-full px-5 py-4 transition-shadow hover:shadow-md">
+            <p className="text-xs font-medium text-ink-3">Fastest-rising keyword</p>
+            <p className="mt-1.5 truncate text-lg font-semibold">GLP-1 support supplement</p>
+            <p className="mt-1 text-xs text-[#006300]">↑ 96% in 90 days · needs sector review</p>
+          </Card>
+        </Link>
+        <Card className="px-5 py-4">
+          <p className="text-xs font-medium text-ink-3">Data quality</p>
+          <p className="tabular mt-1.5 text-2xl font-semibold">{dataQuality.score} / 100</p>
+          <p className="mt-1 text-xs text-ink-3">{num(dataQuality.ready)} ready · {num(dataQuality.needsReview)} need review</p>
+        </Card>
+      </div>
+
+      <Card className="mt-4">
+        <CardHeader title="Growth assistant" subtitle="Suggestions grounded in your own data · every suggestion states its basis" />
+        <div className="grid grid-cols-2 gap-4 px-5 py-4 xl:grid-cols-4">
+          {aiSuggestions.map((s) => (
+            <div key={s.title} className="flex flex-col rounded-lg border border-line px-4 py-3.5">
+              <p className="text-[13px] font-semibold leading-snug">{s.title}</p>
+              <p className="mt-1.5 flex-1 text-xs leading-relaxed text-ink-2">{s.detail}</p>
+              <p className="mt-2 border-t border-line pt-2 text-[10px] font-medium text-ink-3">{s.basis}</p>
+            </div>
+          ))}
+        </div>
+      </Card>
 
       <div className="mt-4 grid grid-cols-3 gap-4">
         <Card className="col-span-2">

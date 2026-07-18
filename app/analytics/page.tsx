@@ -5,9 +5,23 @@ import { automations, campaigns, gbp, num, revenueSeries } from "@/lib/data";
 export default function AnalyticsPage() {
   const bySegment = [
     { label: "VIP customers", value: 386420 },
-    { label: "Candle & fragrance buyers", value: 94210 },
-    { label: "Discount-driven shoppers", value: 41205 },
+    { label: "Weight-management intent", value: 48120 },
+    { label: "Quiz: Metabolic type", value: 22040 },
     { label: "Everyone else", value: 152840 },
+  ];
+  const bySource = [
+    { label: "WooCommerce checkout opt-in", value: 122400 },
+    { label: "Klaviyo legacy list", value: 64110 },
+    { label: "Meta lead forms", value: 18420 },
+    { label: "Quiz funnel", value: 14360 },
+    { label: "FitLab partner referrals", value: 8240 },
+    { label: "Webinar lists", value: 2210 },
+  ];
+  const byKeyword = [
+    { label: "nad+ (site search)", value: 9120 },
+    { label: "collagen (site search)", value: 6240 },
+    { label: "sleep (site search)", value: 3980 },
+    { label: "recovery (site search)", value: 2210 },
   ];
   const topEmails = [...campaigns]
     .filter((c) => c.status === "sent")
@@ -43,6 +57,27 @@ export default function AnalyticsPage() {
           <CardHeader title="Revenue by segment" subtitle="Attributed, last 90 days" />
           <div className="px-5 py-4">
             <HBarChart items={bySegment} format={gbp} />
+          </div>
+        </Card>
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-4">
+        <Card>
+          <CardHeader title="Revenue by data source" subtitle="Orders joined back to the source each contact arrived from · the commercial heart of the source ledger" />
+          <div className="px-5 py-4">
+            <HBarChart items={bySource} format={gbp} />
+            <p className="mt-4 border-t border-line pt-3 text-xs text-ink-3">
+              Cost-aware view: Meta leads cost £2.10 each and return £4.84 · FitLab referrals are revenue-share · the blocked purchased list produced £0.
+            </p>
+          </div>
+        </Card>
+        <Card>
+          <CardHeader title="Revenue by keyword interest" subtitle="First-party search terms that led to purchases" />
+          <div className="px-5 py-4">
+            <HBarChart items={byKeyword} format={gbp} />
+            <p className="mt-4 border-t border-line pt-3 text-xs text-ink-3">
+              Site-search revenue attribution uses same-session and 5-day windows. Restricted-class terms report in aggregate only.
+            </p>
           </div>
         </Card>
       </div>
