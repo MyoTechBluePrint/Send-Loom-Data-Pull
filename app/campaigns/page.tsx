@@ -16,7 +16,7 @@ export default function CampaignsPage() {
       }
     >
       <Card>
-        <table className="w-full">
+        <div className="overflow-x-auto scroll-thin"><table className="w-full min-w-[900px]">
           <thead className="border-b border-line">
             <tr>
               <Th>Campaign</Th>
@@ -45,7 +45,7 @@ export default function CampaignsPage() {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       </Card>
     </Shell>
   );

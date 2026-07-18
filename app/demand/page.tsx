@@ -38,7 +38,7 @@ export default function DemandPage() {
         </>
       }
     >
-      <div className="mb-5 flex gap-1 rounded-lg border border-line bg-surface p-1">
+      <div className="mb-5 flex flex-wrap gap-1 rounded-lg border border-line bg-surface p-1">
         {tabs.map((t) => (
           <button
             key={t}
@@ -54,17 +54,17 @@ export default function DemandPage() {
 
       {tab === "Keyword intent" && (
         <>
-          <div className="mb-4 flex items-center gap-3">
+          <div className="mb-4 flex flex-wrap items-center gap-3">
             <input
               value={watch}
               onChange={(e) => setWatch(e.target.value)}
               placeholder="Add a keyword to monitor, e.g. 'NAD+ supplement'…"
-              className="w-96 rounded-lg border border-line bg-surface px-3.5 py-2 text-sm outline-none placeholder:text-ink-3 focus:border-brand"
+              className="w-full max-w-96 rounded-lg border border-line bg-surface px-3.5 py-2 text-sm outline-none placeholder:text-ink-3 focus:border-brand"
             />
             <span className="text-xs text-ink-3">{keywords.length} monitored · volumes and CPC from keyword provider · refreshed daily</span>
           </div>
           <Card>
-            <table className="w-full">
+            <div className="overflow-x-auto scroll-thin"><table className="w-full min-w-[860px]">
               <thead className="border-b border-line">
                 <tr>
                   <Th>Keyword</Th>
@@ -93,7 +93,7 @@ export default function DemandPage() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
             <p className="border-t border-line px-4 py-3 text-xs text-ink-3">
               Sector mode gates usage: <span className="font-semibold">restricted</span> keywords cannot be used in campaigns or ad exports; <span className="font-semibold">internal only</span> keywords power segmentation and analytics but never public content; <span className="font-semibold">needs review</span> requires approval before campaign use.
             </p>
@@ -102,15 +102,15 @@ export default function DemandPage() {
       )}
 
       {tab === "Demand radar" && (
-        <div className="grid grid-cols-3 gap-4">
-          <Card className="col-span-2">
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+          <Card className="xl:col-span-2">
             <CardHeader title="Rising demand" subtitle="Fastest-growing monitored keywords, 90 days" />
             <div className="space-y-3 px-5 py-4">
               {rising.map((k) => (
                 <div key={k.term}>
-                  <div className="mb-1 flex items-baseline justify-between text-xs">
-                    <span className="font-medium text-ink-2">{k.term} <span className="text-ink-3">· {k.cluster}</span></span>
-                    <span className="tabular font-semibold text-emerald-700">↑ {k.trend}%</span>
+                  <div className="mb-1 flex items-baseline justify-between gap-3 text-xs">
+                    <span className="min-w-0 flex-1 truncate font-medium text-ink-2">{k.term} <span className="text-ink-3">· {k.cluster}</span></span>
+                    <span className="tabular shrink-0 whitespace-nowrap font-semibold text-emerald-700">↑ {k.trend}%</span>
                   </div>
                   <div className="h-2 rounded-full bg-[#f0efec]">
                     <div className="h-2 rounded-full bg-[#1baf7a]" style={{ width: `${k.trend}%` }} />
@@ -167,10 +167,10 @@ export default function DemandPage() {
       )}
 
       {tab === "Site search" && (
-        <div className="grid grid-cols-3 gap-4">
-          <Card className="col-span-2">
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+          <Card className="xl:col-span-2">
             <CardHeader title="On-site search terms" subtitle="What visitors search on vitaliswellness.co.uk · consented visitors attach to their timeline, anonymous stays aggregate" />
-            <table className="w-full">
+            <div className="overflow-x-auto scroll-thin"><table className="w-full min-w-[860px]">
               <thead className="border-b border-line">
                 <tr>
                   <Th>Term</Th>
@@ -199,7 +199,7 @@ export default function DemandPage() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           </Card>
           <Card className="self-start">
             <CardHeader title="Missed demand" subtitle="Searches with no matching product or page" />
@@ -219,7 +219,7 @@ export default function DemandPage() {
       )}
 
       {tab === "Opportunities" && (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {opportunities.map((o) => (
             <Card key={o.cluster} className="px-5 py-4">
               <div className="flex items-start justify-between gap-4">

@@ -9,9 +9,9 @@ export default function FormsPage() {
       subtitle="Capture subscribers on-site · consent logged automatically"
       actions={<PrimaryButton>New form</PrimaryButton>}
     >
-      <div className="grid grid-cols-3 gap-4">
-        <Card className="col-span-2">
-          <table className="w-full">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <Card className="xl:col-span-2">
+          <div className="overflow-x-auto scroll-thin"><table className="w-full min-w-[760px]">
             <thead className="border-b border-line">
               <tr>
                 <Th>Form</Th>
@@ -37,7 +37,7 @@ export default function FormsPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         </Card>
 
         <div className="space-y-4 self-start">

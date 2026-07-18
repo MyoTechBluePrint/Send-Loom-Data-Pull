@@ -29,8 +29,8 @@ export default function TasksPage() {
         </>
       }
     >
-      <div className="grid grid-cols-3 gap-4">
-        <Card className="col-span-2">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <Card className="xl:col-span-2">
           <CardHeader title={`Open tasks · ${open.length}`} subtitle="Overdue first, then by priority" />
           <ul className="divide-y divide-line">
             {[...open].sort((a, b) => (a.status === "overdue" ? -1 : 0) - (b.status === "overdue" ? -1 : 0) || (a.priority === "high" ? -1 : 1)).map((t) => (

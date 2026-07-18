@@ -94,14 +94,14 @@ export function Shell({ children, title, subtitle, actions }: { children: ReactN
       </aside>
 
       <div className="ml-60 flex-1">
-        <header className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-[rgba(247,247,245,0.85)] px-8 py-4 backdrop-blur">
-          <div>
+        <header className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-[rgba(247,247,245,0.85)] px-8 py-4 backdrop-blur max-xl:px-5">
+          <div className="min-w-0">
             <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
             {subtitle && <p className="mt-0.5 text-xs text-ink-3">{subtitle}</p>}
           </div>
-          <div className="flex items-center gap-3">{actions}</div>
+          <div className="flex flex-wrap items-center justify-end gap-2.5">{actions}</div>
         </header>
-        <main className="px-8 py-6">{children}</main>
+        <main className="px-5 py-6 xl:px-8">{children}</main>
       </div>
     </div>
   );

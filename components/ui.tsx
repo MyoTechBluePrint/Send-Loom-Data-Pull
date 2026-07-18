@@ -106,9 +106,9 @@ export function HBarChart({ items, format }: { items: { label: string; value: nu
     <div className="space-y-3">
       {items.map((it) => (
         <div key={it.label}>
-          <div className="mb-1 flex items-baseline justify-between text-xs">
-            <span className="font-medium text-ink-2">{it.label}</span>
-            <span className="tabular font-semibold">{format(it.value)}</span>
+          <div className="mb-1 flex items-baseline justify-between gap-3 text-xs">
+            <span className="min-w-0 flex-1 truncate font-medium text-ink-2">{it.label}</span>
+            <span className="tabular shrink-0 whitespace-nowrap font-semibold">{format(it.value)}</span>
           </div>
           <div className="h-2 w-full rounded-full bg-[#f0efec]">
             <div className="h-2 rounded-full" style={{ width: `${(it.value / max) * 100}%`, background: "var(--s1)" }} />

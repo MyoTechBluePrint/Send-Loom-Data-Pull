@@ -78,7 +78,7 @@ export default function CampaignBuilder() {
     >
       <Link href="/campaigns" className="text-xs font-semibold text-brand hover:underline">← All campaigns</Link>
 
-      <div className="mt-3 grid grid-cols-[220px_1fr_260px] gap-4">
+      <div className="mt-3 grid grid-cols-1 gap-4 xl:grid-cols-[220px_1fr_260px]">
         {/* Block palette */}
         <Card className="self-start">
           <p className="border-b border-line px-4 py-3 text-xs font-semibold uppercase tracking-wide text-ink-3">Blocks</p>

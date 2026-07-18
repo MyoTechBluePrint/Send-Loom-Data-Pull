@@ -10,7 +10,7 @@ export default function AutomationsPage() {
       subtitle="Always-on workflows triggered by store and email behaviour"
       actions={<PrimaryButton>New automation</PrimaryButton>}
     >
-      <div className="grid grid-cols-2 gap-4 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {automations.map((a) => (
           <Link key={a.id} href={`/automations/${a.id}`}>
             <Card className="h-full px-5 py-4 transition-shadow hover:shadow-md">

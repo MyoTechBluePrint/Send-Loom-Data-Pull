@@ -70,7 +70,7 @@ export default function ImportsPage() {
     >
       {!wizard ? (
         <>
-          <div className="mb-4 grid grid-cols-4 gap-4">
+          <div className="mb-4 grid grid-cols-2 gap-4 xl:grid-cols-4">
             <Card className="px-5 py-4">
               <p className="text-xs font-medium text-ink-3">Imported this month</p>
               <p className="tabular mt-1.5 text-2xl font-semibold">17,640</p>
@@ -88,15 +88,15 @@ export default function ImportsPage() {
             </Card>
             <Card className="px-5 py-4">
               <p className="text-xs font-medium text-ink-3">Best source (revenue)</p>
-              <p className="mt-1.5 truncate text-lg font-semibold">Klaviyo legacy list</p>
+              <p className="mt-1.5 text-base font-semibold leading-snug">Klaviyo legacy list</p>
               <p className="mt-1 text-xs text-emerald-700">{gbp(64110)} attributed</p>
             </Card>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
-            <Card className="col-span-2">
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+            <Card className="xl:col-span-2">
               <CardHeader title="Import batches" subtitle="Every upload is quality-checked and source-tagged before contacts go live" />
-              <table className="w-full">
+              <div className="overflow-x-auto scroll-thin"><table className="w-full min-w-[640px]">
                 <thead className="border-b border-line">
                   <tr>
                     <Th>Batch</Th>
@@ -122,7 +122,7 @@ export default function ImportsPage() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             </Card>
 
             <div className="space-y-4 self-start">
@@ -131,9 +131,9 @@ export default function ImportsPage() {
                 <div className="space-y-3 px-5 py-4">
                   {sourcePerformance.map((b) => (
                     <div key={b.id}>
-                      <div className="mb-1 flex justify-between text-xs">
-                        <span className="font-medium text-ink-2">{b.name}</span>
-                        <span className="tabular font-semibold">{gbp(b.revenue)}</span>
+                      <div className="mb-1 flex justify-between gap-3 text-xs">
+                        <span className="min-w-0 flex-1 truncate font-medium text-ink-2">{b.name}</span>
+                        <span className="tabular shrink-0 whitespace-nowrap font-semibold">{gbp(b.revenue)}</span>
                       </div>
                       <div className="h-2 rounded-full bg-[#f0efec]">
                         <div className="h-2 rounded-full bg-[#1baf7a]" style={{ width: `${(b.revenue / sourcePerformance[0].revenue) * 100}%` }} />
@@ -159,7 +159,7 @@ export default function ImportsPage() {
       ) : (
         <div>
           {/* Stepper */}
-          <div className="mb-5 flex items-center gap-2">
+          <div className="mb-5 flex flex-wrap items-center gap-2">
             {steps.map((s, i) => (
               <div key={s} className="flex items-center gap-2">
                 <button
@@ -203,7 +203,7 @@ export default function ImportsPage() {
                 subtitle="webinar-attendees-july.csv · 1,240 rows · 9 columns detected, 8 auto-mapped"
                 action={<button onClick={() => setStep(2)} className="rounded-lg bg-brand px-3.5 py-2 text-[13px] font-semibold text-white hover:bg-[#5b21b6]">Continue → Quality review</button>}
               />
-              <table className="w-full">
+              <div className="overflow-x-auto scroll-thin"><table className="w-full min-w-[640px]">
                 <thead className="border-b border-line">
                   <tr>
                     <Th>File column</Th>
@@ -239,14 +239,14 @@ export default function ImportsPage() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             </Card>
           )}
 
           {step === 2 && (
-            <div className="grid grid-cols-3 gap-4">
-              <div className="col-span-2">
-                <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+              <div className="xl:col-span-2">
+                <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
                   {qualityCards.map((q) => (
                     <Card key={q.label} className="px-4 py-3">
                       <p className="text-[11px] font-medium text-ink-3">{q.label}</p>
@@ -256,7 +256,7 @@ export default function ImportsPage() {
                 </div>
                 <Card className="mt-4">
                   <CardHeader title="Needs review · 87 rows" subtitle="Duplicates, invalid formats and consent gaps" />
-                  <table className="w-full">
+                  <div className="overflow-x-auto scroll-thin"><table className="w-full min-w-[640px]">
                     <tbody className="divide-y divide-line text-sm">
                       {[
                         ["laura.chen@gmail.com", "Duplicate of existing contact (Meta lead, Jun) · newer phone number", "Merge"],
@@ -272,7 +272,7 @@ export default function ImportsPage() {
                         </tr>
                       ))}
                     </tbody>
-                  </table>
+                  </table></div>
                   <p className="border-t border-line px-4 py-3 text-xs text-ink-3">Rejected rows can be exported as CSV for manual cleanup.</p>
                 </Card>
               </div>
@@ -294,7 +294,7 @@ export default function ImportsPage() {
           )}
 
           {step === 3 && (
-            <div className="mx-auto grid max-w-4xl grid-cols-2 gap-4">
+            <div className="mx-auto grid max-w-4xl grid-cols-1 gap-4 lg:grid-cols-2">
               <Card>
                 <CardHeader title="Source ledger entry" subtitle="Recorded on every contact in this batch, permanently" />
                 <div className="space-y-3 px-5 py-4 text-[13px]">

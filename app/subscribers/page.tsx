@@ -38,12 +38,12 @@ export default function SubscribersPage() {
         </>
       }
     >
-      <div className="mb-4 flex items-center justify-between gap-4">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search name, email or tag…"
-          className="w-80 rounded-lg border border-line bg-surface px-3.5 py-2 text-sm outline-none placeholder:text-ink-3 focus:border-brand"
+          className="w-full max-w-80 rounded-lg border border-line bg-surface px-3.5 py-2 text-sm outline-none placeholder:text-ink-3 focus:border-brand"
         />
         <div className="flex gap-1 rounded-lg border border-line bg-surface p-1">
           {filters.map((f) => (
@@ -61,7 +61,7 @@ export default function SubscribersPage() {
       </div>
 
       <Card>
-        <table className="w-full">
+        <div className="overflow-x-auto scroll-thin"><table className="w-full min-w-[900px]">
           <thead className="border-b border-line">
             <tr>
               <Th>Contact</Th>
@@ -107,7 +107,7 @@ export default function SubscribersPage() {
               </tr>
             )}
           </tbody>
-        </table>
+        </table></div>
         <div className="flex items-center justify-between border-t border-line px-4 py-3 text-xs text-ink-3">
           <span>Showing {rows.length} of {num(24817)} contacts</span>
           <span>Bulk actions: tag · add to list · suppress · delete (GDPR erasure)</span>

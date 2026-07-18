@@ -16,7 +16,7 @@ export default function AdminPage() {
       subtitle="Platform operator view · workspaces, imports, providers, reputation and audit"
       actions={<GhostButton>Export audit log</GhostButton>}
     >
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         {[
           ["Active workspaces", "212", "8 new this week"],
           ["Sends today", "1.42M", "queue healthy · p95 4.1s"],
@@ -31,7 +31,7 @@ export default function AdminPage() {
         ))}
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-4">
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Card>
           <CardHeader title="Risk queue" subtitle="Accounts and imports needing operator review" />
           <ul className="divide-y divide-line">
@@ -60,7 +60,7 @@ export default function AdminPage() {
 
         <Card>
           <CardHeader title="Provider health" subtitle="All integrations run through the provider layer" />
-          <table className="w-full">
+          <div className="overflow-x-auto scroll-thin"><table className="w-full min-w-[560px]">
             <thead className="border-b border-line">
               <tr>
                 <Th>Provider</Th>
@@ -82,13 +82,13 @@ export default function AdminPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         </Card>
       </div>
 
       <Card className="mt-4">
         <CardHeader title="Audit log" subtitle="Every consequential action, immutable" />
-        <table className="w-full">
+        <div className="overflow-x-auto scroll-thin"><table className="w-full min-w-[560px]">
           <tbody className="divide-y divide-line text-[13px]">
             {[
               ["Today 09:02", "system", "Campaign 'NAD+ Restock' completed · 9,204 delivered · 0 policy holds"],
@@ -105,7 +105,7 @@ export default function AdminPage() {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       </Card>
     </Shell>
   );

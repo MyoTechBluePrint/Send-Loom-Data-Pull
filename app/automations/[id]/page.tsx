@@ -82,7 +82,7 @@ export default function AutomationCanvas() {
         <Stat label="Attributed revenue" value={gbp(auto.revenue)} />
       </div>
 
-      <div className="mt-4 grid grid-cols-[1fr_300px] gap-4">
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[1fr_300px]">
         <Card className="overflow-x-auto bg-[repeating-linear-gradient(0deg,transparent,transparent_23px,#f0efec_24px),repeating-linear-gradient(90deg,transparent,transparent_23px,#f0efec_24px)] px-6 py-8">
           <div className="flex flex-col items-center">
             {mainNodes.map((n, i) => (
@@ -94,7 +94,7 @@ export default function AutomationCanvas() {
 
             {auto.branches && (
               <>
-                <div className="mt-1 flex w-full max-w-2xl items-start justify-center gap-10 pt-2">
+                <div className="mt-1 flex w-full max-w-2xl flex-col items-center gap-6 pt-2 md:flex-row md:items-start md:justify-center md:gap-10">
                   <div className="flex flex-1 flex-col items-center">
                     <span className="mb-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700">YES</span>
                     {auto.branches.yes.map((n, i) => (

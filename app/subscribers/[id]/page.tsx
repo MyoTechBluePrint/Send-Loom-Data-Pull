@@ -87,8 +87,8 @@ export default function ContactProfile() {
         <p className="mt-1 text-sm">{nextAction(sub)}</p>
       </Card>
 
-      <div className="mt-4 grid grid-cols-3 gap-4">
-        <Card className="col-span-2">
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <Card className="xl:col-span-2">
           <CardHeader title="Timeline" subtitle="Imports, consent, behaviour, emails, scores and tasks in one stream" />
           <ol className="px-5 py-4">
             {events.map((e, i) => {

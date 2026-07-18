@@ -36,7 +36,7 @@ export default function SegmentsPage() {
             </button>
           </div>
           <Card>
-            <table className="w-full">
+            <div className="overflow-x-auto scroll-thin"><table className="w-full min-w-[760px]">
               <thead className="border-b border-line">
                 <tr>
                   <Th>Segment</Th>
@@ -69,12 +69,12 @@ export default function SegmentsPage() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           </Card>
         </>
       ) : (
-        <div className="grid grid-cols-3 gap-4">
-          <Card className="col-span-2">
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+          <Card className="xl:col-span-2">
             <CardHeader title="New segment" subtitle="Contacts matching these rules enter and leave automatically" />
             <div className="px-5 py-5">
               <div className="flex items-center gap-2 text-sm">
@@ -95,7 +95,7 @@ export default function SegmentsPage() {
 
               <div className="mt-4 space-y-2.5">
                 {conditions.map((c, i) => (
-                  <div key={i} className="flex items-center gap-2">
+                  <div key={i} className="flex flex-wrap items-center gap-2">
                     {i > 0 && <span className="w-10 text-center text-[11px] font-bold text-brand">{match === "all" ? "AND" : "OR"}</span>}
                     {i === 0 && <span className="w-10 text-center text-[11px] font-semibold text-ink-3">WHERE</span>}
                     <select

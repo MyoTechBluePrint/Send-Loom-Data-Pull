@@ -62,9 +62,9 @@ export default function ProspectsPage() {
         </label>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
-        <Card className="col-span-2">
-          <table className="w-full">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <Card className="xl:col-span-2">
+          <div className="overflow-x-auto scroll-thin"><table className="w-full min-w-[900px]">
             <thead className="border-b border-line">
               <tr>
                 <Th>Prospect</Th>
@@ -95,8 +95,8 @@ export default function ProspectsPage() {
                 <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-ink-3">No prospects match this filter.</td></tr>
               )}
             </tbody>
-          </table>
-          <div className="flex items-center justify-between border-t border-line px-4 py-3 text-xs text-ink-3">
+          </table></div>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-4 py-3 text-xs text-ink-3">
             <span>{rows.length} prospects shown · {num(5102)} total never-purchased contacts</span>
             <span>Actions: create audience · start automation · create sales tasks · export (where permitted)</span>
           </div>

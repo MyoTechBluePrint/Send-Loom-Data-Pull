@@ -46,8 +46,8 @@ export default function AnalyticsPage() {
         <Stat label="Repeat purchase rate" value="31.8%" delta="↑ 3.4pts" hint="email audience" />
       </div>
 
-      <div className="mt-4 grid grid-cols-3 gap-4">
-        <Card className="col-span-2">
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <Card className="xl:col-span-2">
           <CardHeader title="Attributed revenue by week" subtitle="5-day click attribution window · campaigns vs automations" />
           <div className="px-5 py-4">
             <RevenueChart weeks={revenueSeries.weeks} a={revenueSeries.campaigns} b={revenueSeries.automations} labels={["Campaigns", "Automations"]} />
@@ -61,7 +61,7 @@ export default function AnalyticsPage() {
         </Card>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-4">
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader title="Revenue by data source" subtitle="Orders joined back to the source each contact arrived from · the commercial heart of the source ledger" />
           <div className="px-5 py-4">
@@ -82,10 +82,10 @@ export default function AnalyticsPage() {
         </Card>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-4">
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader title="Top performing emails" subtitle="By attributed revenue" />
-          <table className="w-full">
+          <div className="overflow-x-auto scroll-thin"><table className="w-full min-w-[520px]">
             <thead className="border-b border-line">
               <tr>
                 <Th>Email</Th>
@@ -107,11 +107,11 @@ export default function AnalyticsPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         </Card>
         <Card>
           <CardHeader title="Automation performance" subtitle="All time" />
-          <table className="w-full">
+          <div className="overflow-x-auto scroll-thin"><table className="w-full min-w-[520px]">
             <thead className="border-b border-line">
               <tr>
                 <Th>Flow</Th>
@@ -130,11 +130,11 @@ export default function AnalyticsPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         </Card>
       </div>
 
-      <div className="mt-4 grid grid-cols-3 gap-4">
+      <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
         {[
           { title: "Devices", rows: [["Mobile", "64%"], ["Desktop", "30%"], ["Tablet", "6%"]] },
           { title: "Email clients", rows: [["Apple Mail", "41%"], ["Gmail", "36%"], ["Outlook", "14%"], ["Other", "9%"]] },

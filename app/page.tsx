@@ -41,7 +41,7 @@ export default function Dashboard() {
         <Link href="/demand">
           <Card className="h-full px-5 py-4 transition-shadow hover:shadow-md">
             <p className="text-xs font-medium text-ink-3">Fastest-rising keyword</p>
-            <p className="mt-1.5 truncate text-lg font-semibold">GLP-1 support supplement</p>
+            <p className="mt-1.5 text-base font-semibold leading-snug">GLP-1 support supplement</p>
             <p className="mt-1 text-xs text-[#006300]">↑ 96% in 90 days · needs sector review</p>
           </Card>
         </Link>
@@ -54,7 +54,7 @@ export default function Dashboard() {
 
       <Card className="mt-4">
         <CardHeader title="Growth assistant" subtitle="Suggestions grounded in your own data · every suggestion states its basis" />
-        <div className="grid grid-cols-2 gap-4 px-5 py-4 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 px-5 py-4 sm:grid-cols-2 xl:grid-cols-4">
           {aiSuggestions.map((s) => (
             <div key={s.title} className="flex flex-col rounded-lg border border-line px-4 py-3.5">
               <p className="text-[13px] font-semibold leading-snug">{s.title}</p>
@@ -65,8 +65,8 @@ export default function Dashboard() {
         </div>
       </Card>
 
-      <div className="mt-4 grid grid-cols-3 gap-4">
-        <Card className="col-span-2">
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <Card className="xl:col-span-2">
           <CardHeader title="Attributed revenue by week" subtitle="Orders placed within 5 days of an email click" />
           <div className="px-5 py-4">
             <RevenueChart weeks={revenueSeries.weeks} a={revenueSeries.campaigns} b={revenueSeries.automations} labels={["Campaigns", "Automations"]} />
@@ -87,13 +87,13 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      <div className="mt-4 grid grid-cols-3 gap-4">
-        <Card className="col-span-2">
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <Card className="xl:col-span-2">
           <CardHeader
             title="Recent campaigns"
             action={<Link href="/campaigns" className="text-xs font-semibold text-brand hover:underline">View all →</Link>}
           />
-          <table className="w-full">
+          <div className="overflow-x-auto scroll-thin"><table className="w-full min-w-[620px]">
             <thead className="border-b border-line">
               <tr>
                 <Th>Campaign</Th>
@@ -117,7 +117,7 @@ export default function Dashboard() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         </Card>
         <Card>
           <CardHeader title="Activity" subtitle="Platform notifications" />
@@ -138,7 +138,7 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      <div className="mt-4 grid grid-cols-4 gap-4">
+      <div className="mt-4 grid grid-cols-2 gap-4 xl:grid-cols-4">
         {[
           { label: "Store sync", value: `${num(store.syncedOrders)} orders · ${num(store.syncedProducts)} products`, sub: `Last event 2 min ago · webhooks healthy` },
           { label: "Deliverability", value: "96 / 100 reputation", sub: "SPF, DKIM and DMARC all passing" },

@@ -27,7 +27,7 @@ export default function SettingsPage() {
       </div>
 
       {tab === "Store connection" && (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Card>
             <CardHeader title="WooCommerce store" action={<Badge value="connected" />} />
             <dl className="space-y-3 px-5 py-4 text-sm">
@@ -76,7 +76,7 @@ export default function SettingsPage() {
       )}
 
       {tab === "Sending & deliverability" && (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Card>
             <CardHeader title="Sending infrastructure" />
             <div className="space-y-3 px-5 py-4 text-sm">
@@ -113,7 +113,7 @@ export default function SettingsPage() {
       {tab === "Team" && (
         <Card>
           <CardHeader title="Members & roles" action={<PrimaryButton>Invite member</PrimaryButton>} />
-          <table className="w-full">
+          <div className="overflow-x-auto scroll-thin"><table className="w-full min-w-[520px]">
             <tbody className="divide-y divide-line text-sm">
               {[
                 ["Steve Clark", "steve@vitaliswellness.co.uk", "Owner", "2FA on"],
@@ -131,13 +131,13 @@ export default function SettingsPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
           <p className="border-t border-line px-5 py-3 text-xs text-ink-3">Roles: Owner, Admin, Marketing Manager, Content Editor, Viewer + custom permissions. All actions audit-logged.</p>
         </Card>
       )}
 
       {tab === "Billing" && (
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           {[
             { name: "Starter", price: "£29/mo", desc: "Up to 5,000 contacts · 50k sends", current: false },
             { name: "Professional", price: "£79/mo", desc: "Up to 25,000 contacts · 150k sends · A/B testing, full automations", current: true },
@@ -155,14 +155,14 @@ export default function SettingsPage() {
               </button>
             </Card>
           ))}
-          <Card className="col-span-3 px-5 py-4">
+          <Card className="px-5 py-4 md:col-span-3">
             <p className="text-xs text-ink-3">Usage this cycle: <span className="font-semibold text-foreground">96,417 of 150,000 sends</span> · 18,432 of 25,000 contacts · renews 1 Aug 2026 · Stripe subscription active</p>
           </Card>
         </div>
       )}
 
       {tab === "API & webhooks" && (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Card>
             <CardHeader title="API keys" action={<GhostButton>Create key</GhostButton>} />
             <div className="space-y-3 px-5 py-4 text-sm">
@@ -195,7 +195,7 @@ export default function SettingsPage() {
       )}
 
       {tab === "Compliance" && (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Card>
             <CardHeader title="Consent & GDPR" />
             <ul className="space-y-2.5 px-5 py-4 text-[13px]">

@@ -52,7 +52,7 @@ export default function CampaignReport() {
         <Stat label="Unsubscribes" value="0.21%" delta="34 contacts" deltaGood={false} hint="· 2 complaints" />
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-4">
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader title="Conversion funnel" subtitle={`${num(c.recipients)} recipients · 98.4% delivered`} />
           <div className="px-5 py-4">
@@ -75,7 +75,7 @@ export default function CampaignReport() {
 
       <Card className="mt-4">
         <CardHeader title="Attributed orders" subtitle="Orders placed within 5 days of a click on this campaign" />
-        <table className="w-full">
+        <div className="overflow-x-auto scroll-thin"><table className="w-full min-w-[640px]">
           <thead className="border-b border-line">
             <tr>
               {["Order", "Customer", "Items", "Placed", "Total"].map((h) => (
@@ -99,7 +99,7 @@ export default function CampaignReport() {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       </Card>
     </Shell>
   );
