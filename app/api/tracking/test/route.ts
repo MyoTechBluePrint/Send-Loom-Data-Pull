@@ -22,8 +22,8 @@ export async function POST(req: NextRequest) {
     return Response.json({ ok: true, swept: r.swept });
   }
 
-  const store = await db.store.findFirst({ where: { name: { contains: "Vitalis" } } });
-  if (!store) return Response.json({ ok: false, error: "Demo store missing" }, { status: 404 });
+  const store = (await db.store.findFirst({ where: { name: { contains: "Vitalis" } } })) ?? (await db.store.findFirst());
+  if (!store) return Response.json({ ok: false, error: "No store exists yet" }, { status: 404 });
 
   const t = parsed.data.type;
   const cartToken = "qa-test-cart-1";

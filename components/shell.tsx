@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
-import { store } from "@/lib/data";
 import { Walkthrough, WALKTHROUGH_KEY } from "@/components/walkthrough";
 import { GlobalSearch } from "@/components/global-search";
 
@@ -134,14 +133,12 @@ export function Shell({ children, title, subtitle, actions }: { children: ReactN
         </div>
         <div className="mx-3 mb-4 rounded-lg border border-white/10 bg-white/5 px-3 py-3">
           <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-emerald-400" />
-            <p className="truncate text-xs font-medium">{store.name}</p>
+            <span className="h-2 w-2 rounded-full bg-amber-400" />
+            <p className="truncate text-xs font-medium">Launch workspace</p>
           </div>
-          <p className="mt-1 text-[11px] text-white/50">
-            {store.platform} · synced {store.lastSync}
-          </p>
+          <p className="mt-1 text-[11px] text-white/50">MyoTech · Novatec · fresh data only</p>
           <p className="mt-1.5 inline-block rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-white/70">
-            Sector mode: {store.sectorMode}
+            Sector mode: Health & Wellness
           </p>
         </div>
       </aside>
