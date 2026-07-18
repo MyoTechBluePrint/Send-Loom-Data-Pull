@@ -34,6 +34,7 @@ model Workspace {
   suppressions SuppressionRecord[]
   audits      AuditLog[]
   compliance  ComplianceCheck[]
+  intake      IntakeItem[]
 }
 
 model User {
@@ -74,7 +75,9 @@ model Contact {
   id          String   @id @default(cuid())
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
-  email       String
+  // Optional: phone-only leads arrive via Universal Inbox / WhatsApp pastes.
+  // Uniqueness still enforced per workspace when present (nulls exempt).
+  email       String?
   firstName   String?
   lastName    String?
   phone       String?
@@ -567,6 +570,41 @@ model ComplianceCheck {
   state       String // approved | needs_review | restricted | internal_only | blocked
   rule        String?
   createdAt   DateTime @default(now())
+}
+
+// Universal Inbox: anything messy lands here first (paste, file, WhatsApp
+// forward, email forward, note, form, api), gets extracted into
+// ExtractedRecords, and only becomes Contacts on explicit approval.
+model IntakeItem {
+  id          String   @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  kind        String // paste | file | whatsapp | email | note | form | api
+  title       String
+  raw         String // original text / file summary, always preserved
+  status      String   @default("review") // received | extracting | review | approved | rejected | partial
+  confidence  Int      @default(0)
+  source      String   @default("Universal Inbox")
+  createdAt   DateTime @default(now())
+  processedAt DateTime?
+
+  records ExtractedRecord[]
+
+  @@index([workspaceId, status])
+}
+
+model ExtractedRecord {
+  id         String   @id @default(cuid())
+  intakeId   String
+  intake     IntakeItem @relation(fields: [intakeId], references: [id])
+  fields     String // JSON: {name, phone, email, interests[], taskNote, taskDue, location, notes}
+  confidence Int      @default(0)
+  status     String   @default("pending") // pending | approved | merged | rejected
+  contactId  String? // set on approval
+  duplicateOf String? // existing contact id when a match was detected
+  createdAt  DateTime @default(now())
+
+  @@index([intakeId, status])
 }
 
 model AuditLog {

@@ -47,8 +47,8 @@ export async function getContactsView(): Promise<Subscriber[]> {
     const chan = (ch: string) => c.consents.find((x) => x.channel === ch)?.status === "granted";
     return {
       id: c.id,
-      name: [c.firstName, c.lastName].filter(Boolean).join(" ") || c.email,
-      email: c.email,
+      name: [c.firstName, c.lastName].filter(Boolean).join(" ") || c.email || c.phone || "Unknown",
+      email: c.email ?? (c.phone ? `phone-only · ${c.phone}` : "no contact route"),
       phone: c.phone ?? undefined,
       location: [c.city, c.country === "United Kingdom" ? "UK" : c.country === "Ireland" ? "IE" : c.country].filter(Boolean).join(", "),
       consent: consentView[email?.status ?? "pending"],

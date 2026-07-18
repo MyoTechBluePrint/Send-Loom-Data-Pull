@@ -8,35 +8,36 @@ import { store } from "@/lib/data";
 const nav: { section?: string; items: { href: string; label: string; icon: string }[] }[] = [
   { items: [{ href: "/", label: "Dashboard", icon: "◧" }] },
   {
+    section: "Capture",
+    items: [
+      { href: "/inbox", label: "Universal Inbox", icon: "⤓" },
+      { href: "/imports", label: "Data Uploads", icon: "⇪" },
+      { href: "/forms", label: "Forms & Quizzes", icon: "▤" },
+    ],
+  },
+  {
     section: "Audience",
     items: [
       { href: "/subscribers", label: "Contacts", icon: "◉" },
-      { href: "/imports", label: "Data Uploads", icon: "⇪" },
-      { href: "/segments", label: "Audiences", icon: "◫" },
-      { href: "/prospects", label: "Prospects", icon: "✧" },
+      { href: "/segments", label: "Audience Builder", icon: "◫" },
+      { href: "/prospects", label: "Prospect Discovery", icon: "✧" },
     ],
   },
   {
-    section: "Intelligence",
-    items: [
-      { href: "/demand", label: "Demand Radar", icon: "☄" },
-      { href: "/analytics", label: "Analytics", icon: "∿" },
-    ],
-  },
-  {
-    section: "Engage",
+    section: "Growth",
     items: [
       { href: "/campaigns", label: "Campaigns", icon: "✉" },
       { href: "/automations", label: "Automations", icon: "⌁" },
-      { href: "/forms", label: "Forms & Quizzes", icon: "▤" },
+      { href: "/demand", label: "Demand Radar", icon: "☄" },
       { href: "/tasks", label: "Sales Tasks", icon: "☑" },
     ],
   },
   {
-    section: "System",
+    section: "Control",
     items: [
-      { href: "/settings", label: "Settings", icon: "⚙" },
+      { href: "/analytics", label: "Analytics", icon: "∿" },
       { href: "/admin", label: "Admin", icon: "▣" },
+      { href: "/settings", label: "Settings", icon: "⚙" },
     ],
   },
 ];
@@ -50,7 +51,7 @@ export function Shell({ children, title, subtitle, actions }: { children: ReactN
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#6d28d9] text-sm font-bold">S</div>
           <div>
             <p className="text-sm font-semibold leading-tight">Sendloom</p>
-            <p className="text-[11px] text-white/50">for WooCommerce</p>
+            <p className="text-[11px] text-white/50">Growth Intelligence OS</p>
           </div>
         </div>
         <nav className="mt-1 flex-1 space-y-3 overflow-y-auto px-3 scroll-thin">

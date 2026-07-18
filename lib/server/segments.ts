@@ -64,7 +64,7 @@ function matches(rule: Rule, ctx: Ctx): boolean {
       if (v === "subscribed") return latestEmail?.status === "granted";
       return (latestEmail?.status ?? "none").includes(v);
     case "Not suppressed":
-      return !ctx.suppressions.has(c.email);
+      return !c.email || !ctx.suppressions.has(c.email);
     case "Engagement":
       return c.engagement === v;
     default:
@@ -83,6 +83,7 @@ export async function evaluateSegment(workspaceId: string, match: "all" | "any",
   const exclude = rules.filter((r) => r.exclude);
 
   const hits = contacts.filter((contact) => {
+    if (contact.email && suppressions.has(contact.email)) return false;
     const ctx = { contact, suppressions };
     const inc = include.length === 0 || (match === "all" ? include.every((r) => matches(r, ctx)) : include.some((r) => matches(r, ctx)));
     const exc = exclude.some((r) => matches(r, ctx));
@@ -95,7 +96,7 @@ export async function evaluateSegment(workspaceId: string, match: "all" | "any",
     preview: hits.slice(0, 8).map((c) => ({
       id: c.id,
       name: [c.firstName, c.lastName].filter(Boolean).join(" ") || c.email,
-      email: c.email,
+      email: c.email ?? "(no email · phone lead)",
       score: c.score?.score ?? 0,
     })),
   };
