@@ -35,11 +35,11 @@ export async function main() {
 
   // Campaign TEMPLATES — drafts only, zero stats, clearly labelled.
   const campaignTemplates = [
-    ["Welcome popup subscriber", "Welcome — here's your code"],
+    ["Welcome popup subscriber", "Welcome, here's your code"],
     ["Abandoned cart recovery", "You left something behind"],
     ["Abandoned checkout recovery", "Your order is one click away"],
     ["Product education sequence", "What it actually does"],
-    ["First purchase thank-you", "Thank you — what happens next"],
+    ["First purchase thank-you", "Thank you, and what happens next"],
     ["Win-back sequence", "It's been a while"],
     ["Consultation request follow-up", "About your consultation"],
     ["Discount code reminder", "Your code expires soon"],

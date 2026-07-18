@@ -18,7 +18,7 @@ Written for Steve. Twenty steps, roughly ten minutes per site.
 ## Install (per site)
 
 1. In Sendloom → Store Tracking, copy the store's **API key** (MyoTech key
-   for MyoTech, Novatec key for Novatec — don't cross them).
+   for MyoTech, Novatec key for Novatec, never crossed).
 2. Log into that site's WordPress admin.
 3. Plugins → Add New → **Upload Plugin**.
 4. Choose `sendloom-woocommerce.zip` → **Install Now**.
@@ -79,16 +79,16 @@ needed; every download is written to the audit log.
 
 ## MyoTech test plan (run after install, in order)
 
-1. **Test event** — plugin Send test event → appears in Store Tracking under
+1. **Test event**: plugin Send test event → appears in Store Tracking under
    MyoTech within a minute.
-2. **Browse tracking** — open a product page in a private window →
+2. **Browse tracking**: open a product page in a private window →
    `product_viewed` shows with the MyoTech chip.
-3. **Popup capture** — set a `MyoTech ·` template live in Forms, submit it
+3. **Popup capture**: set a `MyoTech ·` template live in Forms, submit it
    with a test email → a consented contact appears in Contacts, source popup.
-4. **Cart + abandonment** — add to cart, start checkout, enter the test
+4. **Cart + abandonment**: add to cart, start checkout, enter the test
    email, leave. After 30 min (or Run sweep on Store Tracking) the cart shows
    as abandoned checkout with the email attached.
-5. **Sync** — run product, customer and order sync from the plugin →
+5. **Sync**: run product, customer and order sync from the plugin →
    counts appear in the plugin diagnostics and events in Store Tracking.
 
 ## Novatec test plan
@@ -97,4 +97,4 @@ Repeat the same five checks with the **Novatec key on the Novatec site** and
 `Novatec ·` popup templates. While testing, use the store filter on Store
 Tracking to confirm every Novatec event carries the Novatec chip and none of
 it appears under MyoTech. The two stores must stay fully separate; if data
-crosses over, a key was pasted into the wrong plugin — stop and report it.
+crosses over, a key was pasted into the wrong plugin, so stop and report it.

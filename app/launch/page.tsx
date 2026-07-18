@@ -8,7 +8,7 @@ import { can, currentUser } from "@/lib/server/permissions";
 export const dynamic = "force-dynamic";
 
 // Per-store install checklist shown on this page. Kept in sync with
-// docs/myotech-novatec-install.md — the doc stays the long-form version.
+// docs/myotech-novatec-install.md; the doc stays the long-form version.
 const INSTALL_STEPS: string[] = [
   "Log in to the store's WordPress admin (wp-admin).",
   "Go to Plugins → Add New → Upload Plugin.",
@@ -34,13 +34,13 @@ const CHECKLIST: { label: string; href: string; how: string }[] = [
   { label: "Connect MyoTech WooCommerce plugin", href: "/tracking", how: "Upload sendloom-woocommerce.zip on MyoTech, paste the MyoTech API key from Store Tracking, Save & connect." },
   { label: "Connect Novatec WooCommerce plugin", href: "/tracking", how: "Same steps with the Novatec key. Never mix the two keys." },
   { label: "Confirm tracking events are arriving", href: "/tracking", how: "Browse the storefront; events appear in Store Tracking within seconds." },
-  { label: "Create your first popup", href: "/forms", how: "Templates are prefixed MyoTech · and Novatec · — pick the right store's template and set it live." },
+  { label: "Create your first popup", href: "/forms", how: "Templates are prefixed MyoTech · and Novatec ·, so pick the right store's template and set it live." },
   { label: "Test popup submission", href: "/tracking", how: "Submit it yourself with a test email; a consented contact appears in Contacts." },
   { label: "Test product view tracking", href: "/tracking", how: "Open any product page on the storefront." },
   { label: "Test add-to-cart tracking", href: "/tracking", how: "Add a product to the cart." },
   { label: "Test checkout-started tracking", href: "/tracking", how: "Reach the checkout page and enter a test email." },
   { label: "Test abandoned cart detection", href: "/tracking", how: "Abandon that checkout; after 30 minutes it shows as abandoned (Store Tracking → Cart lifecycle)." },
-  { label: "Create your first campaign draft", href: "/campaigns", how: "Duplicate a template. Drafts only — activate after tracking and the sending provider are confirmed." },
+  { label: "Create your first campaign draft", href: "/campaigns", how: "Duplicate a template. Drafts only. Activate after tracking and the sending provider are confirmed." },
   { label: "Create your first audience from real data", href: "/segments", how: "Once contacts exist, build rules and watch the live count." },
   { label: "Review analytics after traffic starts", href: "/analytics", how: "Charts fill in from real events only. Nothing here is faked." },
 ];
@@ -184,7 +184,7 @@ export default async function LaunchPage() {
             <p className="px-5 py-4 text-[13px] leading-relaxed text-ink-2">
               MyoTech and Novatec each have their own API key, tracking ID and templates. Data never mixes: every event,
               cart and sync is tied to the store whose key sent it. If you ever see MyoTech data under Novatec (or the
-              reverse), stop and report it — that means a key was pasted into the wrong plugin.
+              reverse), stop and report it. It means a key was pasted into the wrong plugin.
             </p>
           </Card>
 
