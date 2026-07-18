@@ -611,6 +611,8 @@ model ExtractedRecord {
 model Feedback {
   id          String   @id @default(cuid())
   workspaceId String
+  status      String   @default("new") // new | reviewed | actioned | rejected
+  internalNote String?
   area        String
   workedWell  String?
   confusing   String?

@@ -23,7 +23,7 @@ const consentToStatus: Record<string, string> = {
   suppressed: "suppressed",
 };
 
-async function main() {
+export async function main() {
   console.log("Seeding…");
 
   const ws = await db.workspace.create({
@@ -322,6 +322,8 @@ async function main() {
   console.log(`Store API key: ${DEMO_API_KEY}`);
 }
 
-main()
-  .catch((e) => { console.error(e); process.exit(1); })
-  .finally(() => db.$disconnect());
+if (process.argv[1]?.includes("seed.ts")) {
+  main()
+    .catch((e) => { console.error(e); process.exit(1); })
+    .finally(() => db.$disconnect());
+}

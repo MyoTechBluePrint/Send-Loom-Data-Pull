@@ -226,8 +226,8 @@ export async function getProvidersView(): Promise<Provider[]> {
   }));
 }
 
-export async function getAuditView() {
+export async function getAuditView(take = 60) {
   const wsId = await demoWorkspaceId();
-  const logs = await db.auditLog.findMany({ where: { workspaceId: wsId }, orderBy: { createdAt: "desc" }, take: 30 });
-  return logs.map((l) => ({ time: relTime(l.createdAt), who: l.actorLabel, what: l.detail ?? l.action }));
+  const logs = await db.auditLog.findMany({ where: { workspaceId: wsId }, orderBy: { createdAt: "desc" }, take });
+  return logs.map((l) => ({ time: relTime(l.createdAt), who: l.actorLabel, action: l.action, what: l.detail ?? l.action }));
 }
