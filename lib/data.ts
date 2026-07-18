@@ -212,6 +212,10 @@ export type Campaign = {
   clickRate: number;
   revenue: number;
   abTest?: string;
+  isDemo?: boolean;
+  delivered?: number;
+  opened?: number;
+  clicked?: number;
 };
 
 export const campaigns: Campaign[] = [

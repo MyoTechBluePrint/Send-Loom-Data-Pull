@@ -1,7 +1,7 @@
 // Shapes Prisma rows into the view types the existing UI components consume
 // (lib/data.ts types). Keeps page rewiring to import swaps.
 import { db } from "./db";
-import type { Subscriber, TimelineEvent, ImportBatch, SalesTask, Segment, Keyword, SiteSearch, Opportunity, Provider } from "@/lib/data";
+import type { Subscriber, TimelineEvent, ImportBatch, SalesTask, Segment, Keyword, SiteSearch, Opportunity, Provider, Campaign } from "@/lib/data";
 
 export async function demoWorkspaceId(): Promise<string> {
   const ws = await db.workspace.findFirstOrThrow();
@@ -129,6 +129,32 @@ export async function getImportBatchesView(): Promise<ImportBatch[]> {
     merged: b.mergedRows, blocked: b.blockedRows, missingConsent: b.missingConsentRows,
     status: batchStatusView[b.status] ?? "complete", revenue: b.revenue,
   }));
+}
+
+export async function getCampaignsView(): Promise<Campaign[]> {
+  const wsId = await demoWorkspaceId();
+  const campaigns = await db.campaign.findMany({
+    where: { workspaceId: wsId },
+    include: { sends: true },
+    orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+  });
+  return campaigns.map((c) => {
+    const delivered = c.sends.filter((s) => s.status === "sent").length;
+    const opened = c.sends.filter((s) => s.openedAt).length;
+    const clicked = c.sends.filter((s) => s.clickedAt).length;
+    return {
+      id: c.id, name: c.name, subject: c.subject ?? "",
+      status: c.status as Campaign["status"],
+      audience: c.audienceRef ?? "All contacts",
+      recipients: c.audienceSnapshot,
+      sentAt: c.sentAt ? dateStr(c.sentAt) : c.scheduledAt ? dateStr(c.scheduledAt) : "Not scheduled",
+      openRate: c.isDemo ? c.openRate : delivered ? Math.round((opened / delivered) * 1000) / 10 : 0,
+      clickRate: c.isDemo ? c.clickRate : delivered ? Math.round((clicked / delivered) * 1000) / 10 : 0,
+      revenue: c.revenue,
+      isDemo: c.isDemo,
+      delivered, opened, clicked,
+    };
+  });
 }
 
 export async function getSegmentsView(): Promise<Segment[]> {

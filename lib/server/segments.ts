@@ -72,7 +72,7 @@ function matches(rule: Rule, ctx: Ctx): boolean {
   }
 }
 
-export async function evaluateSegment(workspaceId: string, match: "all" | "any", rules: Rule[]) {
+async function evaluateHits(workspaceId: string, match: "all" | "any", rules: Rule[]) {
   const [contacts, suppressionRows] = await Promise.all([
     loadContacts(workspaceId),
     db.suppressionRecord.findMany({ where: { workspaceId } }),
@@ -82,13 +82,24 @@ export async function evaluateSegment(workspaceId: string, match: "all" | "any",
   const include = rules.filter((r) => !r.exclude);
   const exclude = rules.filter((r) => r.exclude);
 
-  const hits = contacts.filter((contact) => {
+  return contacts.filter((contact) => {
     if (contact.email && suppressions.has(contact.email)) return false;
     const ctx = { contact, suppressions };
     const inc = include.length === 0 || (match === "all" ? include.every((r) => matches(r, ctx)) : include.some((r) => matches(r, ctx)));
     const exc = exclude.some((r) => matches(r, ctx));
     return inc && !exc;
   });
+}
+
+// Full member id list — used by the send path, which re-checks consent and
+// suppression itself at send time.
+export async function evaluateSegmentMembers(workspaceId: string, match: "all" | "any", rules: Rule[]): Promise<string[]> {
+  const hits = await evaluateHits(workspaceId, match, rules);
+  return hits.map((c) => c.id);
+}
+
+export async function evaluateSegment(workspaceId: string, match: "all" | "any", rules: Rule[]) {
+  const hits = await evaluateHits(workspaceId, match, rules);
 
   return {
     count: hits.length,
