@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "sendloom",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 3009,
+      "cwd": "/Users/stephenclark/Sites/sendloom"
+    }
+  ]
+}
