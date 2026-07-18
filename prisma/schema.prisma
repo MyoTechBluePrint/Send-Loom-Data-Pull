@@ -1,0 +1,584 @@
+// Sendloom core schema. Dev runs on SQLite (no local Postgres available);
+// production target is PostgreSQL — switch `provider` + DATABASE_URL only.
+// Written Postgres-compatible: no SQLite-specific features relied upon.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  sector    String? // e.g. "health-wellness" enables sector mode
+  createdAt DateTime @default(now())
+
+  users       User[]
+  stores      Store[]
+  contacts    Contact[]
+  imports     ImportBatch[]
+  segments    Segment[]
+  tags        Tag[]
+  campaigns   Campaign[]
+  automations Automation[]
+  templates   EmailTemplate[]
+  forms       Form[]
+  keywords    Keyword[]
+  clusters    KeywordCluster[]
+  providers   DataProvider[]
+  tasks       SalesTask[]
+  suppressions SuppressionRecord[]
+  audits      AuditLog[]
+  compliance  ComplianceCheck[]
+}
+
+model User {
+  id          String   @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  email       String   @unique
+  name        String
+  role        String   @default("member") // owner | admin | marketing | editor | viewer
+  twoFactor   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  tasksAssigned SalesTask[] @relation("assignee")
+  audits        AuditLog[]
+}
+
+model Store {
+  id          String   @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  name        String
+  url         String
+  platform    String   @default("woocommerce")
+  apiKey      String   @unique // plugin authenticates with this
+  status      String   @default("pending") // pending | connected | error
+  lastSyncAt  DateTime?
+  pluginVersion String?
+  createdAt   DateTime @default(now())
+
+  products Product[]
+  orders   Order[]
+  carts    Cart[]
+  events   Event[]
+  syncs    ProviderSync[]
+}
+
+model Contact {
+  id          String   @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  email       String
+  firstName   String?
+  lastName    String?
+  phone       String?
+  country     String?
+  city        String?
+  postcode    String?
+  externalCustomerId String? // WooCommerce customer id
+  notes       String?
+  customFields String? // JSON blob of custom fields
+  confidence  Int      @default(70)
+  engagement  String   @default("none") // high | medium | low | none
+  // denormalised commerce rollups (recomputed on order ingestion)
+  ordersCount Int      @default(0)
+  revenue     Float    @default(0)
+  lastOrderAt DateTime?
+  lastActivityAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  sources     ContactSource[]
+  consents    ConsentRecord[]
+  tags        ContactTag[]
+  events      Event[]
+  timeline    TimelineItem[]
+  score       LeadScore?
+  orders      Order[]
+  carts       Cart[]
+  enrichments EnrichmentRecord[]
+  tasks       SalesTask[]
+  sends       CampaignSend[]
+  runs        AutomationRun[]
+  importRows  ImportRow[]
+
+  @@unique([workspaceId, email])
+  @@index([workspaceId, lastActivityAt])
+}
+
+// Append-only. A contact always has >= 1 source; re-appearance adds a row.
+model ContactSource {
+  id          String   @id @default(cuid())
+  contactId   String
+  contact     Contact  @relation(fields: [contactId], references: [id])
+  source      String // "Checkout opt-in", "Import: Klaviyo export", ...
+  sourceType  String // checkout | popup | quiz | import | api | referral | webhook
+  importBatchId String?
+  importBatch ImportBatch? @relation(fields: [importBatchId], references: [id])
+  uploadedBy  String?
+  detail      String?
+  createdAt   DateTime @default(now())
+
+  @@index([contactId])
+}
+
+// Append-only consent history per channel. Current state = latest row per channel.
+model ConsentRecord {
+  id          String   @id @default(cuid())
+  contactId   String
+  contact     Contact  @relation(fields: [contactId], references: [id])
+  channel     String // email | sms | whatsapp | phone | ad_export
+  status      String // granted | withdrawn | pending | suppressed
+  lawfulBasis String?
+  evidence    String? // form snapshot ref, import batch, etc.
+  actor       String? // user email or "system" | "import:<batchId>"
+  createdAt   DateTime @default(now())
+
+  @@index([contactId, channel, createdAt])
+}
+
+model ImportBatch {
+  id          String   @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  name        String
+  source      String
+  sourceType  String   @default("import")
+  format      String   @default("csv")
+  uploadedBy  String
+  status      String   @default("mapping") // mapping | review | importing | complete | needs_review | blocked
+  mapping     String? // JSON: column -> field
+  options     String? // JSON: duplicate strategy etc.
+  totalRows   Int      @default(0)
+  readyRows   Int      @default(0)
+  duplicateRows Int    @default(0)
+  mergedRows  Int      @default(0)
+  blockedRows Int      @default(0)
+  missingConsentRows Int @default(0)
+  invalidRows Int      @default(0)
+  revenue     Float    @default(0)
+  createdAt   DateTime @default(now())
+  completedAt DateTime?
+
+  rows    ImportRow[]
+  sources ContactSource[]
+}
+
+model ImportRow {
+  id        String   @id @default(cuid())
+  batchId   String
+  batch     ImportBatch @relation(fields: [batchId], references: [id])
+  rowNumber Int
+  raw       String // JSON of the original row, always preserved
+  status    String   @default("pending") // pending | ready | duplicate | invalid | blocked | needs_review | imported | merged | skipped
+  issue     String?
+  contactId String?
+  contact   Contact? @relation(fields: [contactId], references: [id])
+
+  @@index([batchId, status])
+}
+
+model Segment {
+  id          String   @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  name        String
+  description String?
+  match       String   @default("all") // all | any
+  count       Int      @default(0) // last computed
+  revenue     Float    @default(0)
+  computedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  rules SegmentRule[]
+}
+
+model SegmentRule {
+  id        String  @id @default(cuid())
+  segmentId String
+  segment   Segment @relation(fields: [segmentId], references: [id])
+  field     String
+  operator  String
+  value     String
+  exclude   Boolean @default(false)
+}
+
+model Tag {
+  id          String   @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  name        String
+  createdAt   DateTime @default(now())
+
+  contacts ContactTag[]
+
+  @@unique([workspaceId, name])
+}
+
+model ContactTag {
+  contactId String
+  contact   Contact @relation(fields: [contactId], references: [id])
+  tagId     String
+  tag       Tag     @relation(fields: [tagId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@id([contactId, tagId])
+}
+
+model Event {
+  id          String   @id @default(cuid())
+  workspaceId String
+  storeId     String?
+  store       Store?   @relation(fields: [storeId], references: [id])
+  contactId   String?
+  contact     Contact? @relation(fields: [contactId], references: [id])
+  type        String // product_viewed | category_viewed | search | cart_add | cart_remove | checkout_started | purchase_completed | email_open | email_click | form_submitted | quiz_completed | guide_downloaded | consultation_requested | imported | consent_recorded | ...
+  payload     String? // JSON
+  anonymousId String? // for not-yet-identified visitors
+  occurredAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, type, occurredAt])
+  @@index([contactId, occurredAt])
+}
+
+model TimelineItem {
+  id        String   @id @default(cuid())
+  contactId String
+  contact   Contact  @relation(fields: [contactId], references: [id])
+  type      String
+  title     String
+  detail    String?
+  value     String?
+  eventId   String?
+  occurredAt DateTime @default(now())
+
+  @@index([contactId, occurredAt])
+}
+
+model Product {
+  id        String  @id @default(cuid())
+  storeId   String
+  store     Store   @relation(fields: [storeId], references: [id])
+  externalId String
+  title     String
+  sku       String?
+  price     Float   @default(0)
+  salePrice Float?
+  imageUrl  String?
+  url       String?
+  categories String? // JSON array
+  tags      String? // JSON array
+  inventory Int?
+  updatedAt DateTime @updatedAt
+
+  @@unique([storeId, externalId])
+}
+
+model Order {
+  id         String   @id @default(cuid())
+  storeId    String
+  store      Store    @relation(fields: [storeId], references: [id])
+  contactId  String?
+  contact    Contact? @relation(fields: [contactId], references: [id])
+  externalId String
+  number     String
+  status     String
+  total      Float    @default(0)
+  tax        Float    @default(0)
+  shipping   Float    @default(0)
+  discount   Float    @default(0)
+  refunded   Float    @default(0)
+  coupon     String?
+  paymentMethod String?
+  items      String? // JSON [{externalProductId, title, qty, price, categories}]
+  placedAt   DateTime @default(now())
+
+  @@unique([storeId, externalId])
+  @@index([contactId])
+}
+
+model Cart {
+  id         String   @id @default(cuid())
+  storeId    String
+  store      Store    @relation(fields: [storeId], references: [id])
+  contactId  String?
+  contact    Contact? @relation(fields: [contactId], references: [id])
+  externalId String?
+  items      String? // JSON
+  total      Float    @default(0)
+  status     String   @default("open") // open | abandoned | recovered | converted
+  updatedAt  DateTime @updatedAt
+
+  @@index([storeId, status])
+}
+
+model Campaign {
+  id          String   @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  name        String
+  subject     String?
+  previewText String?
+  status      String   @default("draft") // draft | scheduled | sending | sent
+  audienceType String? // all | segment | tag | import_batch | score_group | keyword_interest
+  audienceRef String?
+  audienceSnapshot Int  @default(0) // contact count at send/schedule time
+  content     String? // JSON blocks from the builder
+  scheduledAt DateTime?
+  sentAt      DateTime?
+  isDemo      Boolean  @default(false) // seeded performance data, not real sends
+  openRate    Float    @default(0)
+  clickRate   Float    @default(0)
+  revenue     Float    @default(0)
+  createdAt   DateTime @default(now())
+
+  sends CampaignSend[]
+}
+
+model CampaignSend {
+  id         String   @id @default(cuid())
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id])
+  contactId  String
+  contact    Contact  @relation(fields: [contactId], references: [id])
+  status     String   @default("queued") // queued | sent | delivered | bounced | complained
+  openedAt   DateTime?
+  clickedAt  DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([campaignId, status])
+}
+
+model Automation {
+  id          String   @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  name        String
+  trigger     String
+  status      String   @default("draft") // live | paused | draft
+  isDemo      Boolean  @default(false)
+  entered     Int      @default(0)
+  completed   Int      @default(0)
+  revenue     Float    @default(0)
+  conversion  Float    @default(0)
+  createdAt   DateTime @default(now())
+
+  nodes AutomationNode[]
+  runs  AutomationRun[]
+}
+
+model AutomationNode {
+  id           String     @id @default(cuid())
+  automationId String
+  automation   Automation @relation(fields: [automationId], references: [id])
+  kind         String // trigger | delay | condition | email | task | tag | webhook | split | exit
+  label        String
+  detail       String?
+  stats        String?
+  position     Int        @default(0)
+  branch       String? // null | "yes" | "no"
+  config       String? // JSON
+}
+
+model AutomationRun {
+  id           String     @id @default(cuid())
+  automationId String
+  automation   Automation @relation(fields: [automationId], references: [id])
+  contactId    String
+  contact      Contact    @relation(fields: [contactId], references: [id])
+  status       String     @default("running") // running | completed | exited | converted
+  currentNode  String?
+  startedAt    DateTime   @default(now())
+  endedAt      DateTime?
+
+  @@index([automationId, status])
+}
+
+model EmailTemplate {
+  id          String   @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  name        String
+  content     String // JSON blocks
+  createdAt   DateTime @default(now())
+}
+
+model Form {
+  id          String   @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  name        String
+  type        String // popup | embedded | slide_in | floating_bar | exit_intent | quiz
+  trigger     String?
+  status      String   @default("draft")
+  views       Int      @default(0)
+  signups     Int      @default(0)
+  isDemo      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+}
+
+model LeadScore {
+  id           String   @id @default(cuid())
+  contactId    String   @unique
+  contact      Contact  @relation(fields: [contactId], references: [id])
+  score        Int      @default(0)
+  status       String   @default("cold") // cold | warm | hot | ready | customer | vip | suppressed
+  reasons      String // JSON [{reason, points}]
+  calculatedAt DateTime @default(now())
+}
+
+model Keyword {
+  id          String   @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  term        String
+  clusterId   String?
+  cluster     KeywordCluster? @relation(fields: [clusterId], references: [id])
+  volume      Int      @default(0)
+  trend       Int      @default(0)
+  cpc         Float    @default(0)
+  seoDifficulty Int    @default(0)
+  intent      String   @default("research") // buyer | research | question
+  review      String   @default("approved") // approved | needs_review | restricted | internal_only | blocked
+  createdAt   DateTime @default(now())
+
+  @@unique([workspaceId, term])
+}
+
+model KeywordCluster {
+  id          String   @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  name        String
+  opportunityScore Int @default(0)
+  demandNote  String?
+  haveAssets  String? // JSON array
+  missingAssets String? // JSON array
+
+  keywords Keyword[]
+
+  @@unique([workspaceId, name])
+}
+
+model DemandSignal {
+  id          String   @id @default(cuid())
+  workspaceId String
+  source      String // site_search | search_console | dataforseo | ...
+  kind        String // site_search_term | rising_topic | question | regional
+  term        String
+  metric      Float    @default(0) // searches, %, etc.
+  trend       Int      @default(0)
+  conversion  Float    @default(0)
+  revenue     Float    @default(0)
+  note        String?
+  periodDays  Int      @default(30)
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, kind])
+}
+
+model DataProvider {
+  id          String   @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  name        String
+  type        String // commerce | sending | ad_platform | search_data | keyword_data | enrichment | crm | sms
+  status      String   @default("not_connected") // healthy | syncing | error | not_connected
+  config      String? // JSON (keys stay in env; this holds non-secret settings)
+  lastSyncAt  DateTime?
+  note        String?
+  costMonth   Float    @default(0)
+
+  syncs ProviderSync[]
+}
+
+model ProviderSync {
+  id         String   @id @default(cuid())
+  providerId String
+  provider   DataProvider @relation(fields: [providerId], references: [id])
+  storeId    String?
+  store      Store?   @relation(fields: [storeId], references: [id])
+  status     String // ok | error
+  detail     String?
+  records    Int      @default(0)
+  startedAt  DateTime @default(now())
+  endedAt    DateTime?
+}
+
+model EnrichmentRecord {
+  id         String   @id @default(cuid())
+  contactId  String
+  contact    Contact  @relation(fields: [contactId], references: [id])
+  provider   String
+  fieldsAdded String // JSON
+  confidence Int      @default(0)
+  cost       Float    @default(0)
+  permission String?
+  createdAt  DateTime @default(now())
+}
+
+model SuppressionRecord {
+  id          String   @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  email       String
+  reason      String // unsubscribed | hard_bounce | complaint | manual | import_blocked
+  detail      String?
+  createdAt   DateTime @default(now())
+
+  @@unique([workspaceId, email])
+}
+
+model SalesTask {
+  id          String   @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  contactId   String?
+  contact     Contact? @relation(fields: [contactId], references: [id])
+  contactLabel String? // for prospects not yet in contacts
+  type        String
+  note        String?
+  priority    String   @default("medium") // high | medium | low
+  status      String   @default("open") // open | done | overdue
+  source      String   @default("manual") // manual | automation | score_threshold | system
+  assigneeId  String?
+  assignee    User?    @relation("assignee", fields: [assigneeId], references: [id])
+  assigneeLabel String?
+  dueAt       DateTime?
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, status])
+}
+
+model ComplianceCheck {
+  id          String   @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  subjectType String // keyword | campaign | import
+  subjectId   String
+  state       String // approved | needs_review | restricted | internal_only | blocked
+  rule        String?
+  createdAt   DateTime @default(now())
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  actorId     String?
+  actor       User?    @relation(fields: [actorId], references: [id])
+  actorLabel  String // email or "system" | "plugin:<storeId>"
+  action      String // import.created | import.blocked | contact.suppressed | store.connected | event.rejected | ...
+  detail      String?
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, createdAt])
+}
