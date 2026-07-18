@@ -4,6 +4,7 @@ import { db } from "./db";
 import { audit } from "./audit";
 
 export async function authenticateStore(req: NextRequest) {
+  if (process.env.PLUGIN_API_ENABLED === "false") return null; // staging kill switch
   const key = req.headers.get("x-sendloom-key");
   if (!key) return null;
   return db.store.findUnique({ where: { apiKey: key } });

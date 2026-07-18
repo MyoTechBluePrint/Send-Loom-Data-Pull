@@ -18,3 +18,9 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   });
   return Response.json({ ok: true, id: task.id, status: task.status });
 }
+
+export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const { id } = await ctx.params;
+  await db.salesTask.delete({ where: { id } });
+  return Response.json({ ok: true });
+}

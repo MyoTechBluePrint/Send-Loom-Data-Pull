@@ -49,12 +49,14 @@ const nav: { section?: string; items: { href: string; label: string; icon: strin
 export function Shell({ children, title, subtitle, actions }: { children: ReactNode; title: string; subtitle?: string; actions?: ReactNode }) {
   const pathname = usePathname();
   const [me, setMe] = useState<Me | null>(null);
+  const [navOpen, setNavOpen] = useState(false);
   useEffect(() => {
     fetch("/api/auth/me").then((r) => (r.ok ? r.json() : null)).then((j) => j?.ok && setMe(j)).catch(() => {});
   }, []);
   return (
     <div className="flex min-h-screen">
-      <aside className="fixed inset-y-0 left-0 flex w-60 flex-col border-r border-[#262433] bg-[#14121f] text-white">
+      {navOpen && <button aria-label="Close menu" onClick={() => setNavOpen(false)} className="fixed inset-0 z-30 bg-black/50 lg:hidden" />}
+      <aside className={`fixed inset-y-0 left-0 z-40 w-60 flex-col border-r border-[#262433] bg-[#14121f] text-white ${navOpen ? "flex" : "hidden"} lg:flex`}>
         <div className="flex items-center gap-2.5 px-5 py-5">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#6d28d9] text-sm font-bold">S</div>
           <div>
@@ -75,6 +77,7 @@ export function Shell({ children, title, subtitle, actions }: { children: ReactN
                     <Link
                       key={item.href}
                       href={item.href}
+                      onClick={() => setNavOpen(false)}
                       className={`flex items-center gap-3 rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors ${
                         active ? "bg-[#6d28d9] text-white" : "text-white/65 hover:bg-white/5 hover:text-white"
                       }`}
@@ -132,14 +135,21 @@ export function Shell({ children, title, subtitle, actions }: { children: ReactN
         </div>
       </aside>
 
-      <div className="ml-60 flex-1">
+      <div className="flex-1 lg:ml-60">
         <div className="flex items-center justify-center gap-2 bg-[#14121f] px-4 py-1.5 text-center text-[11px] font-medium text-white/80">
           <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
           Sendloom Staging · Demo data only · No live sending
           <Link href="/team-handover" className="font-bold text-white underline underline-offset-2 hover:text-amber-200">What to try →</Link>
         </div>
-        <header className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-[rgba(247,247,245,0.85)] px-8 py-4 backdrop-blur max-xl:px-5">
-          <div className="min-w-0">
+        <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-line bg-[rgba(247,247,245,0.85)] px-8 py-4 backdrop-blur max-xl:px-5">
+          <button
+            aria-label="Open menu"
+            onClick={() => setNavOpen(true)}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-line bg-surface text-lg lg:hidden"
+          >
+            ☰
+          </button>
+          <div className="min-w-0 flex-1">
             <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
             {subtitle && <p className="mt-0.5 text-xs text-ink-3">{subtitle}</p>}
           </div>

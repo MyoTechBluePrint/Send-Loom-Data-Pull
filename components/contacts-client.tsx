@@ -2,14 +2,38 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Shell, PrimaryButton, GhostButton } from "@/components/shell";
+import { useRouter } from "next/navigation";
+import { Shell, GhostButton } from "@/components/shell";
 import { Card, Badge, Th, Td } from "@/components/ui";
 import { gbp, num, type Subscriber } from "@/lib/data";
 
 const filters = ["All", "Subscribed", "Pending", "Unsubscribed", "Suppressed"] as const;
 
 export function ContactsClient({ contacts }: { contacts: Subscriber[] }) {
+  const router = useRouter();
   const [q, setQ] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [form, setForm] = useState({ name: "", email: "", phone: "", tag: "" });
+  const [busy, setBusy] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+
+  async function addContact(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setAddError(null);
+    try {
+      const res = await fetch("/api/contacts", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form),
+      });
+      const json = await res.json();
+      if (!json.ok) { setAddError(json.error ?? "Failed"); return; }
+      setAdding(false);
+      setForm({ name: "", email: "", phone: "", tag: "" });
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
   const [filter, setFilter] = useState<(typeof filters)[number]>("All");
 
   const rows = useMemo(
@@ -33,11 +57,39 @@ export function ContactsClient({ contacts }: { contacts: Subscriber[] }) {
       actions={
         <>
           <Link href="/imports"><GhostButton>Import CSV</GhostButton></Link>
-          <GhostButton>Export</GhostButton>
-          <PrimaryButton>Add contact</PrimaryButton>
+          <button onClick={() => setAdding(true)} className="rounded-lg bg-[#6d28d9] px-3.5 py-2 text-[13px] font-semibold text-white shadow-sm hover:bg-[#5b21b6]">
+            Add contact
+          </button>
         </>
       }
     >
+      {adding && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setAdding(false)}>
+          <form onSubmit={addContact} onClick={(e) => e.stopPropagation()} className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl">
+            <h2 className="text-base font-semibold">Add demo contact</h2>
+            <p className="mt-0.5 text-xs text-ink-3">Staging only · gets a source ledger entry and pending consent</p>
+            {addError && <p className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{addError}</p>}
+            {([["name", "Full name *"], ["email", "Email"], ["phone", "Phone"], ["tag", "Interest tag"]] as const).map(([key, label]) => (
+              <label key={key} className="mt-3 block">
+                <span className="text-xs font-medium text-ink-3">{label}</span>
+                <input
+                  value={form[key]}
+                  onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+                  required={key === "name"}
+                  className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand"
+                />
+              </label>
+            ))}
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" onClick={() => setAdding(false)} className="rounded-lg border border-line px-3.5 py-2 text-[13px] font-semibold text-ink-2 hover:bg-[#f0efec]">Cancel</button>
+              <button type="submit" disabled={busy} className="rounded-lg bg-brand px-3.5 py-2 text-[13px] font-semibold text-white hover:bg-[#5b21b6] disabled:opacity-50">
+                {busy ? "Saving…" : "Create contact"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <input
           value={q}

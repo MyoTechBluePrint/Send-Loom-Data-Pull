@@ -6,7 +6,11 @@ import { db } from "../lib/server/db";
 import { hashPassword } from "../lib/server/auth";
 
 export async function seedUsers(workspaceId: string) {
-  const raw = process.env.SEED_USERS;
+  let raw = process.env.SEED_USERS;
+  // Alternative single-worker provisioning per the staging brief.
+  if (!raw && process.env.WORKER_DEMO_EMAIL && process.env.WORKER_DEMO_PASSWORD) {
+    raw = `${process.env.WORKER_DEMO_EMAIL}:${process.env.WORKER_DEMO_PASSWORD}`;
+  }
   if (!raw) {
     console.log("SEED_USERS not set — no login users provisioned.");
     return 0;

@@ -12,6 +12,21 @@ export default function SettingsPage() {
 
   return (
     <Shell title="Settings" subtitle="Workspace: Vitalis Wellness & Longevity">
+      <div className="mb-4 rounded-xl border border-line bg-surface px-5 py-4 shadow-[0_1px_2px_rgba(11,11,11,0.04)]">
+        <p className="text-xs font-bold uppercase tracking-wide text-ink-3">Your access · staging worker account</p>
+        <p className="mt-1.5 text-[13px] leading-relaxed text-ink-2">
+          You can test workflows, add demo data, run imports, approve inbox items, create audiences, draft campaigns and manage sales tasks.
+          Live sending, billing changes, workspace deletion, production providers and secrets are disabled for everyone on staging.
+        </p>
+        <div className="mt-2.5 flex flex-wrap gap-1.5">
+          {["Test imports ✓", "Demo contacts ✓", "Audiences ✓", "Sales tasks ✓", "Draft campaigns ✓", "Dashboards ✓"].map((c) => (
+            <span key={c} className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">{c}</span>
+          ))}
+          {["Live sending ✕", "Billing ✕", "Delete workspace ✕", "Production secrets ✕"].map((c) => (
+            <span key={c} className="rounded-full bg-[#f0efec] px-2.5 py-1 text-[11px] font-semibold text-ink-3">{c}</span>
+          ))}
+        </div>
+      </div>
       <div className="mb-5 flex flex-wrap gap-1 rounded-lg border border-line bg-surface p-1">
         {tabs.map((t) => (
           <button

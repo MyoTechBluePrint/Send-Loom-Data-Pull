@@ -4,6 +4,7 @@ import { Shell, GhostButton, PrimaryButton } from "@/components/shell";
 import { Card, CardHeader, Badge, Stat } from "@/components/ui";
 import { gbp } from "@/lib/data";
 import { getContactView } from "@/lib/server/views";
+import { ContactActions } from "@/components/contact-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -182,6 +183,8 @@ export default async function ContactProfile({ params }: { params: Promise<{ id:
               </div>
             </dl>
           </Card>
+
+          <ContactActions contactId={sub.id} archived={sub.consent === "suppressed"} />
 
           <Card>
             <CardHeader title="Tags & enrichment" />

@@ -15,6 +15,24 @@ export function CampaignsClient({ campaigns }: { campaigns: Campaign[] }) {
   const [summary, setSummary] = useState<SendSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  async function quickDraft() {
+    const name = window.prompt("New draft campaign name", "Untitled campaign");
+    if (!name) return;
+    await fetch("/api/campaigns", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) });
+    router.refresh();
+  }
+
+  async function duplicate(id: string) {
+    await fetch(`/api/campaigns/${id}`, { method: "POST" });
+    router.refresh();
+  }
+
+  async function removeDraft(id: string, name: string) {
+    if (!window.confirm(`Delete draft '${name}'?`)) return;
+    await fetch(`/api/campaigns/${id}`, { method: "DELETE" });
+    router.refresh();
+  }
+
   async function send(id: string) {
     setSending(id);
     setError(null);
@@ -35,7 +53,7 @@ export function CampaignsClient({ campaigns }: { campaigns: Campaign[] }) {
       subtitle="One-off sends · consent and suppression enforced at send time, whatever the audience"
       actions={
         <>
-          <GhostButton>Templates</GhostButton>
+          <button onClick={quickDraft} className="rounded-lg border border-line bg-surface px-3.5 py-2 text-[13px] font-semibold text-ink-2 hover:bg-[#f0efec]">Quick draft</button>
           <Link href="/campaigns/new"><PrimaryButton>Create campaign</PrimaryButton></Link>
         </>
       }
@@ -83,13 +101,17 @@ export function CampaignsClient({ campaigns }: { campaigns: Campaign[] }) {
                 <Td className="tabular text-right font-semibold">{c.status === "sent" && c.revenue > 0 ? gbp(c.revenue) : "–"}</Td>
                 <Td className="text-right">
                   {c.status === "draft" ? (
-                    <button
-                      disabled={sending === c.id}
-                      onClick={() => send(c.id)}
-                      className="rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#5b21b6] disabled:opacity-50"
-                    >
-                      {sending === c.id ? "Sending…" : "Send now"}
-                    </button>
+                    <span className="inline-flex items-center gap-1.5">
+                      <button
+                        disabled={sending === c.id}
+                        onClick={() => send(c.id)}
+                        className="rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#5b21b6] disabled:opacity-50"
+                      >
+                        {sending === c.id ? "Sending…" : "Send now"}
+                      </button>
+                      <button onClick={() => duplicate(c.id)} className="rounded-lg border border-line px-2 py-1.5 text-[11px] font-semibold text-ink-2 hover:bg-[#f0efec]" title="Duplicate">⧉</button>
+                      <button onClick={() => removeDraft(c.id, c.name)} className="rounded-lg border border-line px-2 py-1.5 text-[11px] font-semibold text-ink-3 hover:bg-red-50 hover:text-red-700" title="Delete draft">✕</button>
+                    </span>
                   ) : (
                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${c.isDemo ? "bg-zinc-100 text-zinc-500" : "bg-emerald-50 text-emerald-700"}`}>
                       {c.isDemo ? "Demo" : "Real"}

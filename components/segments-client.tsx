@@ -61,6 +61,19 @@ export function SegmentsClient({ segments }: { segments: Segment[] }) {
     return () => clearTimeout(t);
   }, [building, match, conditions]);
 
+  async function renameAudience(id: string, current: string) {
+    const name = window.prompt("Rename audience", current);
+    if (!name || name === current) return;
+    await fetch(`/api/segments/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) });
+    router.refresh();
+  }
+
+  async function deleteAudience(id: string, name: string) {
+    if (!window.confirm(`Delete audience '${name}'? Contacts are not affected.`)) return;
+    await fetch(`/api/segments/${id}`, { method: "DELETE" });
+    router.refresh();
+  }
+
   async function save() {
     setBusy(true);
     try {
@@ -123,9 +136,13 @@ export function SegmentsClient({ segments }: { segments: Segment[] }) {
                       <p className="mt-0.5 text-[13px] font-semibold">{play.campaign}</p>
                     </div>
                   </div>
-                  <Link href="/campaigns/new" className="mt-3 rounded-lg bg-brand-soft px-3 py-1.5 text-center text-xs font-bold text-brand hover:bg-[#ece2fa]">
-                    Create campaign →
-                  </Link>
+                  <div className="mt-3 flex items-center gap-2">
+                    <Link href="/campaigns/new" className="flex-1 rounded-lg bg-brand-soft px-3 py-1.5 text-center text-xs font-bold text-brand hover:bg-[#ece2fa]">
+                      Create campaign →
+                    </Link>
+                    <button onClick={() => renameAudience(s.id, s.name)} className="rounded-lg border border-line px-2 py-1.5 text-[11px] font-semibold text-ink-2 hover:bg-[#f0efec]" title="Rename">Rename</button>
+                    <button onClick={() => deleteAudience(s.id, s.name)} className="rounded-lg border border-line px-2 py-1.5 text-[11px] font-semibold text-ink-3 hover:bg-red-50 hover:text-red-700" title="Delete">✕</button>
+                  </div>
                 </Card>
               );
             })}

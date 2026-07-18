@@ -83,6 +83,26 @@ export default async function Dashboard() {
         </Link>
       </div>
 
+      {/* Start here (first visit) */}
+      <Card className="mt-4 border-brand bg-brand-soft/30">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3.5">
+          <p className="text-xs font-bold uppercase tracking-wide text-brand">Start here</p>
+          {[
+            ["Review intake", "/inbox"],
+            ["Try Paste Anything", "/inbox"],
+            ["Open hot leads", "/subscribers"],
+            ["Create a test audience", "/segments"],
+            ["Check Demand Radar", "/demand"],
+            ["Complete a sales task", "/tasks"],
+            ["Leave feedback", "/feedback"],
+          ].map(([label, href]) => (
+            <Link key={label} href={href} className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-ink-2 shadow-sm hover:text-brand">
+              {label} →
+            </Link>
+          ))}
+        </div>
+      </Card>
+
       {/* Next best actions */}
       <Card className="mt-4">
         <CardHeader title="Next best actions" subtitle="Every suggestion states its basis and links to the work · live counts where marked" />

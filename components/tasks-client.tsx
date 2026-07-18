@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Shell, PrimaryButton, GhostButton } from "@/components/shell";
+import { Shell, GhostButton } from "@/components/shell";
 import { Card, CardHeader } from "@/components/ui";
 import type { SalesTask } from "@/lib/data";
 
@@ -16,6 +16,31 @@ const prioChip: Record<string, string> = {
 export function TasksClient({ tasks }: { tasks: SalesTask[] }) {
   const router = useRouter();
   const [completing, setCompleting] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [form, setForm] = useState({ type: "Call lead", contactLabel: "", note: "", priority: "medium", assigneeLabel: "Will", dueInDays: 1 });
+  const [busy, setBusy] = useState(false);
+
+  async function createTask(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      const res = await fetch("/api/tasks", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form),
+      });
+      if ((await res.json()).ok) {
+        setCreating(false);
+        setForm({ type: "Call lead", contactLabel: "", note: "", priority: "medium", assigneeLabel: "Will", dueInDays: 1 });
+        router.refresh();
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(id: string) {
+    await fetch(`/api/tasks/${id}`, { method: "DELETE" });
+    router.refresh();
+  }
 
   const open = tasks.filter((t) => t.status !== "done");
 
@@ -39,10 +64,58 @@ export function TasksClient({ tasks }: { tasks: SalesTask[] }) {
       actions={
         <>
           <GhostButton>Filter: All assignees ▾</GhostButton>
-          <PrimaryButton>New task</PrimaryButton>
+          <button onClick={() => setCreating(true)} className="rounded-lg bg-[#6d28d9] px-3.5 py-2 text-[13px] font-semibold text-white shadow-sm hover:bg-[#5b21b6]">
+            New task
+          </button>
         </>
       }
     >
+      {creating && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setCreating(false)}>
+          <form onSubmit={createTask} onClick={(e) => e.stopPropagation()} className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl">
+            <h2 className="text-base font-semibold">New sales task</h2>
+            <label className="mt-3 block">
+              <span className="text-xs font-medium text-ink-3">Task</span>
+              <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand">
+                {["Call lead", "WhatsApp follow-up", "Review prospect", "Check consent", "Send manual quote", "Send consultation link"].map((o) => <option key={o}>{o}</option>)}
+              </select>
+            </label>
+            <label className="mt-3 block">
+              <span className="text-xs font-medium text-ink-3">Who *</span>
+              <input required value={form.contactLabel} onChange={(e) => setForm({ ...form, contactLabel: e.target.value })} placeholder="Contact name" className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand" />
+            </label>
+            <label className="mt-3 block">
+              <span className="text-xs font-medium text-ink-3">Note</span>
+              <input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand" />
+            </label>
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              <label className="block">
+                <span className="text-xs font-medium text-ink-3">Priority</span>
+                <select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })} className="mt-1 w-full rounded-lg border border-line bg-surface px-2 py-2 text-sm outline-none focus:border-brand">
+                  <option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option>
+                </select>
+              </label>
+              <label className="block">
+                <span className="text-xs font-medium text-ink-3">Assignee</span>
+                <select value={form.assigneeLabel} onChange={(e) => setForm({ ...form, assigneeLabel: e.target.value })} className="mt-1 w-full rounded-lg border border-line bg-surface px-2 py-2 text-sm outline-none focus:border-brand">
+                  {["Will", "Steve", "Hannah", "Clinic team", "Unassigned"].map((o) => <option key={o}>{o}</option>)}
+                </select>
+              </label>
+              <label className="block">
+                <span className="text-xs font-medium text-ink-3">Due</span>
+                <select value={form.dueInDays} onChange={(e) => setForm({ ...form, dueInDays: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-line bg-surface px-2 py-2 text-sm outline-none focus:border-brand">
+                  <option value={0}>Today</option><option value={1}>Tomorrow</option><option value={7}>Next week</option>
+                </select>
+              </label>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" onClick={() => setCreating(false)} className="rounded-lg border border-line px-3.5 py-2 text-[13px] font-semibold text-ink-2 hover:bg-[#f0efec]">Cancel</button>
+              <button type="submit" disabled={busy} className="rounded-lg bg-brand px-3.5 py-2 text-[13px] font-semibold text-white hover:bg-[#5b21b6] disabled:opacity-50">{busy ? "Saving…" : "Create task"}</button>
+            </div>
+          </form>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <Card className="xl:col-span-2">
           <CardHeader title={`Open tasks · ${open.length}`} subtitle="Overdue first, then by priority" />
@@ -87,6 +160,9 @@ export function TasksClient({ tasks }: { tasks: SalesTask[] }) {
                   <div className="shrink-0 text-right">
                     <p className="text-xs font-semibold">{t.due}</p>
                     <p className="mt-0.5 text-[11px] text-ink-3">{t.assignee}</p>
+                    <button onClick={() => remove(t.id)} className="mt-1 text-[10px] font-semibold text-ink-3 hover:text-[#d03b3b]" title="Delete demo task">
+                      Delete
+                    </button>
                   </div>
                 </li>
               ))}
