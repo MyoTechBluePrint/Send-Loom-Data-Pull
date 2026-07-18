@@ -153,6 +153,14 @@ async function main() {
   check("interest tags applied", (tessa?.tags.length ?? 0) >= 1);
 
   console.log("Campaign send path");
+  // Deterministic suppressed-contact case (must not depend on leftover data):
+  // a contact exists AND its email is on the suppression list.
+  await db.contact.create({
+    data: { workspaceId: ws.id, email: `held.${STAMP}@example.com`, firstName: "Held" },
+  });
+  await db.suppressionRecord.create({
+    data: { workspaceId: ws.id, email: `held.${STAMP}@example.com`, reason: "unsubscribed" },
+  });
   const camp = await db.campaign.create({
     data: { workspaceId: ws.id, name: `Send test ${STAMP}`, subject: "Test", status: "draft" },
   });

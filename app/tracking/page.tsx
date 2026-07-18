@@ -6,6 +6,7 @@ import { demoWorkspaceId } from "@/lib/server/views";
 import { cartStats } from "@/lib/server/carts";
 import { can, currentUser } from "@/lib/server/permissions";
 import { TrackingTestButtons } from "@/components/tracking-test-buttons";
+import { TrackingEventsTable, type QaEvent } from "@/components/tracking-events-table";
 
 export const dynamic = "force-dynamic";
 
@@ -18,11 +19,23 @@ export default async function TrackingPage() {
     db.store.findMany({ where: { workspaceId: wsId }, orderBy: { createdAt: "asc" } }),
     db.event.findMany({
       where: { workspaceId: wsId, type: { notIn: ["imported", "consent_recorded"] } },
-      orderBy: { occurredAt: "desc" }, take: 20,
+      orderBy: { occurredAt: "desc" }, take: 50,
       include: { contact: { select: { email: true, firstName: true, lastName: true } }, store: { select: { name: true } } },
     }),
     cartStats(),
   ]);
+
+  const qaEvents: QaEvent[] = events.map((e) => ({
+    id: e.id,
+    occurredAt: e.occurredAt.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }),
+    storeId: e.storeId,
+    storeName: e.store?.name ?? null,
+    type: e.type,
+    who: e.contact ? [e.contact.firstName, e.contact.lastName].filter(Boolean).join(" ") || e.contact.email : null,
+    anonymousId: e.anonymousId,
+    payload: e.payload,
+  }));
+  const cartsQuiet = stats.open + stats.checkoutStarted + stats.abandoned + stats.abandonedCheckout + stats.converted + stats.recovered === 0;
 
   const funnelCounts = await Promise.all(
     ["product_viewed", "cart_add", "checkout_started", "purchase_completed"].map((t) =>
@@ -38,7 +51,15 @@ export default async function TrackingPage() {
     >
       {/* Stores */}
       <Card>
-        <CardHeader title="Connected stores" subtitle={showKeys ? "API keys visible to owner only · paste into the WordPress plugin" : "Keys are owner-only · ask Steve for install credentials"} />
+        <CardHeader
+          title="Connected stores"
+          subtitle={showKeys ? "API keys visible to owner only · paste into the WordPress plugin" : "Keys are owner-only · ask Steve for install credentials"}
+          action={showKeys ? (
+            <a href="/api/admin/plugin-zip" className="rounded-lg bg-brand px-3.5 py-2 text-[13px] font-semibold text-white hover:bg-[#5b21b6]">
+              Download plugin ZIP
+            </a>
+          ) : undefined}
+        />
         <div className="overflow-x-auto scroll-thin"><table className="w-full min-w-[860px]">
           <thead className="border-b border-line">
             <tr>
@@ -104,33 +125,19 @@ export default async function TrackingPage() {
               <dd className="tabular font-semibold text-emerald-700">{gbp(stats.recoveredRevenue)}</dd>
             </div>
           </dl>
+          {cartsQuiet && (
+            <p className="border-t border-line px-5 py-3 text-xs leading-relaxed text-ink-3">
+              No carts tracked yet. A cart becomes <b>abandoned</b> after 1 hour of inactivity, an entered checkout after
+              30 minutes. To test: add to cart on the storefront, enter an email at checkout, leave, then press Run sweep above.
+            </p>
+          )}
         </Card>
       </div>
 
       {/* Event stream */}
       <Card className="mt-4">
-        <CardHeader title="Last 20 events" subtitle="Everything the trackers and plugins sent, newest first" />
-        <div className="overflow-x-auto scroll-thin"><table className="w-full min-w-[820px]">
-          <thead className="border-b border-line">
-            <tr><Th>When</Th><Th>Store</Th><Th>Event</Th><Th>Who</Th><Th>Payload</Th></tr>
-          </thead>
-          <tbody className="divide-y divide-line">
-            {events.map((e) => (
-              <tr key={e.id} className="hover:bg-[#fafaf8]">
-                <Td className="whitespace-nowrap text-xs text-ink-3">{e.occurredAt.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</Td>
-                <Td className="text-xs">{e.store?.name ?? "–"}</Td>
-                <Td><span className="rounded bg-[#f0efec] px-1.5 py-0.5 text-[11px] font-bold text-ink-2">{e.type}</span></Td>
-                <Td className="text-xs">
-                  {e.contact
-                    ? [e.contact.firstName, e.contact.lastName].filter(Boolean).join(" ") || e.contact.email
-                    : <span className="text-ink-3">anonymous{e.anonymousId ? ` · ${e.anonymousId.slice(0, 10)}` : ""}</span>}
-                </Td>
-                <Td className="max-w-md truncate text-[11px] text-ink-3">{e.payload ?? "–"}</Td>
-              </tr>
-            ))}
-            {events.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-ink-3">No events yet. Use the test buttons above.</td></tr>}
-          </tbody>
-        </table></div>
+        <CardHeader title="Last 50 events" subtitle="Everything the trackers and plugins sent, newest first · filter by store and event type" />
+        <TrackingEventsTable events={qaEvents} stores={stores.map((s) => ({ id: s.id, name: s.name }))} />
       </Card>
     </Shell>
   );

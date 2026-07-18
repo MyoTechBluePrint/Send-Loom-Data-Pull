@@ -11,11 +11,23 @@ const field = "mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 te
 
 type Saved = { name: string; url: string };
 
+const STORE_ROOTS: Record<string, string> = {
+  MyoTech: "https://myotechlabs.co.uk/",
+  Novatec: "https://novateclabs.co.uk/",
+};
+
 export default function UtmBuilderPage() {
   const [form, setForm] = useState({
-    landing: "https://", source: "facebook", medium: "paid_social",
+    store: "MyoTech", owner: "",
+    landing: STORE_ROOTS.MyoTech, source: "facebook", medium: "paid_social",
     campaign: "", content: "", term: "",
   });
+
+  function pickStore(store: string) {
+    // Swap the landing root when it hasn't been customised beyond a store root.
+    const untouched = form.landing === "https://" || Object.values(STORE_ROOTS).includes(form.landing);
+    setForm({ ...form, store, landing: untouched ? STORE_ROOTS[store] : form.landing });
+  }
   const [saved, setSaved] = useState<Saved[]>([]);
   const [copied, setCopied] = useState(false);
 
@@ -46,17 +58,30 @@ export default function UtmBuilderPage() {
 
   function save() {
     if (!url || !form.campaign) return;
-    const next = [{ name: `${form.campaign} · ${form.source}/${form.medium}`, url }, ...saved].slice(0, 30);
+    const owner = form.owner.trim() ? ` · ${form.owner.trim()}` : "";
+    const next = [{ name: `${form.store} · ${form.campaign} · ${form.source}/${form.medium}${owner}`, url }, ...saved].slice(0, 30);
     setSaved(next);
     localStorage.setItem(KEY, JSON.stringify(next));
   }
 
   return (
-    <Shell title="UTM Builder" subtitle="Tag every ad link before it goes live · the tracker stores UTMs on every event for attribution">
+    <Shell title="UTM Builder" subtitle="Tag every ad link before it goes live · pick the store first so the link lands on the right domain">
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Card>
           <CardHeader title="Build a tagged link" />
           <div className="space-y-3 px-5 py-4">
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="text-xs font-medium text-ink-3">Store *</span>
+                <select value={form.store} onChange={(e) => pickStore(e.target.value)} className={field}>
+                  {Object.keys(STORE_ROOTS).map((s) => <option key={s}>{s}</option>)}
+                </select>
+              </label>
+              <label className="block">
+                <span className="text-xs font-medium text-ink-3">Campaign owner</span>
+                <input value={form.owner} onChange={(e) => setForm({ ...form, owner: e.target.value })} placeholder="who runs this campaign" className={field} />
+              </label>
+            </div>
             {([
               ["landing", "Landing page URL *", "https://myotechlabs.co.uk/product/…"],
               ["campaign", "Campaign *", "july-nad-launch"],

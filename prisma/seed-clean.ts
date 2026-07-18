@@ -15,7 +15,7 @@ export async function main() {
   await seedUsers(ws.id);
   // Ads team placeholder: visible in Team, no password until added to SEED_USERS.
   await db.user.create({
-    data: { workspaceId: ws.id, email: "ads@frenziapp.com", name: "Ads team (placeholder)", role: "operator" },
+    data: { workspaceId: ws.id, email: "ads@frenziapp.com", name: "Ads team (placeholder)", role: "ads_operator" },
   });
 
   // The two real stores. Pending until the plugin connects.
@@ -82,12 +82,14 @@ export async function main() {
 
   // Popup/form TEMPLATES — draft until the ads team activates one.
   const popupTemplates: [string, string, string][] = [
-    ["Discount signup (template)", "popup", "Time on page · 8s"],
-    ["Consultation request (template)", "popup", "Product pages"],
-    ["Exit intent offer (template)", "exit_intent", "Exit intent · cart page"],
-    ["Cart rescue (template)", "popup", "Cart page · 30s"],
-    ["Product education (template)", "slide_in", "Category pages"],
-    ["Newsletter / waitlist (template)", "embedded", "Site footer"],
+    ["MyoTech · Discount signup (template)", "popup", "Time on page · 8s · all pages"],
+    ["MyoTech · Consultation request (template)", "popup", "Product pages"],
+    ["MyoTech · Exit intent offer (template)", "exit_intent", "Exit intent · cart page"],
+    ["MyoTech · Cart rescue (template)", "popup", "Cart page · 30s"],
+    ["Novatec · Product interest capture (template)", "popup", "Product pages"],
+    ["Novatec · Launch waitlist (template)", "embedded", "Landing pages"],
+    ["Novatec · Discount signup (template)", "popup", "Time on page · 8s"],
+    ["Novatec · Exit intent (template)", "exit_intent", "Exit intent · all pages"],
   ];
   for (const [name, type, trigger] of popupTemplates) {
     await db.form.create({
@@ -120,6 +122,31 @@ export async function main() {
   });
 
   console.log("Clean launch workspace ready.");
+}
+
+// Boot top-up for CLEAN workspaces only: keeps the ads role current and adds
+// store-flavoured popup templates introduced after the last reset. Idempotent.
+export async function launchTopUp(workspaceId: string) {
+  await db.user.updateMany({
+    where: { workspaceId, email: "ads@frenziapp.com" },
+    data: { role: "ads_operator" },
+  });
+  const wanted: [string, string, string][] = [
+    ["MyoTech · Discount signup (template)", "popup", "Time on page · 8s · all pages"],
+    ["MyoTech · Consultation request (template)", "popup", "Product pages"],
+    ["MyoTech · Exit intent offer (template)", "exit_intent", "Exit intent · cart page"],
+    ["MyoTech · Cart rescue (template)", "popup", "Cart page · 30s"],
+    ["Novatec · Product interest capture (template)", "popup", "Product pages"],
+    ["Novatec · Launch waitlist (template)", "embedded", "Landing pages"],
+    ["Novatec · Discount signup (template)", "popup", "Time on page · 8s"],
+    ["Novatec · Exit intent (template)", "exit_intent", "Exit intent · all pages"],
+  ];
+  for (const [name, type, trigger] of wanted) {
+    const exists = await db.form.findFirst({ where: { workspaceId, name } });
+    if (!exists) {
+      await db.form.create({ data: { workspaceId, name, type, trigger, status: "draft", isDemo: true } });
+    }
+  }
 }
 
 if (process.argv[1]?.includes("seed-clean.ts")) {

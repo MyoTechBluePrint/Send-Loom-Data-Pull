@@ -29,7 +29,26 @@ passwords in Git, README, reports, chat logs or screenshots.**
 
 Append `,new.person@company.com:TheirPassword` to `SEED_USERS` and save.
 Role assignment: `steve@*` → owner, `talk@willwoolley.co.uk` → operator,
-everyone else → viewer (adjust in `prisma/seed-users.ts` when the team grows).
+`ads@*` → ads_operator, everyone else → viewer (adjust in
+`prisma/seed-users.ts` when the team grows).
+
+## Adding the ads guy
+
+When Steve has the ads team's real email, either use an `ads@` address (the
+role maps automatically) or add their address to the `ads_operator` mapping
+in `prisma/seed-users.ts`, then append `,their.email:TheirPassword` to
+`SEED_USERS` in Render and save. Give them the password through a separate
+channel, never in a committed file or chat log.
+
+**Ads Operator can:** view every page (Launch, Store Tracking QA, UTM
+Builder, popups/forms, campaign drafts, analytics), work with real captured
+data, review intake, and leave feedback.
+
+**Ads Operator cannot:** reset or wipe the workspace, delete stores,
+see or regenerate store API keys, download the plugin ZIP (owner sends it or
+installs directly), enable live email sending, change billing, delete audit
+logs, remove users, or import Savvy Mango data (that import is parked for
+everyone until Steve unparks it).
 
 ## Disabling a worker
 
