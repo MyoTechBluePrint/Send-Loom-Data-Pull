@@ -1,0 +1,21 @@
+# Render blueprint for Sendloom.
+# Connect the GitHub repo in the Render dashboard (New > Blueprint) and it
+# picks this up. The disk holds the SQLite database so contacts, imports and
+# events survive deploys; the seed script only runs when the DB is empty.
+services:
+  - type: web
+    name: sendloom
+    runtime: node
+    plan: starter # disks are not available on the free plan
+    buildCommand: npm ci && npm run build
+    startCommand: npx prisma migrate deploy && npx tsx scripts/seed-if-empty.ts && npm start
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: DATABASE_URL
+        value: file:/opt/render/project/src/data/sendloom.db
+      - key: NODE_VERSION
+        value: "22"
+    disk:
+      name: sendloom-data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 1
