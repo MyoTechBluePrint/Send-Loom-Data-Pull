@@ -34,6 +34,19 @@ const statusChip: Record<string, string> = {
   suppressed: "bg-red-50 text-red-700",
 };
 
+function whyMatters(sub: { status: string; consent: string; source: string; tags: string[]; revenue: number; orders: number; score: number; channels: { email: boolean } }): string {
+  const bits: string[] = [];
+  if (sub.status === "VIP") bits.push(`Top-tier customer: ${sub.orders} orders, ${"£" + Math.round(sub.revenue).toLocaleString("en-GB")} lifetime`);
+  else if (sub.orders > 1) bits.push(`Repeat buyer (${sub.orders} orders)`);
+  else if (sub.orders === 1) bits.push("Bought once, prime for a second purchase");
+  else if (sub.score >= 60) bits.push(`High-intent lead (score ${sub.score}) with no purchase yet`);
+  if (sub.tags.length) bits.push(`interests: ${sub.tags.slice(0, 3).join(", ")}`);
+  bits.push(`came in via ${sub.source.toLowerCase()}`);
+  if (!sub.channels.email) bits.push("no email permission, best next step is a manual call");
+  else if (sub.consent === "pending") bits.push("email consent still pending, hold marketing");
+  return bits.join(" · ").replace(/^./, (c) => c.toUpperCase()) + ".";
+}
+
 function nextAction(status: string, consent: string): string {
   if (status === "suppressed") return "Do not contact. Suppression is enforced at send time across all channels.";
   if (status === "VIP") return "Invite to VIP early access for the Sleep Series launch (scheduled 21 Jul).";
@@ -88,10 +101,16 @@ export default async function ContactProfile({ params }: { params: Promise<{ id:
         <Stat label="Data confidence" value={`${sub.confidence} / 100`} />
       </div>
 
-      <Card className="mt-4 border-brand bg-brand-soft/40 px-5 py-3.5">
-        <p className="text-xs font-bold uppercase tracking-wide text-brand">Suggested next action</p>
-        <p className="mt-1 text-sm">{nextAction(sub.status, sub.consent)}</p>
-      </Card>
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card className="border-brand bg-brand-soft/40 px-5 py-3.5">
+          <p className="text-xs font-bold uppercase tracking-wide text-brand">Why this contact matters</p>
+          <p className="mt-1 text-sm">{whyMatters(sub)}</p>
+        </Card>
+        <Card className="px-5 py-3.5">
+          <p className="text-xs font-bold uppercase tracking-wide text-ink-3">Suggested next action</p>
+          <p className="mt-1 text-sm">{nextAction(sub.status, sub.consent)}</p>
+        </Card>
+      </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
         <Card className="xl:col-span-2">

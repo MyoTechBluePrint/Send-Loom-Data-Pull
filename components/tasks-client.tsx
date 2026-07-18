@@ -72,6 +72,17 @@ export function TasksClient({ tasks }: { tasks: SalesTask[] }) {
                       {t.status === "overdue" && <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold uppercase text-red-700">Overdue</span>}
                     </div>
                     <p className="mt-1 text-[13px] text-ink-2">{t.note}</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      {t.source && (
+                        <span className="rounded-full bg-[#f0efec] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-ink-3">
+                          via {t.source === "intake" ? "Universal Inbox" : t.source === "automation" ? "automation" : t.source === "score_threshold" ? "lead score" : t.source}
+                        </span>
+                      )}
+                      {t.contactId && (
+                        <Link href={`/subscribers/${t.contactId}`} className="text-[11px] font-semibold text-brand hover:underline">Open profile</Link>
+                      )}
+                      <Link href="/campaigns/new" className="text-[11px] font-semibold text-brand hover:underline">Draft email</Link>
+                    </div>
                   </div>
                   <div className="shrink-0 text-right">
                     <p className="text-xs font-semibold">{t.due}</p>

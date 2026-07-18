@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { Shell, GhostButton, PrimaryButton } from "@/components/shell";
 import { Card, CardHeader, Th, Td } from "@/components/ui";
@@ -219,7 +220,27 @@ export function DemandClient({ keywords, opportunities, siteSearches, sectorMode
       )}
 
       {tab === "Opportunities" && (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <>
+          <Card className="mb-4">
+            <CardHeader title="Product demand matching" subtitle="Demand signals vs products, pages, flows and revenue · the gaps are the growth plan" />
+            <ul className="divide-y divide-line">
+              {[
+                { gap: "512 searches for 'menopause support', but no matching product or content.", fix: "Scope a collection page + intro guide", href: "/campaigns/new", cta: "Draft announcement" },
+                { gap: "Weight-management demand is rising 96%, but there is no dedicated landing page or nurture flow.", fix: "Sector review first, then consultation nurture", href: "/segments", cta: "Build audience" },
+                { gap: "NAD+ leads engage heavily but no consultation campaign targets them.", fix: "1,102 quiz-typed contacts are ready", href: "/campaigns/new", cta: "Create campaign" },
+                { gap: "'Creatine gummies' searches up 91% with zero results shown.", fix: "Stock decision needed before content", href: "/tasks", cta: "Create task" },
+              ].map((g) => (
+                <li key={g.gap} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[13px] font-medium">{g.gap}</p>
+                    <p className="mt-0.5 text-xs text-ink-3">{g.fix}</p>
+                  </div>
+                  <Link href={g.href} className="shrink-0 rounded-lg bg-brand-soft px-3 py-1.5 text-xs font-bold text-brand hover:bg-[#ece2fa]">{g.cta} →</Link>
+                </li>
+              ))}
+            </ul>
+          </Card>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {opportunities.map((o) => (
             <Card key={o.cluster} className="px-5 py-4">
               <div className="flex items-start justify-between gap-4">
@@ -247,13 +268,13 @@ export function DemandClient({ keywords, opportunities, siteSearches, sectorMode
                 </div>
               </div>
               <div className="mt-3 flex gap-2 border-t border-line pt-3">
-                <button className="rounded-lg bg-brand-soft px-3 py-1.5 text-xs font-semibold text-brand hover:bg-[#ece2fa]">Create campaign</button>
-                <button className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink-2 hover:bg-[#f0efec]">Brief content</button>
-                <button className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink-2 hover:bg-[#f0efec]">Build audience</button>
+                <Link href="/campaigns/new" className="rounded-lg bg-brand-soft px-3 py-1.5 text-xs font-semibold text-brand hover:bg-[#ece2fa]">Create campaign</Link>
+                <Link href="/segments" className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink-2 hover:bg-[#f0efec]">Build audience</Link>
               </div>
             </Card>
           ))}
-        </div>
+          </div>
+        </>
       )}
     </Shell>
   );

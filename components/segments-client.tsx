@@ -2,6 +2,7 @@
 
 // Audience builder backed by the real segment engine: estimates and saves hit
 // /api/segments against actual contacts.
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Shell, PrimaryButton } from "@/components/shell";
@@ -15,6 +16,19 @@ const fieldOptions = [
 const operatorOptions = ["is", "is not", "is greater than", "is less than", "is at least", "is exactly", "is more than", "contains"];
 
 type Estimate = { count: number; revenue: number; preview: { id: string; name: string; email: string; score: number }[] };
+
+// Suggested plays per audience, matched on name. Rendered on the cards so
+// every audience leads somewhere.
+function playFor(name: string): { campaign: string; channel: string } {
+  const n = name.toLowerCase();
+  if (n.includes("vip")) return { campaign: "VIP early access · Sleep Series", channel: "Email" };
+  if (n.includes("weight")) return { campaign: "Consultation push · metabolic", channel: "Email" };
+  if (n.includes("consultation")) return { campaign: "Booking reminder + sales call", channel: "Email + phone" };
+  if (n.includes("quiz")) return { campaign: "Metabolic education flow", channel: "Email" };
+  if (n.includes("hot")) return { campaign: "Sales-task sprint + nurture", channel: "Phone first" };
+  if (n.includes("risk") || n.includes("inactive")) return { campaign: "Win-back · 15% incentive", channel: "Email" };
+  return { campaign: "One-off campaign", channel: "Email" };
+}
 
 export function SegmentsClient({ segments }: { segments: Segment[] }) {
   const router = useRouter();
@@ -83,6 +97,40 @@ export function SegmentsClient({ segments }: { segments: Segment[] }) {
               + Build an audience
             </button>
           </div>
+          <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {segments.map((s) => {
+              const play = playFor(s.name);
+              return (
+                <Card key={s.id} className="flex flex-col px-5 py-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-semibold">{s.name}</h3>
+                      <p className="mt-0.5 text-xs text-ink-3">{s.description}</p>
+                    </div>
+                    <span className="tabular shrink-0 rounded-full bg-brand-soft px-2.5 py-1 text-xs font-bold text-brand">{num(s.count)}</span>
+                  </div>
+                  <div className="mt-3 grid flex-1 grid-cols-2 gap-3 border-t border-line pt-3 text-xs">
+                    <div>
+                      <p className="font-medium text-ink-3">Revenue so far</p>
+                      <p className="tabular mt-0.5 text-sm font-semibold">{s.revenue > 0 ? gbp(s.revenue) : "–"}</p>
+                    </div>
+                    <div>
+                      <p className="font-medium text-ink-3">Best channel</p>
+                      <p className="mt-0.5 text-sm font-semibold">{play.channel}</p>
+                    </div>
+                    <div className="col-span-2">
+                      <p className="font-medium text-ink-3">Suggested play</p>
+                      <p className="mt-0.5 text-[13px] font-semibold">{play.campaign}</p>
+                    </div>
+                  </div>
+                  <Link href="/campaigns/new" className="mt-3 rounded-lg bg-brand-soft px-3 py-1.5 text-center text-xs font-bold text-brand hover:bg-[#ece2fa]">
+                    Create campaign →
+                  </Link>
+                </Card>
+              );
+            })}
+          </div>
+
           <Card>
             <div className="overflow-x-auto scroll-thin"><table className="w-full min-w-[760px]">
               <thead className="border-b border-line">

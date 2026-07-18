@@ -494,6 +494,7 @@ export type SalesTask = {
   status: "open" | "done" | "overdue";
   note: string;
   assignee: string;
+  source?: string;
 };
 
 export const salesTasks: SalesTask[] = [

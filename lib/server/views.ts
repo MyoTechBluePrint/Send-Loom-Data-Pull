@@ -152,6 +152,7 @@ export async function getTasksView(): Promise<SalesTask[]> {
     priority: t.priority as SalesTask["priority"],
     status: t.status === "open" && t.dueAt && t.dueAt < new Date() ? "overdue" : (t.status as SalesTask["status"]),
     note: t.note ?? "", assignee: t.assigneeLabel ?? "Unassigned",
+    source: t.source,
   }));
 }
 
