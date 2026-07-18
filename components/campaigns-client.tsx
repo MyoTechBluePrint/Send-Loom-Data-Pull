@@ -102,6 +102,7 @@ export function CampaignsClient({ campaigns }: { campaigns: Campaign[] }) {
                 <Td className="text-right">
                   {c.status === "draft" ? (
                     <span className="inline-flex items-center gap-1.5">
+                      {c.isDemo && <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-bold uppercase text-zinc-600" title="Template · no live sends yet">Template</span>}
                       <button
                         disabled={sending === c.id}
                         onClick={() => send(c.id)}

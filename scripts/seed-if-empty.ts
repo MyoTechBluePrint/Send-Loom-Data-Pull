@@ -18,8 +18,9 @@ async function main() {
     await seedStores(ws.id);
     return;
   }
-  console.log("Empty database detected. Seeding demo workspace…");
-  execSync("npx tsx prisma/seed.ts", { stdio: "inherit" });
+  const mode = process.env.SENDLOOM_DATA_MODE ?? "clean_launch";
+  console.log(`Empty database detected. Seeding ${mode} workspace…`);
+  execSync(mode === "demo" ? "npx tsx prisma/seed.ts" : "npx tsx prisma/seed-clean.ts", { stdio: "inherit" });
 }
 
 main()

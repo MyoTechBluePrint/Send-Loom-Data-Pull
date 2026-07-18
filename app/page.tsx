@@ -3,7 +3,7 @@ import { Shell, PrimaryButton, GhostButton } from "@/components/shell";
 import { Card, CardHeader, Stat, Badge, RevenueChart, HBarChart, Th, Td } from "@/components/ui";
 import { campaigns, gbp, num, revenueSeries, topAutomationsByRevenue } from "@/lib/data";
 import { db } from "@/lib/server/db";
-import { demoWorkspaceId, getAuditView } from "@/lib/server/views";
+import { demoWorkspaceId, getAuditView, workspaceIsClean } from "@/lib/server/views";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +11,82 @@ const kindIcon: Record<string, string> = { paste: "⌘V", whatsapp: "◎", email
 
 export default async function Dashboard() {
   const wsId = await demoWorkspaceId();
+  const clean = await workspaceIsClean();
+
+  if (clean) {
+    const [stores, cleanAudit] = await Promise.all([
+      db.store.findMany({ where: { workspaceId: wsId }, orderBy: { name: "asc" } }),
+      getAuditView(8),
+    ]);
+    return (
+      <Shell
+        title="Dashboard"
+        subtitle="Fresh launch workspace · no live customer data yet"
+        actions={<Link href="/launch"><PrimaryButton>Open launch checklist</PrimaryButton></Link>}
+      >
+        <Card className="border-brand bg-brand-soft/30 px-5 py-4">
+          <p className="text-sm leading-relaxed">
+            <b>No live customer data yet.</b> Sendloom is ready to capture fresh data from MyoTech and Novatec.
+            No Savvy Mango data has been imported and nothing on this dashboard is simulated.
+          </p>
+        </Card>
+        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {stores.map((s) => (
+            <Card key={s.id} className="px-5 py-4">
+              <p className="text-xs font-medium text-ink-3">{s.name}</p>
+              <p className="mt-1.5 text-base font-semibold">{s.status === "connected" ? "Connected ✓" : "Plugin pending"}</p>
+              <p className="mt-1 text-xs text-ink-3">{s.url}</p>
+            </Card>
+          ))}
+          <Link href="/tracking">
+            <Card className="h-full px-5 py-4 transition-shadow hover:shadow-md">
+              <p className="text-xs font-medium text-ink-3">Store Tracking</p>
+              <p className="mt-1.5 text-base font-semibold text-brand">Test events →</p>
+              <p className="mt-1 text-xs text-ink-3">install checks + live event stream</p>
+            </Card>
+          </Link>
+          <Link href="/forms">
+            <Card className="h-full px-5 py-4 transition-shadow hover:shadow-md">
+              <p className="text-xs font-medium text-ink-3">Popups</p>
+              <p className="mt-1.5 text-base font-semibold text-brand">6 templates →</p>
+              <p className="mt-1 text-xs text-ink-3">activate after tracking connects</p>
+            </Card>
+          </Link>
+        </div>
+        <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
+          <Card className="xl:col-span-2">
+            <CardHeader title="First five steps" action={<Link href="/launch" className="text-xs font-semibold text-brand hover:underline">Full checklist →</Link>} />
+            <ol className="px-5 py-4">
+              {[
+                ["Install the plugin on MyoTech", "/tracking"],
+                ["Send a test event and see it arrive", "/tracking"],
+                ["Browse the storefront and watch real events", "/tracking"],
+                ["Set a popup template live", "/forms"],
+                ["Tag your first ad link", "/utm-builder"],
+              ].map(([label, href], i) => (
+                <li key={i} className="flex items-center gap-3 border-b border-line py-2.5 last:border-0">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-bold text-brand">{i + 1}</span>
+                  <Link href={href} className="text-sm font-medium hover:text-brand">{label} →</Link>
+                </li>
+              ))}
+            </ol>
+          </Card>
+          <Card>
+            <CardHeader title="Activity" subtitle="Live audit log" />
+            <ul className="divide-y divide-line">
+              {cleanAudit.map((n, i) => (
+                <li key={i} className="px-5 py-2.5">
+                  <p className="text-[13px] leading-snug">{n.what}</p>
+                  <p className="mt-0.5 text-[11px] text-ink-3">{n.time} · {n.who}</p>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        </div>
+      </Shell>
+    );
+  }
+
   const ninetyDays = new Date(Date.now() - 90 * 24 * 3600 * 1000);
 
   const [contacts, hotLeads, openTasks, pendingRecords, intakeFeed, winbackCount, pendingConsent, audit] = await Promise.all([

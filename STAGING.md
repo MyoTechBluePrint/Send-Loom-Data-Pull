@@ -51,6 +51,16 @@ user management.)
 Enforced in `lib/server/permissions.ts` at the sensitive seams (triage,
 reset, live sending). Full per-route RBAC is a production task.
 
+## Clean launch workspace (current mode)
+
+The visible staging workspace is the CLEAN LAUNCH state: MyoTech + Novatec
+stores pending connection, template campaigns/automations/popups only, no
+contacts, no demo revenue, no Savvy Mango data. Savvy Mango import is PARKED
+at the ads team's request (/savvy is an archived preview). The Vitalis demo
+still exists for development: Admin → Reset workspace → "Vitalis demo data",
+or SENDLOOM_DATA_MODE=demo for local seeds. Back up before any reset:
+Admin → Export backup (owner-only JSON dump).
+
 ## What is demo-only
 
 Campaign/automation performance charts, keyword volumes/CPC, prospect list,

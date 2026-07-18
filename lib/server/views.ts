@@ -157,6 +157,46 @@ export async function getCampaignsView(): Promise<Campaign[]> {
   });
 }
 
+export async function getAutomationsView() {
+  const wsId = await demoWorkspaceId();
+  const autos = await db.automation.findMany({
+    where: { workspaceId: wsId },
+    include: { nodes: { orderBy: { position: "asc" } } },
+    orderBy: { createdAt: "asc" },
+  });
+  return autos.map((a) => ({
+    id: a.id, name: a.name, trigger: a.trigger,
+    status: a.status as "live" | "paused" | "draft",
+    isDemo: a.isDemo,
+    entered: a.entered, completed: a.completed, revenue: a.revenue, conversion: a.conversion,
+    nodes: a.nodes.filter((n) => !n.branch).map((n) => ({ id: n.id, kind: n.kind, label: n.label, detail: n.detail ?? "", stats: n.stats ?? undefined })),
+    branches: a.nodes.some((n) => n.branch)
+      ? {
+          at: a.nodes.filter((n) => !n.branch).at(-1)?.id ?? "",
+          yes: a.nodes.filter((n) => n.branch === "yes").map((n) => ({ id: n.id, kind: n.kind, label: n.label, detail: n.detail ?? "", stats: n.stats ?? undefined })),
+          no: a.nodes.filter((n) => n.branch === "no").map((n) => ({ id: n.id, kind: n.kind, label: n.label, detail: n.detail ?? "", stats: n.stats ?? undefined })),
+        }
+      : undefined,
+  }));
+}
+
+export async function getFormsView() {
+  const wsId = await demoWorkspaceId();
+  const forms = await db.form.findMany({ where: { workspaceId: wsId }, orderBy: { createdAt: "asc" } });
+  return forms.map((f) => ({
+    id: f.id, name: f.name,
+    type: f.type.split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join(" "),
+    trigger: f.trigger ?? "", status: f.status as "live" | "paused" | "draft",
+    views: f.views, signups: f.signups, isDemo: f.isDemo,
+  }));
+}
+
+export async function workspaceIsClean(): Promise<boolean> {
+  const wsId = await demoWorkspaceId();
+  const contacts = await db.contact.count({ where: { workspaceId: wsId } });
+  return contacts === 0;
+}
+
 export async function getSegmentsView(): Promise<Segment[]> {
   const wsId = await demoWorkspaceId();
   const segments = await db.segment.findMany({ where: { workspaceId: wsId }, include: { rules: true }, orderBy: { createdAt: "asc" } });

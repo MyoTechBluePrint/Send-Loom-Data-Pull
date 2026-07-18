@@ -1,7 +1,7 @@
 import { Shell, GhostButton } from "@/components/shell";
 import { Donut } from "@/components/ui";
 import { db } from "@/lib/server/db";
-import { demoWorkspaceId } from "@/lib/server/views";
+import { demoWorkspaceId, workspaceIsClean } from "@/lib/server/views";
 import { Card, CardHeader, Stat, RevenueChart, HBarChart, Th, Td } from "@/components/ui";
 import { automations, campaigns, gbp, num, revenueSeries } from "@/lib/data";
 
@@ -9,6 +9,30 @@ export const dynamic = "force-dynamic";
 
 export default async function AnalyticsPage() {
   const wsId = await demoWorkspaceId();
+  if (await workspaceIsClean()) {
+    const Link = (await import("next/link")).default;
+    return (
+      <Shell title="Analytics" subtitle="Fresh launch workspace · charts fill in from real events only">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {[
+            ["Revenue attribution", "Revenue attribution will appear once MyoTech/Novatec WooCommerce events are connected.", "Install the plugin", "/tracking"],
+            ["Abandoned carts", "No abandoned carts yet. They appear automatically once store tracking is live.", "Open Store Tracking", "/tracking"],
+            ["Popup performance", "No popup submissions yet. Activate a template to start capturing.", "Open Popups", "/forms"],
+            ["Campaign performance", "No campaign data yet. Draft from a template now; performance appears after real sends.", "Open Campaigns", "/campaigns"],
+          ].map(([title, copy, cta, href]) => (
+            <Card key={title as string}>
+              <CardHeader title={title as string} />
+              <div className="px-5 py-6">
+                <p className="text-sm leading-relaxed text-ink-2">{copy}</p>
+                <Link href={href as string} className="mt-3 inline-block rounded-lg bg-brand-soft px-3.5 py-2 text-[13px] font-bold text-brand hover:bg-[#ece2fa]">{cta} →</Link>
+              </div>
+            </Card>
+          ))}
+        </div>
+      </Shell>
+    );
+  }
+
   const scores = await db.leadScore.findMany({ where: { contact: { workspaceId: wsId } }, select: { score: true } });
   const consents = await db.contact.findMany({
     where: { workspaceId: wsId },

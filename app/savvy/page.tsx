@@ -36,6 +36,9 @@ export default async function SavvyPage() {
       subtitle="Sister-company data stays labelled, separated and consent-gated · everything below is SIMULATED demo data"
       actions={<Link href="/imports" className="rounded-lg bg-[#6d28d9] px-3.5 py-2 text-[13px] font-semibold text-white shadow-sm hover:bg-[#5b21b6]">Import a real export →</Link>}
     >
+      <div className="mb-4 rounded-lg border border-zinc-300 bg-zinc-100 px-4 py-3 text-[13px] font-semibold text-zinc-700">
+        PARKED — Savvy Mango import is on hold at the ads team's request. This page is an archived preview, not part of the launch workspace. No Savvy data will be imported for now.
+      </div>
       <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] leading-relaxed text-amber-800">
         <b>Simulated.</b> These aggregates show what a ~100k Savvy Mango import looks like; no real records exist here.
         Before importing real Savvy Mango personal data: lawful-basis and consent review (it was collected by a different company for a different purpose),

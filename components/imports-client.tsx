@@ -243,7 +243,7 @@ export function ImportsClient({ batches }: { batches: ImportBatch[] }) {
             <p className="text-2xl">⇪</p>
             <h2 className="mt-2 text-base font-semibold">Drop your data here</h2>
             <p className="mx-auto mt-1 max-w-xl text-[13px] leading-relaxed text-ink-2">
-              Contacts, prospects, customer files, exported lists, suppression lists, WhatsApp exports or messy spreadsheets.
+              WooCommerce exports, ad lead exports, customer CSVs, suppression lists, WhatsApp exports or messy spreadsheets.
               Sendloom classifies, cleans, maps and organises them before anything is imported.
             </p>
             <div className="mt-4 flex flex-wrap items-center justify-center gap-2">

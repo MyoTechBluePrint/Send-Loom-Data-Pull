@@ -1,4 +1,4 @@
-import { Shell, GhostButton } from "@/components/shell";
+import { Shell } from "@/components/shell";
 import { Card, CardHeader, Th, Td } from "@/components/ui";
 import { num } from "@/lib/data";
 import { db } from "@/lib/server/db";
@@ -51,7 +51,7 @@ export default async function AdminPage() {
     <Shell
       title="Admin Control Centre"
       subtitle={`Operator view · signed in as ${user?.name ?? "?"} (${role})`}
-      actions={<GhostButton>Export audit log</GhostButton>}
+      actions={<a href="/api/admin/backup" download className="rounded-lg border border-line bg-surface px-3.5 py-2 text-[13px] font-semibold text-ink-2 hover:bg-[#f0efec]">Export backup (JSON)</a>}
     >
       <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-800">
         Staging passwords should be rotated after sharing or after appearing in logs. Rotation: Render → Environment → SEED_USERS → save. See STAGING.md.

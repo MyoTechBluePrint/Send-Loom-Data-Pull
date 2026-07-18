@@ -12,6 +12,14 @@ type Me = { name: string; roleLabel: string; env: string };
 const nav: { section?: string; items: { href: string; label: string; icon: string }[] }[] = [
   { items: [{ href: "/", label: "Dashboard", icon: "◧" }] },
   {
+    section: "Launch",
+    items: [
+      { href: "/launch", label: "Ads Launch", icon: "▶" },
+      { href: "/tracking", label: "Store Tracking", icon: "◉" },
+      { href: "/utm-builder", label: "UTM Builder", icon: "🔗" },
+    ],
+  },
+  {
     section: "Capture",
     items: [
       { href: "/inbox", label: "Universal Inbox", icon: "⤓" },
@@ -41,7 +49,6 @@ const nav: { section?: string; items: { href: string; label: string; icon: strin
     section: "Control",
     items: [
       { href: "/analytics", label: "Analytics", icon: "∿" },
-      { href: "/tracking", label: "Store Tracking", icon: "◉" },
       { href: "/providers", label: "API Providers", icon: "↯" },
       { href: "/admin", label: "Admin", icon: "▣" },
       { href: "/settings", label: "Settings", icon: "⚙" },
@@ -142,7 +149,7 @@ export function Shell({ children, title, subtitle, actions }: { children: ReactN
       <div className="flex-1 lg:ml-60">
         <div className="flex items-center justify-center gap-2 bg-[#14121f] px-4 py-1.5 text-center text-[11px] font-medium text-white/80">
           <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-          Sendloom Staging · Demo data only · No live sending
+          Sendloom Staging · No live sending · use test data only
           <Link href="/team-handover" className="font-bold text-white underline underline-offset-2 hover:text-amber-200">What to try →</Link>
         </div>
         <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-line bg-[rgba(247,247,245,0.85)] px-8 py-4 backdrop-blur max-xl:px-5">
