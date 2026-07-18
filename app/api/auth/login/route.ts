@@ -22,7 +22,8 @@ export async function POST(req: NextRequest) {
     // diagnosable from Admin → Audit log instead of guesswork.
     const ws = await db.workspace.findFirst();
     if (ws) {
-      await audit(ws.id, email, "auth.login_failed", !user ? "No account with this email" : "Wrong password");
+      const ua = (req.headers.get("user-agent") ?? "unknown").slice(0, 120);
+      await audit(ws.id, email, "auth.login_failed", `${!user ? "No account with this email" : "Wrong password"} · ip ${ip} · ${ua}`);
     }
     // Same message either way: no account enumeration.
     return Response.json({ ok: false, error: "Email or password is incorrect." }, { status: 401 });

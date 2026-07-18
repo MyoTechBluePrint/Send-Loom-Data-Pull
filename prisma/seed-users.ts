@@ -35,14 +35,11 @@ export async function seedUsers(workspaceId: string) {
         : email.startsWith("steve@")
           ? "Steve Clark"
           : email.split("@")[0].replace(/[._]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    const role = email.startsWith("steve") ? "owner" : email === "talk@willwoolley.co.uk" ? "operator" : "viewer";
     await db.user.upsert({
       where: { email },
-      create: {
-        workspaceId, email, name,
-        role: email.startsWith("steve") ? "owner" : "viewer",
-        passwordHash: hashPassword(password),
-      },
-      update: { passwordHash: hashPassword(password) },
+      create: { workspaceId, email, name, role, passwordHash: hashPassword(password) },
+      update: { passwordHash: hashPassword(password), role },
     });
     count++;
   }

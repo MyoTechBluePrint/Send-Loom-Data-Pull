@@ -2,10 +2,7 @@ import { NextRequest } from "next/server";
 import { db } from "@/lib/server/db";
 import { verifySessionToken, SESSION_COOKIE } from "@/lib/server/auth";
 
-const ROLE_LABELS: Record<string, string> = {
-  owner: "Owner", admin: "Admin", marketing: "Marketing Manager",
-  editor: "Content Editor", viewer: "Worker Admin",
-};
+import { ROLE_LABELS, can } from "@/lib/server/permissions";
 
 export async function GET(req: NextRequest) {
   const email = verifySessionToken(req.cookies.get(SESSION_COOKIE)?.value);
@@ -18,6 +15,8 @@ export async function GET(req: NextRequest) {
     email: user.email,
     role: user.role,
     roleLabel: ROLE_LABELS[user.role] ?? user.role,
+    canTriageFeedback: can(user.role, "triage_feedback"),
+    canResetDemo: can(user.role, "reset_demo_data"),
     env: "Staging",
   });
 }
