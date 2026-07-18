@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
       await db.order.create({ data: { storeId: store.id, externalId: o.externalId, ...data } });
       // New completed order for an identified contact runs through ingestion
       // (rollups + timeline + rescore), same as a live purchase event.
-      if (contact && (o.status === "completed" || o.status === "processing")) {
+      if (contact?.email && (o.status === "completed" || o.status === "processing")) {
         await eventIngestionService.process({
           workspaceId: store.workspaceId, storeId: store.id, type: "purchase_completed",
           email: contact.email, payload: { orderNumber: o.number, total: o.total },
