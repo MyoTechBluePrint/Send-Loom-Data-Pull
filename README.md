@@ -64,6 +64,7 @@ transport and no email ever leaves the platform.
 
 ## Docs
 
+- [STAGING.md](STAGING.md) — staging logins, password rotation, roles, demo reset, feedback/audit review
 - [ARCHITECTURE.md](ARCHITECTURE.md) — data model, services, provider layer, scaling plan
 - [API.md](API.md) — endpoint reference (plugin API + internal API)
 - [PLUGIN.md](PLUGIN.md) — WooCommerce plugin install and local walkthrough
