@@ -32,5 +32,5 @@ export async function POST(req: NextRequest) {
 
   await audit(store.workspaceId, `plugin:${store.id}`, "store.connected", `Plugin connected from ${parsed.data.storeUrl} (plugin ${parsed.data.pluginVersion ?? "?"}, Woo ${parsed.data.wooVersion ?? "?"})`);
 
-  return Response.json({ ok: true, store: { id: updated.id, name: updated.name, workspaceId: updated.workspaceId } });
+  return Response.json({ ok: true, store: { id: updated.id, publicId: updated.publicId, name: updated.name, environment: updated.environment, workspaceId: updated.workspaceId } });
 }

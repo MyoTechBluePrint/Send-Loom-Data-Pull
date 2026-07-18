@@ -13,7 +13,13 @@ export function registerHandler<T>(name: string, handler: Handler<T>) {
 }
 
 export async function enqueue<T>(job: Job<T>): Promise<void> {
-  const handler = handlers.get(job.name);
+  let handler = handlers.get(job.name);
+  if (!handler && job.name === "event.ingest") {
+    // Self-heal: routes that only type-import events.ts never trigger its
+    // module-load registration. Dynamic import avoids the static cycle.
+    await import("./events");
+    handler = handlers.get(job.name);
+  }
   if (!handler) throw new Error(`No handler registered for job '${job.name}'`);
   try {
     await handler(job.payload);

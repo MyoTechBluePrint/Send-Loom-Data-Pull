@@ -59,9 +59,13 @@ model Store {
   name        String
   url         String
   platform    String   @default("woocommerce")
-  apiKey      String   @unique // plugin authenticates with this
+  apiKey      String   @unique // secret: server-to-server plugin calls only
+  publicId    String   @unique @default(cuid()) // safe for the browser tracker
+  domains     String? // comma-separated allowlist for tracker origins
+  environment String   @default("staging")
   status      String   @default("pending") // pending | connected | error
   lastSyncAt  DateTime?
+  lastEventAt DateTime?
   pluginVersion String?
   createdAt   DateTime @default(now())
 
@@ -311,6 +315,9 @@ model Order {
   @@index([contactId])
 }
 
+// Cart + checkout lifecycle. One row per visitor cart token; checkout fields
+// fill in as the visitor progresses. Sweeps flip open carts to abandoned
+// (cart: 1h idle, checkout-started: 30min idle) and purchases convert them.
 model Cart {
   id         String   @id @default(cuid())
   storeId    String
@@ -318,12 +325,24 @@ model Cart {
   contactId  String?
   contact    Contact? @relation(fields: [contactId], references: [id])
   externalId String?
+  token      String?  @unique // visitor cart token from the tracker
+  email      String?
+  phone      String?
   items      String? // JSON
   total      Float    @default(0)
-  status     String   @default("open") // open | abandoned | recovered | converted
+  currency   String   @default("GBP")
+  status     String   @default("open") // open | checkout_started | abandoned | abandoned_checkout | recovered | converted | expired | suppressed
+  checkoutStartedAt DateTime?
+  checkoutStep String?
+  abandonedAt DateTime?
+  recoveredAt DateTime?
+  recoveryToken String? @unique @default(cuid())
+  lastActivityAt DateTime @default(now())
+  createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
   @@index([storeId, status])
+  @@index([status, lastActivityAt])
 }
 
 model Campaign {

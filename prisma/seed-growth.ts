@@ -90,3 +90,25 @@ export async function seedGrowth(workspaceId: string) {
 
   console.log("Growth demo seeded.");
 }
+
+// MyoTech + Novatec store records for the plugin rollout. Idempotent.
+export async function seedStores(workspaceId: string) {
+  const defs = [
+    { name: "MyoTech", url: "myotechlabs.co.uk" },
+    { name: "Novatec", url: "novateclabs.co.uk" },
+  ];
+  const { randomBytes } = await import("node:crypto");
+  for (const d of defs) {
+    const exists = await db.store.findFirst({ where: { workspaceId, name: d.name } });
+    if (exists) continue;
+    await db.store.create({
+      data: {
+        workspaceId, name: d.name, url: d.url,
+        apiKey: `slm_live_${d.name.toLowerCase()}_${randomBytes(8).toString("hex")}`,
+        environment: "staging", status: "pending",
+        domains: d.url,
+      },
+    });
+    console.log(`Store created: ${d.name}`);
+  }
+}

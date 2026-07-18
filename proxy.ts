@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 const SESSION_COOKIE = "sendloom_session";
 // /api/t = email open/click tracking, fetched by mail clients with no session.
-const OPEN_PREFIXES = ["/login", "/api/auth", "/api/health", "/api/v1", "/api/t"];
+const OPEN_PREFIXES = ["/login", "/api/auth", "/api/health", "/api/v1", "/api/t", "/r/"];
 
 async function verifyToken(token: string | undefined, secret: string): Promise<boolean> {
   if (!token) return false;

@@ -6,6 +6,7 @@ import { db } from "./db";
 import { audit } from "./audit";
 import { recomputeLeadScore } from "./scoring";
 import { registerHandler } from "./queue";
+import { touchCart, sweepAbandoned } from "./carts";
 
 export type IncomingEvent = {
   workspaceId: string;
@@ -35,6 +36,16 @@ const TIMELINE_TITLES: Record<string, string> = {
   consultation_requested: "Consultation requested",
   imported: "Imported",
   consent_recorded: "Consent recorded",
+  page_viewed: "Viewed page",
+  checkout_email_entered: "Entered checkout email",
+  checkout_phone_entered: "Entered checkout phone",
+  checkout_address_started: "Started checkout address",
+  cart_updated: "Updated cart",
+  popup_viewed: "Saw popup",
+  popup_closed: "Closed popup",
+  popup_submitted: "Submitted popup",
+  recovery_link_clicked: "Clicked recovery link",
+  discount_code_used: "Used discount code",
   enrichment_completed: "Enrichment completed",
   suppression_applied: "Suppressed",
   task_created: "Sales task created",
@@ -42,7 +53,7 @@ const TIMELINE_TITLES: Record<string, string> = {
 };
 
 // Event types that must never auto-create a contact (no consent implied).
-const NO_AUTOCREATE = new Set(["product_viewed", "category_viewed", "search", "cart_add", "cart_remove"]);
+const NO_AUTOCREATE = new Set(["product_viewed", "category_viewed", "search", "cart_add", "cart_remove", "cart_updated", "page_viewed", "popup_viewed", "popup_closed"]);
 
 export const eventIngestionService = {
   async process(e: IncomingEvent) {
@@ -83,6 +94,25 @@ export const eventIngestionService = {
     }
     if (e.type === "purchase_completed" && contactId && e.payload) {
       await applyOrderRollup(contactId, e.payload);
+    }
+    // Cart/checkout lifecycle (keyed by cart token from the tracker).
+    if (e.storeId && ["cart_add", "cart_remove", "cart_updated", "checkout_started", "checkout_email_entered", "checkout_phone_entered", "checkout_address_started", "checkout_completed", "purchase_completed"].includes(e.type)) {
+      await touchCart(e.storeId, e.type, (e.payload ?? {}) as Parameters<typeof touchCart>[2], contactId);
+      await sweepAbandoned();
+    }
+    // Popup submissions with an explicit consent tick grant email consent —
+    // the one intake route that does, because the form showed a consent box.
+    if (e.type === "popup_submitted" && contactId && e.payload?.consent === true) {
+      await db.consentRecord.create({
+        data: {
+          contactId, channel: "email", status: "granted",
+          lawfulBasis: "Consent (popup checkbox)",
+          evidence: String(e.payload?.popup ?? "popup"), actor: "tracker",
+        },
+      });
+    }
+    if (e.storeId) {
+      await db.store.update({ where: { id: e.storeId }, data: { lastEventAt: occurredAt } }).catch(() => {});
     }
 
     // 4. Timeline item for identified contacts.

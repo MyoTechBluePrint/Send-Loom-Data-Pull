@@ -5,10 +5,13 @@ import { rejectEvent, type IncomingEvent } from "@/lib/server/events";
 import { enqueue } from "@/lib/server/queue";
 
 const EVENT_TYPES = [
-  "product_viewed", "category_viewed", "search", "cart_add", "cart_remove",
-  "checkout_started", "checkout_completed", "purchase_completed",
-  "account_created", "newsletter_signup", "form_submitted", "quiz_completed",
-  "guide_downloaded", "consultation_requested", "consultation_booked",
+  "page_viewed", "product_viewed", "category_viewed", "search", "cart_add",
+  "cart_remove", "cart_updated", "checkout_started", "checkout_email_entered",
+  "checkout_phone_entered", "checkout_address_started", "checkout_completed",
+  "purchase_completed", "account_created", "newsletter_signup",
+  "form_submitted", "quiz_completed", "guide_downloaded",
+  "consultation_requested", "consultation_booked", "popup_viewed",
+  "popup_closed", "popup_submitted", "discount_code_used",
 ] as const;
 
 const EventSchema = z.object({
