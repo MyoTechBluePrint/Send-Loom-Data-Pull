@@ -146,6 +146,16 @@ export async function launchTopUp(workspaceId: string) {
     where: { workspaceId, name: "MyoTech", url: "myotechlabs.co.uk" },
     data: { url: "myotech.store", domains: "myotech.store" },
   });
+  // If an old plugin connect overwrote the storefront URL with the backend
+  // host (api.myotech.store), point it back at the first allowed storefront.
+  const { looksBackend, normalizeHost, splitDomains } = await import("../lib/server/tracking-domains");
+  for (const s of await db.store.findMany({ where: { workspaceId } })) {
+    const host = normalizeHost(s.url);
+    const allowed = splitDomains(s.domains);
+    if (host && looksBackend(host) && allowed.length > 0) {
+      await db.store.update({ where: { id: s.id }, data: { url: allowed[0] } });
+    }
+  }
   // Storefront/backend separation (19 Jul): api.myotech.store is the backend,
   // never a tracking domain. Record it and strip it from the allowlist.
   const myo = await db.store.findFirst({ where: { workspaceId, name: "MyoTech" } });
