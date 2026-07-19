@@ -14,6 +14,8 @@ export type QaEvent = {
   who: string | null; // resolved contact label, null = anonymous
   anonymousId: string | null;
   payload: string | null;
+  host: string | null;   // hostname the tracker reported
+  kind: "storefront" | "test" | "server"; // accepted-event classification
 };
 
 export function TrackingEventsTable({ events, stores }: { events: QaEvent[]; stores: { id: string; name: string }[] }) {
@@ -46,7 +48,7 @@ export function TrackingEventsTable({ events, stores }: { events: QaEvent[]; sto
       </div>
       <div className="overflow-x-auto scroll-thin"><table className="w-full min-w-[820px]">
         <thead className="border-b border-line">
-          <tr><Th>When</Th><Th>Store</Th><Th>Event</Th><Th>Who</Th><Th>Payload</Th></tr>
+          <tr><Th>When</Th><Th>Store</Th><Th>Event</Th><Th>Status</Th><Th>Who</Th><Th>Payload</Th></tr>
         </thead>
         <tbody className="divide-y divide-line">
           {filtered.map((e) => (
@@ -54,6 +56,12 @@ export function TrackingEventsTable({ events, stores }: { events: QaEvent[]; sto
               <Td className="whitespace-nowrap text-xs text-ink-3">{e.occurredAt}</Td>
               <Td className="text-xs">{e.storeName ?? "–"}</Td>
               <Td><span className="rounded bg-[#f0efec] px-1.5 py-0.5 text-[11px] font-bold text-ink-2">{e.type}</span></Td>
+              <Td>
+                <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${e.kind === "test" ? "bg-sky-50 text-sky-700" : "bg-emerald-50 text-emerald-700"}`}>
+                  {e.kind === "test" ? "Test event" : e.kind === "server" ? "Accepted · server" : "Accepted · storefront"}
+                </span>
+                {e.host && <span className="ml-1.5 text-[11px] text-ink-3">{e.host}</span>}
+              </Td>
               <Td className="text-xs">
                 {e.who ?? <span className="text-ink-3">anonymous{e.anonymousId ? ` · ${e.anonymousId.slice(0, 10)}` : ""}</span>}
               </Td>
@@ -61,7 +69,7 @@ export function TrackingEventsTable({ events, stores }: { events: QaEvent[]; sto
             </tr>
           ))}
           {filtered.length === 0 && (
-            <tr><td colSpan={5} className="px-4 py-10 text-center text-sm text-ink-3">
+            <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-ink-3">
               {events.length === 0
                 ? "No tracking events yet. Install the plugin and send a test event."
                 : "No events match this filter yet."}

@@ -64,14 +64,19 @@ export default async function LaunchPage() {
     db.campaign.count({ where: { workspaceId: wsId, isDemo: false } }),
   ]);
 
+  const CUSTOMER_TYPES = ["product_viewed", "category_viewed", "search", "cart_add", "cart_remove", "cart_updated", "checkout_started", "checkout_email_entered", "checkout_completed", "purchase_completed", "popup_submitted"];
   const storeBoards = await Promise.all(
     stores.map(async (s) => {
-      const [eventCount, abandonedCount, livePopup] = await Promise.all([
+      const [eventCount, customerCount, testCount, abandonedCount, livePopup] = await Promise.all([
         db.event.count({ where: { storeId: s.id } }),
+        // Customer behaviour = real journeys only: behaviour types, minus
+        // anything tagged as a QA/plugin test event.
+        db.event.count({ where: { storeId: s.id, type: { in: CUSTOMER_TYPES }, NOT: [{ payload: { contains: "qa-panel" } }, { payload: { contains: "/sendloom-test" } }] } }),
+        db.event.count({ where: { storeId: s.id, OR: [{ payload: { contains: "qa-panel" } }, { payload: { contains: "/sendloom-test" } }] } }),
         db.cart.count({ where: { storeId: s.id, status: { in: ["abandoned", "abandoned_checkout"] } } }),
         db.form.findFirst({ where: { workspaceId: wsId, status: "live", name: { startsWith: s.name } } }),
       ]);
-      return { store: s, eventCount, abandonedCount, livePopup };
+      return { store: s, eventCount, customerCount, testCount, abandonedCount, livePopup };
     })
   );
 
@@ -90,11 +95,11 @@ export default async function LaunchPage() {
 
       {/* Per-store launch status */}
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {storeBoards.map(({ store: s, eventCount, abandonedCount, livePopup }) => (
+        {storeBoards.map(({ store: s, eventCount, customerCount, testCount, abandonedCount, livePopup }) => (
           <Card key={s.id}>
             <CardHeader
               title={s.name}
-              subtitle={s.url}
+              subtitle={`Storefront: ${s.url}${s.backendDomains ? ` · backend: ${s.backendDomains} (never tracked)` : ""}`}
               action={
                 <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${s.status === "connected" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
                   {s.status === "connected" ? "Connected" : "Plugin pending"}
@@ -103,8 +108,9 @@ export default async function LaunchPage() {
             />
             <dl className="divide-y divide-line text-sm">
               {([
-                ["Plugin installed", <StatusChip key="p" ok={s.status === "connected"} okLabel={`Connected · v${s.pluginVersion ?? "?"}`} pendingLabel="Not installed" />],
-                ["Tracking events", <StatusChip key="t" ok={eventCount > 0} okLabel={`${eventCount} received`} pendingLabel="No events yet" />],
+                ["Plugin connection", <StatusChip key="p" ok={s.status === "connected"} okLabel={`Connected · v${s.pluginVersion ?? "?"}`} pendingLabel="Not installed" />],
+                ["Tracking events", <StatusChip key="t" ok={eventCount > 0} okLabel={`${eventCount} received${testCount > 0 ? ` · ${testCount} test` : ""}`} pendingLabel="No storefront events yet" />],
+                ["Customer behaviour", <StatusChip key="c" ok={customerCount > 0} okLabel={`${customerCount} real events`} pendingLabel="No product/cart/checkout events yet" />],
                 ["First popup", <StatusChip key="f" ok={!!livePopup} okLabel={livePopup?.name.replace(" (template)", "") ?? "Live"} pendingLabel="Templates ready · none live" />],
                 ["Abandoned cart detection", <StatusChip key="a" ok={abandonedCount > 0} okLabel={`${abandonedCount} detected`} pendingLabel={eventCount > 0 ? "Armed · waiting for carts" : "Activates once tracking is live"} />],
               ] as [string, React.ReactNode][]).map(([k, v]) => (

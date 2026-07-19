@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/server/db";
 import { audit } from "@/lib/server/audit";
 import { readSignedBody } from "@/lib/server/apiAuth";
+import { looksBackend, normalizeHost, splitDomains } from "@/lib/server/tracking-domains";
 
 const Body = z.object({
   storeUrl: z.string().min(3),
@@ -20,19 +21,28 @@ export async function POST(req: NextRequest) {
     return Response.json({ ok: false, error: parsed.error.flatten() }, { status: 400 });
   }
 
-  // Auto-allowlist the connecting site's host so the browser tracker is
-  // accepted even when the real domain differs from what was seeded
-  // (www variants, different TLD, staging subdomain).
-  const host = parsed.data.storeUrl.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0].toLowerCase();
-  const domains = (store.domains ?? "").split(",").map((d) => d.trim().replace(/^www\./, "")).filter(Boolean);
-  if (host && !domains.includes(host)) domains.push(host);
+  // Auto-learn the connecting site's host. Storefront-looking hosts join the
+  // tracking allowlist; backend-looking hosts (api.*, admin.*) are recorded
+  // as backend domains instead, so a headless WordPress on api.myotech.store
+  // can never allowlist itself for customer tracking.
+  const host = normalizeHost(parsed.data.storeUrl);
+  const domains = splitDomains(store.domains);
+  const backend = splitDomains(store.backendDomains);
+  if (host && looksBackend(host)) {
+    if (!backend.includes(host)) backend.push(host);
+  } else if (host && !domains.includes(host)) {
+    domains.push(host);
+  }
 
   const updated = await db.store.update({
     where: { id: store.id },
     data: {
       status: "connected",
-      url: parsed.data.storeUrl.replace(/^https?:\/\//, ""),
+      // Keep url pointing at the STOREFRONT: only overwrite it with the
+      // connecting host when that host is not a backend domain.
+      url: host && !looksBackend(host) ? host : store.url,
       domains: domains.join(","),
+      backendDomains: backend.join(",") || null,
       pluginVersion: parsed.data.pluginVersion ?? store.pluginVersion,
       lastSyncAt: new Date(),
     },

@@ -18,7 +18,7 @@ export default async function TrackingPage() {
   const showKeys = can(user?.role ?? "viewer", "manage_users");
   const canDownload = can(user?.role ?? "viewer", "download_plugin");
 
-  const [stores, events, stats] = await Promise.all([
+  const [stores, events, stats, rejects] = await Promise.all([
     db.store.findMany({ where: { workspaceId: wsId }, orderBy: { createdAt: "asc" } }),
     db.event.findMany({
       where: { workspaceId: wsId, type: { notIn: ["imported", "consent_recorded"] } },
@@ -26,18 +26,32 @@ export default async function TrackingPage() {
       include: { contact: { select: { email: true, firstName: true, lastName: true } }, store: { select: { name: true } } },
     }),
     cartStats(),
+    db.trackingReject.findMany({ orderBy: { createdAt: "desc" }, take: 10, include: { store: { select: { name: true } } } }),
   ]);
 
-  const qaEvents: QaEvent[] = events.map((e) => ({
-    id: e.id,
-    occurredAt: e.occurredAt.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }),
-    storeId: e.storeId,
-    storeName: e.store?.name ?? null,
-    type: e.type,
-    who: e.contact ? [e.contact.firstName, e.contact.lastName].filter(Boolean).join(" ") || e.contact.email : null,
-    anonymousId: e.anonymousId,
-    payload: e.payload,
-  }));
+  const qaEvents: QaEvent[] = events.map((e) => {
+    let host: string | null = null;
+    let isTest = false;
+    let fromTracker = false;
+    try {
+      const pl = e.payload ? JSON.parse(e.payload) : {};
+      host = typeof pl.hostname === "string" ? pl.hostname : null;
+      isTest = pl.source === "qa-panel" || pl.url === "/sendloom-test" || pl.pageType === "test";
+      fromTracker = pl.source === "tracker";
+    } catch {}
+    return {
+      id: e.id,
+      occurredAt: e.occurredAt.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }),
+      storeId: e.storeId,
+      storeName: e.store?.name ?? null,
+      type: e.type,
+      who: e.contact ? [e.contact.firstName, e.contact.lastName].filter(Boolean).join(" ") || e.contact.email : null,
+      anonymousId: e.anonymousId,
+      payload: e.payload,
+      host,
+      kind: isTest ? ("test" as const) : fromTracker ? ("storefront" as const) : ("server" as const),
+    };
+  });
   const cartsQuiet = stats.open + stats.checkoutStarted + stats.abandoned + stats.abandonedCheckout + stats.converted + stats.recovered === 0;
 
   const funnelCounts = await Promise.all(
@@ -77,7 +91,8 @@ export default async function TrackingPage() {
               <tr key={s.id} className="hover:bg-[#fafaf8]">
                 <Td>
                   <p className="font-medium">{s.name}</p>
-                  <p className="text-xs text-ink-3">{s.url} · plugin {s.pluginVersion ?? "not installed"}</p>
+                  <p className="text-xs text-ink-3">Storefront: <b>{s.url}</b> · plugin {s.pluginVersion ?? "not installed"}</p>
+                  <p className="text-xs text-ink-3">Tracks: {s.domains || "any"}{s.backendDomains ? <> · rejects: <span className="text-red-700">{s.backendDomains}</span></> : null}</p>
                 </Td>
                 <Td><span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">{s.environment}</span></Td>
                 <Td>
@@ -185,6 +200,37 @@ export default async function TrackingPage() {
           )}
         </Card>
       </div>
+
+      {/* Rejected tracking attempts */}
+      <Card className="mt-4">
+        <CardHeader
+          title="Rejected tracking attempts"
+          subtitle="Backend/API domains, admin pages and unknown origins land here with a reason, never in customer analytics"
+        />
+        {rejects.length === 0 ? (
+          <p className="px-5 py-6 text-sm text-ink-3">
+            None yet. Events from backend/API domains (for example api.myotech.store) or WordPress admin pages will be
+            listed here as rejected instead of being counted as customer traffic.
+          </p>
+        ) : (
+          <div className="overflow-x-auto scroll-thin"><table className="w-full min-w-[760px]">
+            <thead className="border-b border-line">
+              <tr><Th>When</Th><Th>Store</Th><Th>Hostname</Th><Th>Event</Th><Th>Reason</Th></tr>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {rejects.map((r) => (
+                <tr key={r.id}>
+                  <Td className="whitespace-nowrap text-xs text-ink-3">{r.createdAt.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</Td>
+                  <Td className="text-xs">{r.store.name}</Td>
+                  <Td><code className="text-xs">{r.host}</code>{r.url && <span className="ml-1 text-[11px] text-ink-3">{r.url}</span>}</Td>
+                  <Td className="text-xs">{r.eventType ?? "–"}</Td>
+                  <Td className="text-xs text-red-700">{r.reason}</Td>
+                </tr>
+              ))}
+            </tbody>
+          </table></div>
+        )}
+      </Card>
 
       {/* Event stream */}
       <Card className="mt-4">

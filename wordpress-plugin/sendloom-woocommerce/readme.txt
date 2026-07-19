@@ -6,7 +6,7 @@ Tested up to: 7.0
 Requires PHP: 8.0
 WC requires at least: 9.0
 WC tested up to: 10.9
-Stable tag: 4.2.0
+Stable tag: 4.3.0
 License: GPL-2.0+
 
 Connects WooCommerce to Sendloom for tracking, popups, abandoned cart/checkout recovery and store data sync.
@@ -37,6 +37,12 @@ Compatibility note: structure and syntax validated (PHP 7/8 parse, no secrets in
 No coding needed. Never paste one store's key into another store's plugin.
 
 == Changelog ==
+
+= 4.3.0 =
+* Storefront-only tracking: the tracker refuses to run on api./admin./backend. hosts and WordPress admin paths
+* Every event reports its hostname; Sendloom rejects backend/API domains with a visible reason
+* Settings page shows the storefront domain with a warning when it looks like a backend/API domain
+
 
 = 4.2.0 =
 * Declared WooCommerce HPOS (custom order tables) and cart/checkout blocks compatibility

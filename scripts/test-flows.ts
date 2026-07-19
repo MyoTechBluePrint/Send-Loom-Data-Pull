@@ -152,6 +152,23 @@ async function main() {
   check("consent held pending, not granted", tessa?.consents.every((c) => c.status === "pending") ?? false);
   check("interest tags applied", (tessa?.tags.length ?? 0) >= 1);
 
+  console.log("Storefront vs backend domain rules");
+  {
+    const { classifyTrackingSource } = await import("../lib/server/tracking-domains");
+    const base = { allowed: "myotech.store", backend: "api.myotech.store" };
+    check("storefront origin accepted", classifyTrackingSource({ origin: "https://myotech.store", ...base }).ok === true);
+    check("www variant accepted", classifyTrackingSource({ origin: "https://www.myotech.store", ...base }).ok === true);
+    check("api subdomain rejected", classifyTrackingSource({ origin: "https://api.myotech.store", ...base }).ok === false);
+    check("listed backend domain rejected", classifyTrackingSource({ origin: "https://api.myotech.store", allowed: "myotech.store", backend: "api.myotech.store" }).ok === false);
+    check("admin subdomain rejected", classifyTrackingSource({ origin: "https://admin.myotech.store", ...base }).ok === false);
+    check("random subdomain no longer implicitly trusted", classifyTrackingSource({ origin: "https://evil.myotech.store", ...base }).ok === false);
+    check("foreign origin rejected", classifyTrackingSource({ origin: "https://evil.example.com", ...base }).ok === false);
+    check("wp-admin path rejected even on storefront", classifyTrackingSource({ origin: "https://myotech.store", payloadUrl: "/wp-admin/edit.php", ...base }).ok === false);
+    check("wp-login rejected", classifyTrackingSource({ origin: "https://myotech.store", payloadUrl: "/wp-login.php?x=1", ...base }).ok === false);
+    check("hostname fallback used when no origin", classifyTrackingSource({ origin: null, payloadHostname: "api.myotech.store", ...base }).ok === false);
+    check("no host at all accepted (server-side QA)", classifyTrackingSource({ origin: null, ...base }).ok === true);
+  }
+
   console.log("Campaign send path");
   // Deterministic suppressed-contact case (must not depend on leftover data):
   // a contact exists AND its email is on the suppression list.

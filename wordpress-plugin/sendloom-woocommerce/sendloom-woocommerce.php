@@ -3,7 +3,7 @@
  * Plugin Name: Sendloom for WooCommerce
  * Plugin URI: https://sendloom.onrender.com
  * Description: Connects this WooCommerce store to Sendloom — behaviour tracking, abandoned cart & checkout recovery, popups, and customer/order/product sync.
- * Version: 4.2.0
+ * Version: 4.3.0
  * Author: Sendloom
  * Requires at least: 6.4
  * Requires PHP: 8.0
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('SENDLOOM_VERSION', '4.2.0');
+define('SENDLOOM_VERSION', '4.3.0');
 define('SENDLOOM_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('SENDLOOM_PLUGIN_URL', plugin_dir_url(__FILE__));
 

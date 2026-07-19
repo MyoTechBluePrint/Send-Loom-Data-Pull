@@ -61,10 +61,14 @@ model Store {
   platform    String   @default("woocommerce")
   apiKey      String   @unique // secret: server-to-server plugin calls only
   publicId    String   @unique @default(cuid()) // safe for the browser tracker
+  // domains = ALLOWED storefront tracking domains (comma list).
   domains     String? // comma-separated allowlist for tracker origins
   environment String   @default("staging")
   status      String   @default("pending") // pending | connected | error
   lastSyncAt  DateTime?
+  // Known backend/API hosts (api.*, wp-admin hosts). Tracking from these is
+  // rejected and surfaced in QA rather than counted as customer behaviour.
+  backendDomains String?
   lastEventAt DateTime?
   pluginVersion String?
   createdAt   DateTime @default(now())
@@ -74,6 +78,7 @@ model Store {
   carts    Cart[]
   events   Event[]
   syncs    ProviderSync[]
+  trackingRejects TrackingReject[]
 }
 
 model Contact {
@@ -717,4 +722,20 @@ model AuditLog {
   createdAt   DateTime @default(now())
 
   @@index([workspaceId, createdAt])
+}
+
+// Rejected tracker submissions (wrong domain, backend host, admin path).
+// Kept so Tracking QA can show WHY something was rejected instead of
+// silently dropping it. Trimmed to the most recent rows per store.
+model TrackingReject {
+  id        String   @id @default(cuid())
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id])
+  host      String
+  url       String?
+  eventType String?
+  reason    String
+  createdAt DateTime @default(now())
+
+  @@index([storeId, createdAt])
 }

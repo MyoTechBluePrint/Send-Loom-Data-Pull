@@ -112,6 +112,16 @@ class Sendloom_Admin {
             <table class="widefat striped" style="max-width:720px;">
                 <tbody>
                     <tr><td style="width:220px;"><strong>Connection</strong></td><td><?php echo $connected ? '<span style="color:#008a20;">● Connected</span>' : '<span style="color:#d63638;">● Not connected</span>'; ?></td></tr>
+                    <tr><td><strong>Storefront domain</strong></td><td>
+                        <?php
+                        $sendloom_host = preg_replace('#^https?://(www\.)?#', '', home_url());
+                        $sendloom_host = strtolower(explode('/', $sendloom_host)[0]);
+                        echo '<code>' . esc_html($sendloom_host) . '</code>';
+                        if (preg_match('/^(api|admin|backend|staging|dev)\./', $sendloom_host)) {
+                            echo '<p style="color:#d63638;margin:6px 0 0;"><strong>This looks like a backend or API domain.</strong> Customer behaviour should be tracked on the public storefront domain (for example myotech.store). The tracker only loads on pages this WordPress serves; if customers browse a separate storefront, tracking must be added to that site instead.</p>';
+                        }
+                        ?>
+                    </td></tr>
                     <tr><td><strong>Store ID</strong></td><td><code><?php echo esc_html($diag['store_id'] ?: '—'); ?></code></td></tr>
                     <tr><td><strong>Tracking ID (public)</strong></td><td><code><?php echo esc_html($diag['store_public_id'] ?: '—'); ?></code></td></tr>
                     <tr><td><strong>Tracker</strong></td><td><?php echo $connected && $diag['tracking'] === 'yes' ? 'Active on storefront' : 'Off'; ?></td></tr>
@@ -135,7 +145,7 @@ class Sendloom_Admin {
                         <th><label for="sendloom_api_key">API key</label></th>
                         <td>
                             <input type="password" class="regular-text" id="sendloom_api_key" name="sendloom_api_key" value="<?php echo esc_attr(get_option('sendloom_api_key')); ?>" autocomplete="new-password" />
-                            <p class="description">From Sendloom → Settings → Store Tracking. Store ID and Tracking ID fill in automatically after connecting.</p>
+                            <p class="description">From Sendloom → Settings → Store Tracking. Store ID and Tracking ID fill in automatically after connecting. Use the public website domain customers visit, for example myotech.store. Do not use an API/admin/backend domain.</p>
                         </td>
                     </tr>
                     <tr>

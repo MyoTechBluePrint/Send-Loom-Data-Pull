@@ -7,6 +7,7 @@ import { z } from "zod";
 import { db } from "@/lib/server/db";
 import { enqueue } from "@/lib/server/queue";
 import type { IncomingEvent } from "@/lib/server/events";
+import { classifyTrackingSource, normalizeHost } from "@/lib/server/tracking-domains";
 
 const BROWSER_TYPES = [
   "page_viewed", "product_viewed", "category_viewed", "search",
@@ -60,18 +61,55 @@ export async function POST(req: NextRequest) {
     return Response.json({ ok: false, error: "unknown store" }, { status: 403, headers });
   }
 
-  // Origin allowlist: enforced only when the store has domains configured.
-  if (store.domains && origin) {
-    const host = origin.replace(/^https?:\/\//, "").replace(/^www\./, "");
-    const allowed = store.domains.split(",").map((d) => d.trim().replace(/^www\./, "")).filter(Boolean);
-    if (allowed.length > 0 && !allowed.some((d) => host === d || host.endsWith(`.${d}`))) {
-      return Response.json({ ok: false, error: "origin not allowed for this store" }, { status: 403, headers });
-    }
+  // Storefront-only gate. Backend/API hosts (api.*, admin.*) and WordPress
+  // admin paths are rejected AND recorded, so Tracking QA can show why
+  // instead of silently accepting backend noise as customer behaviour.
+  const batchVerdict = classifyTrackingSource({
+    origin,
+    payloadHostname: firstString(parsed.data.events[0]?.payload?.["hostname"]),
+    payloadUrl: firstString(parsed.data.events[0]?.payload?.["url"]),
+    allowed: store.domains,
+    backend: store.backendDomains,
+  });
+  if (!batchVerdict.ok) {
+    const first = parsed.data.events[0];
+    await db.trackingReject.create({
+      data: {
+        storeId: store.id,
+        host: normalizeHost(origin) || normalizeHost(firstString(first?.payload?.["hostname"])) || "unknown",
+        url: firstString(first?.payload?.["url"]),
+        eventType: first?.type,
+        reason: batchVerdict.reason,
+      },
+    });
+    return Response.json({ ok: false, error: batchVerdict.reason }, { status: 403, headers });
   }
 
   // Idempotency: skip events whose tracker eventId we've already stored.
-  let accepted = 0, duplicates = 0;
+  let accepted = 0, duplicates = 0, rejected = 0;
   for (const e of parsed.data.events) {
+    // Per-event check: a mixed batch can still carry an admin-path or
+    // backend-host event; drop just that event, keep the rest.
+    const verdict = classifyTrackingSource({
+      origin,
+      payloadHostname: firstString(e.payload?.["hostname"]),
+      payloadUrl: firstString(e.payload?.["url"]),
+      allowed: store.domains,
+      backend: store.backendDomains,
+    });
+    if (!verdict.ok) {
+      rejected++;
+      await db.trackingReject.create({
+        data: {
+          storeId: store.id,
+          host: normalizeHost(origin) || normalizeHost(firstString(e.payload?.["hostname"])) || "unknown",
+          url: firstString(e.payload?.["url"]),
+          eventType: e.type,
+          reason: verdict.reason,
+        },
+      });
+      continue;
+    }
     if (e.eventId) {
       const dupe = await db.event.findFirst({
         where: { storeId: store.id, type: e.type, payload: { contains: `"eventId":"${e.eventId}"` } },
@@ -92,5 +130,9 @@ export async function POST(req: NextRequest) {
     accepted++;
   }
 
-  return Response.json({ ok: true, accepted, duplicates }, { headers });
+  return Response.json({ ok: true, accepted, duplicates, rejected }, { headers });
+}
+
+function firstString(v: unknown): string | undefined {
+  return typeof v === "string" ? v : undefined;
 }

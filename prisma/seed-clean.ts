@@ -21,14 +21,15 @@ export async function main() {
   // The two real stores. Pending until the plugin connects.
   const { randomBytes } = await import("node:crypto");
   for (const d of [
-    { name: "MyoTech", url: "myotech.store" },
-    { name: "Novatec", url: "novateclabs.co.uk" },
+    { name: "MyoTech", url: "myotech.store", backend: "api.myotech.store" },
+    { name: "Novatec", url: "novateclabs.co.uk", backend: null },
   ]) {
     await db.store.create({
       data: {
         workspaceId: ws.id, name: d.name, url: d.url,
         apiKey: `slm_live_${d.name.toLowerCase()}_${randomBytes(8).toString("hex")}`,
         environment: "staging", status: "pending", domains: d.url,
+        backendDomains: d.backend,
       },
     });
   }
@@ -137,6 +138,19 @@ export async function launchTopUp(workspaceId: string) {
     where: { workspaceId, name: "MyoTech", url: "myotechlabs.co.uk" },
     data: { url: "myotech.store", domains: "myotech.store" },
   });
+  // Storefront/backend separation (19 Jul): api.myotech.store is the backend,
+  // never a tracking domain. Record it and strip it from the allowlist.
+  const myo = await db.store.findFirst({ where: { workspaceId, name: "MyoTech" } });
+  if (myo) {
+    const cleaned = (myo.domains ?? "").split(",").map((d) => d.trim()).filter((d) => d && !d.startsWith("api.") && !d.startsWith("admin."));
+    await db.store.update({
+      where: { id: myo.id },
+      data: {
+        domains: cleaned.join(",") || "myotech.store",
+        backendDomains: myo.backendDomains?.includes("api.myotech.store") ? myo.backendDomains : [myo.backendDomains, "api.myotech.store"].filter(Boolean).join(","),
+      },
+    });
+  }
   const wanted: [string, string, string][] = [
     ["MyoTech · Discount signup (template)", "popup", "Time on page · 8s · all pages"],
     ["MyoTech · Consultation request (template)", "popup", "Product pages"],

@@ -71,6 +71,24 @@ Written for Steve. Twenty steps, roughly ten minutes per site.
   `php -l` on the includes once before first install, or just install on a
   staging copy of MyoTech first.
 
+## Use the customer-facing storefront domain
+
+Sendloom tracks the public website customers visit, never the backend.
+
+- Correct for MyoTech: **myotech.store** (plus www.myotech.store if used)
+- Wrong: api.myotech.store, admin subdomains, wp-admin, wp-login.php
+
+The API/backend domain is not where customers browse products, add to cart
+or check out. Events from backend/API hosts or admin pages are rejected and
+shown in Store Tracking's "Rejected tracking attempts" panel with a reason;
+they never count as customer behaviour. The tracker itself also refuses to
+run on api./admin./backend. hosts and admin paths.
+
+If the WordPress that runs the plugin is NOT the site customers browse (a
+headless setup), the plugin's server-side events still work, but the browser
+tracker must be added to the real storefront separately; the plugin settings
+page warns when it detects this.
+
 ## Compatibility
 
 Targets WordPress 7.0.x and WooCommerce 10.9 (headers declare WC requires

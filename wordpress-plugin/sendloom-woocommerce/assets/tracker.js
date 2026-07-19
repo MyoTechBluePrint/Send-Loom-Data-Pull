@@ -8,6 +8,11 @@
   var CFG = window.SENDLOOM_CFG;
   if (!CFG || !CFG.endpoint || !CFG.store || !CFG.consented) return;
 
+  // Storefront only: never track backend/API hosts or WordPress admin.
+  var HOST = location.hostname.replace(/^www\./, "");
+  if (/^(api|admin|backend|staging|dev)\./.test(HOST)) return;
+  if (location.pathname.indexOf("/wp-admin") === 0 || location.pathname.indexOf("wp-login.php") !== -1) return;
+
   var API = CFG.endpoint + "/api/t/events";
   var LS = window.localStorage;
 
@@ -53,7 +58,7 @@
       email: email || get("sendloom_email") || undefined,
       ts: Date.now(),
       payload: Object.assign(
-        { url: location.pathname, referrer: document.referrer || undefined, cartToken: CFG.cartToken },
+        { url: location.pathname, hostname: HOST, context: "storefront", referrer: document.referrer || undefined, cartToken: CFG.cartToken },
         utm(),
         payload || {}
       ),
