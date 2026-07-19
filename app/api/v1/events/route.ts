@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
       type: e.type,
       email: e.email,
       anonymousId: e.anonymousId,
-      payload: e.payload,
+      payload: { ...(e.payload ?? {}), source: "plugin" },
       occurredAt: e.occurredAt ? new Date(e.occurredAt) : undefined,
     };
     await enqueue({ name: "event.ingest", payload });

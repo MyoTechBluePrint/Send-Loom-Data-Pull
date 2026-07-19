@@ -91,11 +91,11 @@ async function main() {
   const before = await db.event.count({ where: { workspaceId: ws.id } });
   await eventIngestionService.process({
     workspaceId: ws.id, type: "product_viewed", email: `alice.${STAMP}@example.com`,
-    payload: { productTitle: "NAD+ Cellular Complex" },
+    payload: { productTitle: "NAD+ Cellular Complex", source: "tracker" },
   });
   await eventIngestionService.process({
     workspaceId: ws.id, type: "checkout_started", email: `alice.${STAMP}@example.com`,
-    payload: { total: 68, itemCount: 1 },
+    payload: { total: 68, itemCount: 1, source: "tracker" },
   });
   const after = await db.event.count({ where: { workspaceId: ws.id } });
   check("events stored", after === before + 2);
@@ -112,7 +112,7 @@ async function main() {
   const contactsBefore = await db.contact.count({ where: { workspaceId: ws.id } });
   await eventIngestionService.process({
     workspaceId: ws.id, type: "search", anonymousId: "anon-test-1",
-    payload: { term: `test term ${STAMP}`, resultCount: 0 },
+    payload: { term: `test term ${STAMP}`, resultCount: 0, source: "tracker" },
   });
   const contactsAfter = await db.contact.count({ where: { workspaceId: ws.id } });
   check("anonymous search creates no contact", contactsAfter === contactsBefore);
@@ -167,6 +167,40 @@ async function main() {
     check("wp-login rejected", classifyTrackingSource({ origin: "https://myotech.store", payloadUrl: "/wp-login.php?x=1", ...base }).ok === false);
     check("hostname fallback used when no origin", classifyTrackingSource({ origin: null, payloadHostname: "api.myotech.store", ...base }).ok === false);
     check("no host at all accepted (server-side QA)", classifyTrackingSource({ origin: null, ...base }).ok === true);
+  }
+
+  console.log("Event validation pipeline");
+  {
+    const { classifyEvent, scrubPayload } = await import("../lib/server/ingest-pipeline");
+    const liveStore = { id: "s1", domains: "myotech.store", backendDomains: "api.myotech.store", trackingMode: "live" };
+    const testStore = { ...liveStore, trackingMode: "test" };
+
+    const a = classifyEvent({ type: "product_viewed", payload: { source: "tracker", hostname: "myotech.store", url: "/p/x" }, origin: "https://myotech.store", store: liveStore });
+    check("tracker storefront event → storefront stream", a.action === "accept" && a.stream === "storefront");
+    const b = classifyEvent({ type: "checkout_completed", payload: { source: "plugin" }, store: liveStore });
+    check("plugin commerce event → server stream", b.action === "accept" && b.stream === "server");
+    const c = classifyEvent({ type: "page_viewed", payload: { source: "qa-panel", url: "/qa-test" }, store: liveStore });
+    check("qa-panel event → test stream", c.action === "accept" && c.stream === "test");
+    const d = classifyEvent({ type: "page_viewed", payload: { source: "tracker", hostname: "myotech.store", url: "/p", context: "internal" }, origin: "https://myotech.store", store: liveStore });
+    check("logged-in staff → internal stream", d.action === "accept" && d.stream === "internal");
+    const e2 = classifyEvent({ type: "product_viewed", payload: { source: "tracker", hostname: "myotech.store", url: "/p" }, origin: "https://myotech.store", store: testStore });
+    check("test-mode store forces test stream", e2.action === "accept" && e2.stream === "test");
+    const f = classifyEvent({ type: "product_viewed", payload: {}, store: liveStore });
+    check("product_viewed from unmarked system source quarantined", f.action === "quarantine");
+    const g = classifyEvent({ type: "purchase_completed", payload: { source: "tracker", hostname: "myotech.store" }, origin: "https://myotech.store", store: liveStore });
+    check("browser cannot fabricate purchase_completed", g.action === "quarantine");
+    const h = classifyEvent({ type: "page_viewed", payload: { source: "tracker", hostname: "api.myotech.store" }, origin: "https://api.myotech.store", store: liveStore });
+    check("backend host rejected in pipeline too", h.action === "reject");
+    const i = classifyEvent({ type: "page_viewed", payload: { source: "tracker", hostname: "myotech.store", url: "/wp-json/wc/v3" }, origin: "https://myotech.store", store: liveStore });
+    check("wp-json on storefront host rejected", i.action === "reject");
+    const j = classifyEvent({ type: "page_viewed", payload: { source: "tracker", hostname: "myotech.store", url: "/p" }, origin: "https://myotech.store", occurredAt: new Date(Date.now() + 60 * 60 * 1000), store: liveStore });
+    check("future timestamp quarantined", j.action === "quarantine");
+    const k = classifyEvent({ type: "page_viewed", payload: { source: "tracker", hostname: "myotech.store", url: "/p" }, origin: "https://myotech.store", occurredAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000), store: liveStore });
+    check("stale timestamp quarantined", k.action === "quarantine");
+    const s = scrubPayload({ url: "/checkout?token=abc&utm_source=fb", password: "x", card_number: "4111", productId: "9" });
+    check("scrubber strips credentials and sensitive query params", s !== undefined && !("password" in s) && !("card_number" in s) && s.url === "/checkout?utm_source=fb" && s.productId === "9");
+    const m = classifyEvent({ type: "email_open", payload: {}, store: null });
+    check("system events without store still accepted", m.action === "accept");
   }
 
   console.log("Campaign send path");

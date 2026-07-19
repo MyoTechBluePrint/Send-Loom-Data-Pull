@@ -125,6 +125,7 @@ export async function POST(req: NextRequest) {
       anonymousId: e.anonymousId,
       payload: { ...(e.payload ?? {}), ...(e.eventId ? { eventId: e.eventId } : {}), ...(e.sessionId ? { sessionId: e.sessionId } : {}), source: "tracker" },
       occurredAt: e.ts ? new Date(e.ts) : undefined,
+      origin,
     };
     await enqueue({ name: "event.ingest", payload });
     accepted++;

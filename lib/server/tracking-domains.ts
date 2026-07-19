@@ -5,8 +5,11 @@
 
 export type DomainVerdict = { ok: true } | { ok: false; reason: string };
 
-const BACKEND_PREFIXES = ["api.", "admin.", "backend.", "staging.", "dev."];
-const ADMIN_PATH_MARKERS = ["/wp-admin", "wp-login.php"];
+const BACKEND_PREFIXES = ["api.", "admin.", "backend.", "staging.", "dev.", "internal."];
+// Admin/backend activity can happen on the legitimate storefront hostname
+// (myotech.store/wp-admin), so paths are classified independently of domains.
+const ADMIN_PATH_MARKERS = ["/wp-admin", "wp-login.php", "/wp-json", "xmlrpc.php"];
+const ADMIN_PATH_PREFIXES = ["/api/", "/internal/", "/webhooks/", "/cron", "/health"];
 
 export function normalizeHost(input: string | null | undefined): string {
   if (!input) return "";
@@ -32,7 +35,8 @@ export function looksBackend(host: string): boolean {
 
 export function isAdminPath(url: string | null | undefined): boolean {
   if (!url) return false;
-  return ADMIN_PATH_MARKERS.some((m) => url.includes(m));
+  const path = url.replace(/^https?:\/\/[^/]+/, "");
+  return ADMIN_PATH_MARKERS.some((m) => path.includes(m)) || ADMIN_PATH_PREFIXES.some((p) => path.startsWith(p));
 }
 
 export const BACKEND_REJECT_REASON = "Rejected: backend/API domain is not an allowed storefront tracking domain.";

@@ -128,3 +128,17 @@ Repeat the same five checks with the **Novatec key on the Novatec site** and
 Tracking to confirm every Novatec event carries the Novatec chip and none of
 it appears under MyoTech. The two stores must stay fully separate; if data
 crosses over, a key was pasted into the wrong plugin, so stop and report it.
+
+## Common rejection reasons in Tracking QA
+
+- "backend/API domain is not an allowed storefront tracking domain": the
+  event came from api./admin./backend. hosts (for example api.myotech.store).
+- "WordPress admin pages are not customer journeys": the URL contained
+  /wp-admin, wp-login.php, /wp-json or xmlrpc.php, even on the storefront
+  domain.
+- "origin is not on this store's storefront allowlist": an unknown domain;
+  check Store Tracking → Tracks list.
+- "Quarantined: … not a valid event from source …": something tried to send
+  a browser-only event from a server context or the reverse.
+- Test events (QA buttons, plugin test button, TEST MODE stores) are
+  accepted but labelled Test and never count as customer behaviour.

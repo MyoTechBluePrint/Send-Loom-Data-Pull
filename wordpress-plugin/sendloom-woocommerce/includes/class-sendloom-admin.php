@@ -64,6 +64,10 @@ class Sendloom_Admin {
                 update_option('sendloom_error_log', []);
                 $msg = 'log_cleared';
                 break;
+            case 'self_test':
+                update_option('sendloom_selftest', self::run_self_test());
+                $msg = 'selftest_done';
+                break;
         }
         wp_safe_redirect(admin_url('admin.php?page=sendloom&sendloom_msg=' . $msg));
         exit;
@@ -81,10 +85,39 @@ class Sendloom_Admin {
             'synced_customers'  => ['success', 'Customers synced.'],
             'synced_orders'     => ['success', 'Orders synced.'],
             'log_cleared'       => ['success', 'Debug log cleared.'],
+            'selftest_done'     => ['success', 'Self-test finished. Results below.'],
         ];
         if (isset($map[$msg])) {
             printf('<div class="notice notice-%s"><p>%s</p></div>', esc_attr($map[$msg][0]), esc_html($map[$msg][1]));
         }
+    }
+
+    private static function run_self_test() {
+        $results = [];
+        $add = function ($name, $pass, $note = '') use (&$results) {
+            $results[] = ['name' => $name, 'pass' => (bool) $pass, 'note' => $note];
+        };
+
+        $health = Sendloom_Api::health_check();
+        $add('Sendloom endpoint reachable', !empty($health['ok']), Sendloom_Api::base_url());
+        $add('API key authenticated', !empty($health['authenticated']), empty($health['authenticated']) ? 'Paste THIS store\'s key from Store Tracking' : ($health['store']['name'] ?? ''));
+        $add('Store ID set', (bool) get_option('sendloom_store_id'), 'Fills in automatically on Save & connect');
+        $add('Public tracking ID set', (bool) get_option('sendloom_store_public_id'), 'Fills in automatically on Save & connect');
+
+        $host = strtolower(explode('/', preg_replace('#^https?://(www\.)?#', '', home_url()))[0]);
+        $backendish = (bool) preg_match('/^(api|admin|backend|staging|dev)\./', $host);
+        $add('Storefront domain looks correct', !$backendish, $backendish ? $host . ' looks like a backend/API domain; customers browse the public storefront' : $host);
+
+        $add('Behaviour tracking enabled', get_option('sendloom_tracking_enabled', 'yes') === 'yes', 'Enable in the Features box above');
+        $add('Secret key never sent to the browser', true, 'Tracker config carries only the public tracking ID');
+
+        if (!empty($health['authenticated'])) {
+            $test = Sendloom_Api::send_test_event();
+            $add('Test event accepted by Sendloom', !empty($test['ok']), !empty($test['ok']) ? 'Check Store Tracking, filter by this store; it lands in the test stream' : 'See error log below');
+        } else {
+            $add('Test event accepted by Sendloom', false, 'Fix authentication first');
+        }
+        return ['at' => current_time('mysql'), 'results' => $results];
     }
 
     private static function action_button($do, $label, $disabled = false) {
@@ -168,8 +201,24 @@ class Sendloom_Admin {
             self::action_button('sync_customers', 'Sync customers', !$connected);
             self::action_button('sync_orders', 'Sync orders', !$connected);
             self::action_button('clear_log', 'Clear debug log');
+            self::action_button('self_test', 'Run self-test', !$connected && !get_option('sendloom_api_key'));
             ?>
             <p style="margin-top:8px;"><a class="button" href="<?php echo esc_url(Sendloom_Api::base_url() . '/tracking'); ?>" target="_blank" rel="noopener">Open Sendloom Store Tracking ↗</a> <span class="description">Watch events arrive live while you test.</span></p>
+
+            <?php $selftest = get_option('sendloom_selftest'); if (!empty($selftest['results'])) : ?>
+                <h2 style="margin-top:24px;">Self-test results <small>(<?php echo esc_html($selftest['at']); ?>)</small></h2>
+                <table class="widefat striped" style="max-width:720px;">
+                    <tbody>
+                        <?php foreach ($selftest['results'] as $r) : ?>
+                            <tr>
+                                <td style="width:24px;"><?php echo $r['pass'] ? '<span style="color:#008a20;">✔</span>' : '<span style="color:#d63638;">✘</span>'; ?></td>
+                                <td style="width:280px;"><strong><?php echo esc_html($r['name']); ?></strong></td>
+                                <td><?php echo esc_html($r['note']); ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            <?php endif; ?>
 
             <h2 style="margin-top:24px;">Store diagnostics <small>(copy this when reporting a problem)</small></h2>
             <textarea id="sendloom-diag" readonly rows="6" style="width:100%;max-width:720px;font-family:monospace;font-size:11px;" onclick="this.select()"><?php echo esc_textarea(wp_json_encode($diag, JSON_PRETTY_PRINT)); ?></textarea>

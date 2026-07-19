@@ -58,7 +58,7 @@
       email: email || get("sendloom_email") || undefined,
       ts: Date.now(),
       payload: Object.assign(
-        { url: location.pathname, hostname: HOST, context: "storefront", referrer: document.referrer || undefined, cartToken: CFG.cartToken },
+        { url: location.pathname, hostname: HOST, context: CFG.internal ? "internal" : "storefront", referrer: document.referrer || undefined, cartToken: CFG.cartToken },
         utm(),
         payload || {}
       ),

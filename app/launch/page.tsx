@@ -71,8 +71,8 @@ export default async function LaunchPage() {
         db.event.count({ where: { storeId: s.id } }),
         // Customer behaviour = real journeys only: behaviour types, minus
         // anything tagged as a QA/plugin test event.
-        db.event.count({ where: { storeId: s.id, type: { in: CUSTOMER_TYPES }, NOT: [{ payload: { contains: "qa-panel" } }, { payload: { contains: "/sendloom-test" } }] } }),
-        db.event.count({ where: { storeId: s.id, OR: [{ payload: { contains: "qa-panel" } }, { payload: { contains: "/sendloom-test" } }] } }),
+        db.event.count({ where: { storeId: s.id, type: { in: CUSTOMER_TYPES }, stream: { in: ["storefront", "server"] } } }),
+        db.event.count({ where: { storeId: s.id, stream: { in: ["test", "internal"] } } }),
         db.cart.count({ where: { storeId: s.id, status: { in: ["abandoned", "abandoned_checkout"] } } }),
         db.form.findFirst({ where: { workspaceId: wsId, status: "live", name: { startsWith: s.name } } }),
       ]);

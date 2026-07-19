@@ -99,3 +99,27 @@ the intake trail. Planned entities for real channel ingestion: IntakeSource
 2. WooCommerce sync + segmentation + scoring + campaigns + automations
 3. Keyword intent + Demand Radar + opportunities + enrichment providers
 4. AI assistant + compliance engine + sales tasks/CRM + advanced attribution
+
+## Tracking integrity (event validation pipeline)
+
+Every event is untrusted until it passes `lib/server/ingest-pipeline.ts`:
+schema (zod at the route) → store resolution → payload scrub (blocked keys +
+sensitive query params) → domain authorisation (`tracking-domains.ts`,
+exact-match allowlist, backend hosts and admin paths rejected) → event
+registry check (`event-registry.ts`: which sources may produce which types;
+a browser cannot fabricate purchase_completed, a server cannot fabricate
+product_viewed) → timestamp sanity (future/stale → quarantined) → stream
+decision. Persisted events carry provenance: `stream` (storefront | server |
+test | internal), `sourceContext` (tracker | plugin | qa-panel | system) and
+`acceptReason`. Rejected/quarantined submissions land in `TrackingReject`
+with a reason and are shown on Store Tracking, never silently dropped or
+silently accepted. Customer analytics (funnels, launch board, carts,
+scoring, demand, consent) read the storefront + server streams only; test
+and internal events are QA-visible but inert. Per-store `trackingMode=test`
+routes everything to the test stream for install days. Logged-in WordPress
+staff are tagged internal by the plugin (`CFG.internal`) and excluded.
+
+Known limitations (deliberate, staging): no punycode normalisation, no
+per-environment key/ID sets (Store.environment is a label), consent state is
+carried on popup events only, and dedup relies on tracker eventIds plus
+order externalId upserts rather than a general idempotency ledger.

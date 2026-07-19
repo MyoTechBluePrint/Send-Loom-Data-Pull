@@ -69,6 +69,9 @@ model Store {
   // Known backend/API hosts (api.*, wp-admin hosts). Tracking from these is
   // rejected and surfaced in QA rather than counted as customer behaviour.
   backendDomains String?
+  // live: events count as real. test: EVERY tracker event for this store is
+  // routed to the test stream (install/QA days) and never touches analytics.
+  trackingMode   String  @default("live")
   lastEventAt DateTime?
   pluginVersion String?
   createdAt   DateTime @default(now())
@@ -257,6 +260,11 @@ model Event {
   type        String // product_viewed | category_viewed | search | cart_add | cart_remove | checkout_started | purchase_completed | email_open | email_click | form_submitted | quiz_completed | guide_downloaded | consultation_requested | imported | consent_recorded | ...
   payload     String? // JSON
   anonymousId String? // for not-yet-identified visitors
+  // Provenance: which analytics stream this event belongs to and why it was
+  // accepted. Customer analytics reads storefront+server ONLY.
+  stream        String  @default("storefront") // storefront | server | test | internal
+  sourceContext String? // tracker | plugin | qa-panel | system
+  acceptReason  String?
   occurredAt  DateTime @default(now())
   createdAt   DateTime @default(now())
 
@@ -735,6 +743,7 @@ model TrackingReject {
   url       String?
   eventType String?
   reason    String
+  kind      String   @default("rejected") // rejected | quarantined
   createdAt DateTime @default(now())
 
   @@index([storeId, createdAt])

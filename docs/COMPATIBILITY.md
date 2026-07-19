@@ -1,6 +1,6 @@
 # Sendloom for WooCommerce · Compatibility Checklist
 
-Plugin version: 4.2.0 · checked 19 Jul 2026.
+Plugin version: 4.4.0 · checked 19 Jul 2026.
 Targets: WordPress 7.0.x (current stable), WooCommerce 10.9 (11.0 due 28 Jul 2026), PHP 8.0+.
 
 Honest status: **structure validated; live WordPress/WooCommerce install testing pending.**

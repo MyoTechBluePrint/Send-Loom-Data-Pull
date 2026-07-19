@@ -7,6 +7,8 @@ import { audit } from "./audit";
 import { recomputeLeadScore } from "./scoring";
 import { registerHandler } from "./queue";
 import { touchCart, sweepAbandoned } from "./carts";
+import { classifyEvent } from "./ingest-pipeline";
+import { eventDef } from "./event-registry";
 
 export type IncomingEvent = {
   workspaceId: string;
@@ -16,6 +18,7 @@ export type IncomingEvent = {
   anonymousId?: string;
   payload?: Record<string, unknown>;
   occurredAt?: Date;
+  origin?: string | null; // browser Origin header (transient, not persisted)
 };
 
 const TIMELINE_TITLES: Record<string, string> = {
@@ -59,9 +62,37 @@ export const eventIngestionService = {
   async process(e: IncomingEvent) {
     const occurredAt = e.occurredAt ?? new Date();
 
-    // 1. Identify contact (never auto-create from anonymous browse events).
+    // 0. Validation pipeline: every event is untrusted until classified.
+    const store = e.storeId
+      ? await db.store.findUnique({ where: { id: e.storeId }, select: { id: true, domains: true, backendDomains: true, trackingMode: true } })
+      : null;
+    const verdict = classifyEvent({ type: e.type, payload: e.payload, origin: e.origin, occurredAt: e.occurredAt, store });
+    if (verdict.action !== "accept") {
+      if (store) {
+        await db.trackingReject.create({
+          data: {
+            storeId: store.id,
+            host: String(e.payload?.hostname ?? e.origin ?? "unknown").replace(/^https?:\/\//, ""),
+            url: typeof e.payload?.url === "string" ? e.payload.url : null,
+            eventType: e.type,
+            reason: verdict.reason,
+            kind: verdict.action === "quarantine" ? "quarantined" : "rejected",
+          },
+        });
+      } else {
+        await rejectEvent(e.workspaceId, verdict.reason, { type: e.type });
+      }
+      return { eventId: null, contactId: null, verdict: verdict.action, reason: verdict.reason };
+    }
+    const scrubbed = verdict.payload;
+    const def = eventDef(e.type);
+    // Only these streams may touch contacts, carts, scoring and analytics.
+    const isCustomerStream = verdict.stream === "storefront" || verdict.stream === "server";
+
+    // 1. Identify contact (never auto-create from anonymous browse events;
+    //    never from test/internal streams at all).
     let contactId: string | null = null;
-    if (e.email) {
+    if (e.email && isCustomerStream) {
       const email = e.email.trim().toLowerCase();
       const existing = await db.contact.findUnique({
         where: { workspaceId_email: { workspaceId: e.workspaceId, email } },
@@ -79,30 +110,33 @@ export const eventIngestionService = {
       }
     }
 
-    // 2. Store the raw event (aggregate-only when anonymous).
+    // 2. Store the event with full provenance (scrubbed payload only).
     const event = await db.event.create({
       data: {
         workspaceId: e.workspaceId, storeId: e.storeId ?? null, contactId,
         type: e.type, anonymousId: e.anonymousId ?? null,
-        payload: e.payload ? JSON.stringify(e.payload) : null, occurredAt,
+        payload: scrubbed ? JSON.stringify(scrubbed) : null, occurredAt,
+        stream: verdict.stream, sourceContext: verdict.sourceContext, acceptReason: verdict.reason,
       },
     });
 
-    // 3. Domain side-effects.
-    if (e.type === "search") {
+    // 3. Domain side-effects: customer streams only. Test and internal events
+    //    are visible in QA but never create demand signals, carts, revenue,
+    //    consent or scores.
+    if (e.type === "search" && isCustomerStream) {
       await recordSearchSignal(e, contactId != null);
     }
-    if (e.type === "purchase_completed" && contactId && e.payload) {
+    if (e.type === "purchase_completed" && contactId && e.payload && isCustomerStream) {
       await applyOrderRollup(contactId, e.payload);
     }
     // Cart/checkout lifecycle (keyed by cart token from the tracker).
-    if (e.storeId && ["cart_add", "cart_remove", "cart_updated", "checkout_started", "checkout_email_entered", "checkout_phone_entered", "checkout_address_started", "checkout_completed", "purchase_completed"].includes(e.type)) {
-      await touchCart(e.storeId, e.type, (e.payload ?? {}) as Parameters<typeof touchCart>[2], contactId);
+    if (e.storeId && isCustomerStream && def.affectsCarts) {
+      await touchCart(e.storeId, e.type, (scrubbed ?? {}) as Parameters<typeof touchCart>[2], contactId);
       await sweepAbandoned();
     }
     // Popup submissions with an explicit consent tick grant email consent —
     // the one intake route that does, because the form showed a consent box.
-    if (e.type === "popup_submitted" && contactId && e.payload?.consent === true) {
+    if (e.type === "popup_submitted" && isCustomerStream && contactId && e.payload?.consent === true) {
       await db.consentRecord.create({
         data: {
           contactId, channel: "email", status: "granted",
@@ -116,7 +150,7 @@ export const eventIngestionService = {
     }
 
     // 4. Timeline item for identified contacts.
-    if (contactId) {
+    if (contactId && isCustomerStream) {
       const title = TIMELINE_TITLES[e.type] ?? e.type;
       const detail = summarisePayload(e.type, e.payload);
       await db.timelineItem.create({
@@ -125,10 +159,10 @@ export const eventIngestionService = {
       await db.contact.update({ where: { id: contactId }, data: { lastActivityAt: occurredAt } });
 
       // 5. Rescore.
-      await recomputeLeadScore(contactId);
+      if (def.affectsScoring) await recomputeLeadScore(contactId);
     }
 
-    return { eventId: event.id, contactId };
+    return { eventId: event.id, contactId, verdict: "accept" as const, stream: verdict.stream };
   },
 };
 

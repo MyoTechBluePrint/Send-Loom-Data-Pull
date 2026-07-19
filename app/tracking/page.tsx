@@ -9,6 +9,8 @@ import { TrackingTestButtons } from "@/components/tracking-test-buttons";
 import { TrackingEventsTable, type QaEvent } from "@/components/tracking-events-table";
 import { LiveRefresh } from "@/components/live-refresh";
 import { CopyButton } from "@/components/copy-button";
+import { TrackingModeToggle } from "@/components/tracking-mode-toggle";
+import { looksBackend, normalizeHost } from "@/lib/server/tracking-domains";
 
 export const dynamic = "force-dynamic";
 
@@ -31,14 +33,12 @@ export default async function TrackingPage() {
 
   const qaEvents: QaEvent[] = events.map((e) => {
     let host: string | null = null;
-    let isTest = false;
-    let fromTracker = false;
     try {
       const pl = e.payload ? JSON.parse(e.payload) : {};
       host = typeof pl.hostname === "string" ? pl.hostname : null;
-      isTest = pl.source === "qa-panel" || pl.url === "/sendloom-test" || pl.pageType === "test";
-      fromTracker = pl.source === "tracker";
     } catch {}
+    const isTest = e.stream === "test";
+    const fromTracker = e.stream === "storefront";
     return {
       id: e.id,
       occurredAt: e.occurredAt.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }),
@@ -54,9 +54,23 @@ export default async function TrackingPage() {
   });
   const cartsQuiet = stats.open + stats.checkoutStarted + stats.abandoned + stats.abandonedCheckout + stats.converted + stats.recovered === 0;
 
+  // Known risks: proactive checks instead of reactive debugging.
+  const LATEST_PLUGIN_VERSION = "4.4.0";
+  const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const recentRejects = await db.trackingReject.count({ where: { createdAt: { gte: dayAgo } } });
+  const risks: { level: "red" | "amber"; text: string }[] = [];
+  for (const s of stores) {
+    if (looksBackend(normalizeHost(s.url))) risks.push({ level: "red", text: `${s.name}: storefront domain "${s.url}" looks like a backend/API address. Customers do not browse there; set the public storefront domain.` });
+    if (!s.domains) risks.push({ level: "amber", text: `${s.name}: no allowed tracking domains configured; events from any origin would be accepted.` });
+    if (s.status === "connected" && !s.lastEventAt) risks.push({ level: "amber", text: `${s.name}: plugin connected but no events received yet. Check the storefront tracker.` });
+    if (s.pluginVersion && s.pluginVersion !== LATEST_PLUGIN_VERSION) risks.push({ level: "amber", text: `${s.name}: plugin v${s.pluginVersion} installed, latest is v${LATEST_PLUGIN_VERSION}. Update the ZIP.` });
+    if (s.trackingMode === "test") risks.push({ level: "amber", text: `${s.name}: TEST MODE is on; nothing counts as customer behaviour until it is switched to live.` });
+  }
+  if (recentRejects > 0) risks.push({ level: "amber", text: `${recentRejects} tracking attempt${recentRejects === 1 ? "" : "s"} rejected in the last 24h; see the panel below for reasons.` });
+
   const funnelCounts = await Promise.all(
     ["product_viewed", "cart_add", "checkout_started", "purchase_completed"].map((t) =>
-      db.event.count({ where: { workspaceId: wsId, type: t } })
+      db.event.count({ where: { workspaceId: wsId, type: t, stream: { in: ["storefront", "server"] } } })
     )
   );
 
@@ -96,9 +110,12 @@ export default async function TrackingPage() {
                 </Td>
                 <Td><span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">{s.environment}</span></Td>
                 <Td>
-                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${s.status === "connected" ? "bg-emerald-50 text-emerald-700" : "bg-zinc-100 text-zinc-600"}`}>
-                    {s.status}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${s.status === "connected" ? "bg-emerald-50 text-emerald-700" : "bg-zinc-100 text-zinc-600"}`}>
+                      {s.status}
+                    </span>
+                    {showKeys ? <TrackingModeToggle storeId={s.id} mode={s.trackingMode} /> : s.trackingMode === "test" ? <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-bold text-sky-700">TEST MODE</span> : null}
+                  </div>
                 </Td>
                 <Td><code className="text-xs">{s.publicId}</code></Td>
                 {showKeys && <Td><code className="text-xs">{s.apiKey}</code></Td>}
@@ -201,6 +218,23 @@ export default async function TrackingPage() {
         </Card>
       </div>
 
+      {/* Known risks */}
+      <Card className="mt-4">
+        <CardHeader title="Known risks" subtitle="Checked on every load · misconfiguration surfaces here before it distorts reporting" />
+        {risks.length === 0 ? (
+          <p className="px-5 py-4 text-sm text-emerald-700">No known risks. Domains, plugin versions and event flow all look healthy.</p>
+        ) : (
+          <ul className="divide-y divide-line">
+            {risks.map((r, i) => (
+              <li key={i} className="flex items-start gap-2.5 px-5 py-3 text-[13px] leading-relaxed">
+                <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${r.level === "red" ? "bg-red-500" : "bg-amber-400"}`} />
+                <span className="text-ink-2">{r.text}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
       {/* Rejected tracking attempts */}
       <Card className="mt-4">
         <CardHeader
@@ -223,7 +257,7 @@ export default async function TrackingPage() {
                   <Td className="whitespace-nowrap text-xs text-ink-3">{r.createdAt.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</Td>
                   <Td className="text-xs">{r.store.name}</Td>
                   <Td><code className="text-xs">{r.host}</code>{r.url && <span className="ml-1 text-[11px] text-ink-3">{r.url}</span>}</Td>
-                  <Td className="text-xs">{r.eventType ?? "–"}</Td>
+                  <Td className="text-xs">{r.eventType ?? "–"}<span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${r.kind === "quarantined" ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-700"}`}>{r.kind}</span></Td>
                   <Td className="text-xs text-red-700">{r.reason}</Td>
                 </tr>
               ))}

@@ -40,6 +40,9 @@ class Sendloom_Tracker {
             'debug'     => get_option('sendloom_debug_mode', 'no') === 'yes',
             // Consent gate: themes/consent plugins can veto via this filter.
             'consented' => apply_filters('sendloom_tracking_allowed', true) ? true : false,
+            // Logged-in staff (admins, shop managers, editors) are internal
+            // traffic: tracked into a separate stream, never customer analytics.
+            'internal'  => is_user_logged_in() && current_user_can('edit_posts'),
             'cartToken' => self::cart_token(),
             'page'      => self::page_context(),
         ];
