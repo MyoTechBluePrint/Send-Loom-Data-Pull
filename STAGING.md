@@ -63,9 +63,10 @@ user management.)
 
 - **Owner** (Steve): everything, including feedback triage, demo reset,
   audit visibility.
-- **Worker Admin / Operator** (Will): test everything, create demo data,
-  submit feedback, view admin monitoring. Cannot triage feedback, reset demo
-  data, change billing, enable live sending or touch secrets.
+- **Full Access** (Will): every owner capability under its own role name, so
+  it can be tuned separately later without touching the owner role.
+- **Ads Operator** (ads team): work every page with real data; no resets,
+  keys, ZIP download, billing or user management.
 - **Viewer**: browse and submit feedback.
 
 Enforced in `lib/server/permissions.ts` at the sensitive seams (triage,
