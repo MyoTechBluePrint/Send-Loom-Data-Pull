@@ -108,7 +108,7 @@ class Sendloom_Tracker {
             }
         }
         if ($added > 0) {
-            wc_add_notice(sprintf(__('Welcome back — we restored %d item(s) to your cart.', 'sendloom'), $added), 'success');
+            wc_add_notice(sprintf(__('Welcome back — we restored %d item(s) to your cart.', 'sendloom-woocommerce'), $added), 'success');
         }
     }
 }

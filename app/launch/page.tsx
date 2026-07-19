@@ -56,7 +56,7 @@ function StatusChip({ ok, okLabel, pendingLabel }: { ok: boolean; okLabel: strin
 export default async function LaunchPage() {
   const wsId = await demoWorkspaceId();
   const user = await currentUser();
-  const isOwner = can(user?.role ?? "viewer", "manage_users");
+  const isOwner = can(user?.role ?? "viewer", "download_plugin");
 
   const [stores, contacts, realCampaigns] = await Promise.all([
     db.store.findMany({ where: { workspaceId: wsId }, orderBy: { name: "asc" } }),

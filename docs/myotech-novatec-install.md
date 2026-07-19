@@ -71,6 +71,18 @@ Written for Steve. Twenty steps, roughly ten minutes per site.
   `php -l` on the includes once before first install, or just install on a
   staging copy of MyoTech first.
 
+## Compatibility
+
+Targets WordPress 7.0.x and WooCommerce 10.9 (headers declare WC requires
+9.0, WC tested up to 10.9), PHP 8.0+. HPOS (High-Performance Order Storage)
+and block cart/checkout compatibility are declared in code. Honest status:
+structure validated, live install testing pending; see docs/COMPATIBILITY.md.
+
+[WordPress Plugins page screenshot here]
+[Upload plugin button screenshot here]
+[WooCommerce → Sendloom settings screenshot here]
+[Store Tracking test event screenshot here]
+
 ## Getting the plugin ZIP
 
 Owners can download it inside Sendloom: **Store Tracking → Download plugin

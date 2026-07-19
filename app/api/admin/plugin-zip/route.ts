@@ -11,8 +11,8 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   const user = await currentUser();
-  if (!user || !can(user.role, "manage_users")) {
-    return Response.json({ ok: false, error: "Owner access required." }, { status: 403 });
+  if (!user || !can(user.role, "download_plugin")) {
+    return Response.json({ ok: false, error: "Owner or admin access required." }, { status: 403 });
   }
 
   const zipPath = path.join(process.cwd(), "plugin-builds", "sendloom-woocommerce.zip");

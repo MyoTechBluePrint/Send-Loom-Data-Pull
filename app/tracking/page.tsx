@@ -8,6 +8,7 @@ import { can, currentUser } from "@/lib/server/permissions";
 import { TrackingTestButtons } from "@/components/tracking-test-buttons";
 import { TrackingEventsTable, type QaEvent } from "@/components/tracking-events-table";
 import { LiveRefresh } from "@/components/live-refresh";
+import { CopyButton } from "@/components/copy-button";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,7 @@ export default async function TrackingPage() {
   const wsId = await demoWorkspaceId();
   const user = await currentUser();
   const showKeys = can(user?.role ?? "viewer", "manage_users");
+  const canDownload = can(user?.role ?? "viewer", "download_plugin");
 
   const [stores, events, stats] = await Promise.all([
     db.store.findMany({ where: { workspaceId: wsId }, orderBy: { createdAt: "asc" } }),
@@ -55,7 +57,7 @@ export default async function TrackingPage() {
         <CardHeader
           title="Connected stores"
           subtitle={showKeys ? "API keys visible to owner only · paste into the WordPress plugin" : "Keys are owner-only · ask Steve for install credentials"}
-          action={showKeys ? (
+          action={canDownload ? (
             <a href="/api/admin/plugin-zip" className="rounded-lg bg-brand px-3.5 py-2 text-[13px] font-semibold text-white hover:bg-[#5b21b6]">
               Download plugin ZIP
             </a>
@@ -66,6 +68,7 @@ export default async function TrackingPage() {
             <tr>
               <Th>Store</Th><Th>Environment</Th><Th>Status</Th>
               <Th>Tracking ID (public)</Th>{showKeys && <Th>API key (secret)</Th>}
+              {showKeys && <Th>Install details</Th>}
               <Th className="text-right">Last event</Th>
             </tr>
           </thead>
@@ -84,11 +87,59 @@ export default async function TrackingPage() {
                 </Td>
                 <Td><code className="text-xs">{s.publicId}</code></Td>
                 {showKeys && <Td><code className="text-xs">{s.apiKey}</code></Td>}
+                {showKeys && (
+                  <Td>
+                    <div className="flex gap-1.5">
+                      <CopyButton small label="Copy key" text={s.apiKey} />
+                      <CopyButton
+                        small
+                        label="Copy install details"
+                        text={`Sendloom · ${s.name} plugin install\nSendloom URL: https://sendloom.onrender.com\nAPI key (paste into WooCommerce → Sendloom on ${s.name} ONLY): ${s.apiKey}\nTracking ID (fills in automatically): ${s.publicId}\nNever paste this key into any other store's plugin.`}
+                      />
+                    </div>
+                  </Td>
+                )}
                 <Td className="text-right text-xs text-ink-2">{s.lastEventAt ? s.lastEventAt.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "never"}</Td>
               </tr>
             ))}
           </tbody>
         </table></div>
+        <p className="border-t border-line px-5 py-3 text-[13px] leading-relaxed text-ink-2">
+          To connect a WooCommerce store: download the Sendloom plugin ZIP, upload it to WordPress, activate it, paste
+          the store's key, then send a test event. <b>No coding needed.</b> Install on staging first if available. Use
+          the MyoTech key only on MyoTech and the Novatec key only on Novatec.
+        </p>
+      </Card>
+
+      {/* Install steps */}
+      <Card className="mt-4">
+        <CardHeader
+          title="Install Sendloom on WordPress/WooCommerce"
+          subtitle="Ten steps, then this page fills with real events · full 18-step version on Ads Launch"
+          action={<a href="/launch" className="rounded-lg border border-line px-3 py-1.5 text-[12px] font-semibold text-ink-2 hover:bg-[#f0efec]">Open install guide</a>}
+        />
+        <ol className="grid grid-cols-1 gap-x-8 gap-y-2 px-5 py-4 sm:grid-cols-2">
+          {[
+            "Download the plugin ZIP (button above)",
+            "Open WordPress Admin (wp-admin)",
+            "Plugins → Add New → Upload Plugin",
+            "Upload sendloom-woocommerce.zip",
+            "Activate the plugin",
+            "Open WooCommerce → Sendloom",
+            "Paste the Sendloom URL and THIS store's API key (Store ID fills in automatically)",
+            "Click Save & connect, then Test connection",
+            "Click Send test event",
+            "Watch it appear here with Live refresh on",
+          ].map((step, i) => (
+            <li key={i} className="flex gap-2.5 text-[13px] leading-relaxed text-ink-2">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-soft text-[11px] font-bold text-brand">{i + 1}</span>
+              {step}
+            </li>
+          ))}
+        </ol>
+        <p className="border-t border-line px-5 py-3 text-xs text-ink-3">
+          Once the test event appears in the stream below, product, cart and checkout events can be tested from the storefront.
+        </p>
       </Card>
 
       {/* Funnel + cart lifecycle */}

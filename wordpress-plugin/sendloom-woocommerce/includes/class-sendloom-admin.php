@@ -72,10 +72,10 @@ class Sendloom_Admin {
     private static function notice($msg) {
         $map = [
             'connected'         => ['success', 'Connected to Sendloom. Store ID and tracking ID saved automatically.'],
-            'connect_failed'    => ['error', 'Connection failed. Check the endpoint URL and API key, then see the error log below.'],
+            'connect_failed'    => ['error', 'Connection failed. Check the Sendloom endpoint URL, the API key (this store\'s key, not the other store\'s) and the error log below.'],
             'connection_ok'     => ['success', 'Connection test passed.'],
             'connection_failed' => ['error', 'Connection test failed. See the error log below.'],
-            'event_sent'        => ['success', 'Test event sent. Check Sendloom → Tracking to see it arrive.'],
+            'event_sent'        => ['success', 'Test event sent. Now open Sendloom Store Tracking and filter by this store; it should appear within a minute.'],
             'event_failed'      => ['error', 'Test event failed. See the error log below.'],
             'synced_products'   => ['success', 'Products synced.'],
             'synced_customers'  => ['success', 'Customers synced.'],
@@ -162,7 +162,8 @@ class Sendloom_Admin {
             <p style="margin-top:8px;"><a class="button" href="<?php echo esc_url(Sendloom_Api::base_url() . '/tracking'); ?>" target="_blank" rel="noopener">Open Sendloom Store Tracking ↗</a> <span class="description">Watch events arrive live while you test.</span></p>
 
             <h2 style="margin-top:24px;">Store diagnostics <small>(copy this when reporting a problem)</small></h2>
-            <textarea readonly rows="6" style="width:100%;max-width:720px;font-family:monospace;font-size:11px;" onclick="this.select()"><?php echo esc_textarea(wp_json_encode($diag, JSON_PRETTY_PRINT)); ?></textarea>
+            <textarea id="sendloom-diag" readonly rows="6" style="width:100%;max-width:720px;font-family:monospace;font-size:11px;" onclick="this.select()"><?php echo esc_textarea(wp_json_encode($diag, JSON_PRETTY_PRINT)); ?></textarea>
+            <p><button type="button" class="button" onclick="var t=document.getElementById('sendloom-diag');t.select();document.execCommand('copy');this.textContent='Copied';">Copy diagnostics</button> <span class="description">Safe to share: contains no API key.</span></p>
 
             <h2 style="margin-top:24px;">Error log</h2>
             <?php if (empty($errors)) : ?>

@@ -15,14 +15,15 @@ export type Action =
   | "submit_feedback"
   | "triage_feedback"       // change status, notes, convert to task
   | "view_admin"
+  | "download_plugin"        // plugin ZIP download (owner + admin)
   | "reset_demo_data"
   | "manage_users"
   | "enable_live_sending"
   | "change_billing";
 
 const GRANTS: Record<Role, Set<Action>> = {
-  owner: new Set(["view_app", "manage_demo_data", "review_intake", "submit_feedback", "triage_feedback", "view_admin", "reset_demo_data", "manage_users", "enable_live_sending", "change_billing"]),
-  admin: new Set(["view_app", "manage_demo_data", "review_intake", "submit_feedback", "triage_feedback", "view_admin", "reset_demo_data"]),
+  owner: new Set(["view_app", "manage_demo_data", "review_intake", "submit_feedback", "triage_feedback", "view_admin", "download_plugin", "reset_demo_data", "manage_users", "enable_live_sending", "change_billing"]),
+  admin: new Set(["view_app", "manage_demo_data", "review_intake", "submit_feedback", "triage_feedback", "view_admin", "download_plugin", "reset_demo_data"]),
   operator: new Set(["view_app", "manage_demo_data", "review_intake", "submit_feedback", "view_admin"]),
   ads_operator: new Set(["view_app", "manage_demo_data", "review_intake", "submit_feedback"]),
   marketing: new Set(["view_app", "manage_demo_data", "review_intake", "submit_feedback"]),
