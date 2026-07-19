@@ -172,6 +172,25 @@ export default async function TrackingPage() {
         <p className="border-t border-line px-5 py-3 text-xs text-ink-3">
           Once the test event appears in the stream below, product, cart and checkout events can be tested from the storefront.
         </p>
+        <div className="border-t border-line px-5 py-4">
+          <p className="text-sm font-semibold">Headless storefront? (MyoTech is one)</p>
+          <p className="mt-1 text-[13px] leading-relaxed text-ink-2">
+            When the customer site is not the WordPress that runs WooCommerce (MyoTech customers browse
+            <b> myotech.store</b> while WordPress lives on api.myotech.store), the plugin cannot load the tracker on the
+            real storefront. Paste this snippet into the root-domain site's <code>&lt;head&gt;</code> instead (theme,
+            layout template or tag manager). It uses only the public tracking ID; keep the plugin on the WordPress side
+            for orders and sync.
+          </p>
+          <ul className="mt-3 space-y-2">
+            {stores.map((s) => (
+              <li key={s.id} className="flex flex-wrap items-center gap-2">
+                <span className="w-20 text-[13px] font-semibold">{s.name}</span>
+                <code className="rounded bg-[#fafaf8] px-2 py-1 text-[11px]">{`<script src="https://sendloom.onrender.com/t/${s.publicId}.js" async></script>`}</code>
+                <CopyButton small label="Copy snippet" text={`<script src="https://sendloom.onrender.com/t/${s.publicId}.js" async></script>`} />
+              </li>
+            ))}
+          </ul>
+        </div>
       </Card>
 
       {/* Funnel + cart lifecycle */}

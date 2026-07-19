@@ -71,6 +71,28 @@ Written for Steve. Twenty steps, roughly ten minutes per site.
   `php -l` on the includes once before first install, or just install on a
   staging copy of MyoTech first.
 
+## Headless storefronts (MyoTech's setup)
+
+MyoTech is headless: customers browse **myotech.store** while WordPress +
+WooCommerce run on **api.myotech.store**. In this shape:
+
+1. Keep the plugin installed on the WordPress site (api.myotech.store). It
+   provides orders, customers, products sync and server-side
+   checkout/purchase truth. Its BROWSER events stay rejected by design.
+2. Add the standalone tracker snippet to the ROOT domain site so customers
+   are tracked where they actually browse. Copy it from Store Tracking:
+
+   `<script src="https://sendloom.onrender.com/t/<publicId>.js" async></script>`
+
+   Paste into the site's <head> via the theme, layout template or tag
+   manager. It carries only the PUBLIC tracking ID (safe to expose).
+3. Optional richer context per page, set before the snippet:
+   `window.SENDLOOM_PAGE = { type: "product", productId: "123", productTitle: "…" }`
+4. Cookie-banner integration: set `window.sendloomConsent = false` to veto
+   tracking until consent is given.
+5. Staff exclusion: set `window.sendloomInternal = true` for logged-in team
+   sessions so they land in the internal stream.
+
 ## Use the customer-facing storefront domain
 
 Sendloom tracks the public website customers visit, never the backend.
