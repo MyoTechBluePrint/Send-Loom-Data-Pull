@@ -28,9 +28,10 @@ passwords in Git, README, reports, chat logs or screenshots.**
 ## Adding a worker
 
 Append `,new.person@company.com:TheirPassword` to `SEED_USERS` and save.
-Role assignment: `steve@*` → owner, `talk@willwoolley.co.uk` → owner (full
-access, granted 19 Jul 2026), `ads@*` → ads_operator, everyone else → viewer
-(adjust in `prisma/seed-users.ts` when the team grows).
+Role assignment: `steve@*` → owner, `talk@willwoolley.co.uk` → Full Access
+(a dedicated role with every owner capability, granted 19 Jul 2026), `ads@*`
+→ ads_operator, everyone else → viewer (adjust in `prisma/seed-users.ts`
+when the team grows).
 
 ## Adding the ads guy
 

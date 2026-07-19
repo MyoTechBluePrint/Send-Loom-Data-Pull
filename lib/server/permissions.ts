@@ -6,7 +6,7 @@ import { cookies } from "next/headers";
 import { db } from "./db";
 import { verifySessionToken, SESSION_COOKIE } from "./auth";
 
-export type Role = "owner" | "admin" | "operator" | "ads_operator" | "marketing" | "editor" | "viewer";
+export type Role = "owner" | "full_access" | "admin" | "operator" | "ads_operator" | "marketing" | "editor" | "viewer";
 
 export type Action =
   | "view_app"
@@ -23,6 +23,9 @@ export type Action =
 
 const GRANTS: Record<Role, Set<Action>> = {
   owner: new Set(["view_app", "manage_demo_data", "review_intake", "submit_feedback", "triage_feedback", "view_admin", "download_plugin", "reset_demo_data", "manage_users", "enable_live_sending", "change_billing"]),
+  // Full Access: every capability the owner has, under its own name so it can
+  // be tuned separately later without touching the owner role.
+  full_access: new Set(["view_app", "manage_demo_data", "review_intake", "submit_feedback", "triage_feedback", "view_admin", "download_plugin", "reset_demo_data", "manage_users", "enable_live_sending", "change_billing"]),
   admin: new Set(["view_app", "manage_demo_data", "review_intake", "submit_feedback", "triage_feedback", "view_admin", "download_plugin", "reset_demo_data"]),
   operator: new Set(["view_app", "manage_demo_data", "review_intake", "submit_feedback", "view_admin"]),
   ads_operator: new Set(["view_app", "manage_demo_data", "review_intake", "submit_feedback"]),
@@ -36,7 +39,7 @@ export function can(role: string, action: Action): boolean {
 }
 
 export const ROLE_LABELS: Record<string, string> = {
-  owner: "Owner", admin: "Admin", operator: "Worker Admin · Operator", ads_operator: "Ads Operator",
+  owner: "Owner", full_access: "Full Access", admin: "Admin", operator: "Worker Admin · Operator", ads_operator: "Ads Operator",
   marketing: "Marketing Manager", editor: "Content Editor", viewer: "Viewer",
 };
 
