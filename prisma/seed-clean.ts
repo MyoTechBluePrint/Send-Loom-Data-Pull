@@ -128,6 +128,14 @@ export async function main() {
 // Boot top-up for CLEAN workspaces only: keeps the ads role current and adds
 // store-flavoured popup templates introduced after the last reset. Idempotent.
 export async function launchTopUp(workspaceId: string) {
+  // Historic-data audit (19 Jul): events ingested before provenance existed
+  // were stamped stream=storefront by the migration default. Anything that is
+  // recognisably a QA/plugin test event is reclassified so it can never
+  // satisfy customer-behaviour milestones.
+  await db.event.updateMany({
+    where: { workspaceId, stream: "storefront", OR: [{ payload: { contains: "qa-panel" } }, { payload: { contains: "/sendloom-test" } }] },
+    data: { stream: "test", sourceContext: "qa-panel", acceptReason: "Reclassified: pre-provenance QA test event." },
+  });
   await db.user.updateMany({
     where: { workspaceId, email: "ads@frenziapp.com" },
     data: { role: "ads_operator" },

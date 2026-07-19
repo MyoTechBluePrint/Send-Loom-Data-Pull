@@ -10,7 +10,7 @@ const TABLES = [
   "form", "leadScore", "keyword", "keywordCluster", "demandSignal",
   "dataProvider", "suppressionRecord", "feedback", "auditLog", "contactPack",
   "exportLog", "intakeItem", "extractedRecord", "cart", "event", "timelineItem",
-  "product", "order",
+  "product", "order", "trackingReject",
 ] as const;
 
 export async function GET() {
