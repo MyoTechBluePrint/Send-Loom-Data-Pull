@@ -60,10 +60,6 @@ class Sendloom_Admin {
                 update_option('sendloom_last_sync', current_time('mysql'));
                 $msg = 'synced_orders';
                 break;
-            case 'register_webhooks':
-                $r   = Sendloom_Api::register_webhooks();
-                $msg = !empty($r['ok']) ? 'webhooks_ok' : 'webhooks_failed';
-                break;
             case 'clear_log':
                 update_option('sendloom_error_log', []);
                 $msg = 'log_cleared';
@@ -84,8 +80,6 @@ class Sendloom_Admin {
             'synced_products'   => ['success', 'Products synced.'],
             'synced_customers'  => ['success', 'Customers synced.'],
             'synced_orders'     => ['success', 'Orders synced.'],
-            'webhooks_ok'       => ['success', 'WooCommerce webhook registered as a backup sync channel.'],
-            'webhooks_failed'   => ['error', 'Webhook registration failed.'],
             'log_cleared'       => ['success', 'Debug log cleared.'],
         ];
         if (isset($map[$msg])) {
@@ -122,7 +116,6 @@ class Sendloom_Admin {
                     <tr><td><strong>Tracking ID (public)</strong></td><td><code><?php echo esc_html($diag['store_public_id'] ?: '—'); ?></code></td></tr>
                     <tr><td><strong>Tracker</strong></td><td><?php echo $connected && $diag['tracking'] === 'yes' ? 'Active on storefront' : 'Off'; ?></td></tr>
                     <tr><td><strong>Popups</strong></td><td><?php echo $connected && $diag['popups'] === 'yes' ? 'Active' : 'Off'; ?></td></tr>
-                    <tr><td><strong>Webhook backup</strong></td><td><?php echo $diag['webhook_id'] !== 'none' ? 'Registered (#' . esc_html($diag['webhook_id']) . ')' : 'Not registered'; ?></td></tr>
                     <tr><td><strong>Last sync</strong></td><td><?php echo esc_html($diag['last_sync']); ?></td></tr>
                     <tr><td><strong>Last event sent</strong></td><td><?php echo esc_html($diag['last_event']); ?></td></tr>
                     <tr><td><strong>Versions</strong></td><td>Plugin <?php echo esc_html($diag['plugin_version']); ?> · WordPress <?php echo esc_html($diag['wordpress']); ?> · WooCommerce <?php echo esc_html($diag['woocommerce']); ?> · PHP <?php echo esc_html($diag['php']); ?></td></tr>
@@ -164,9 +157,9 @@ class Sendloom_Admin {
             self::action_button('sync_products', 'Sync products', !$connected);
             self::action_button('sync_customers', 'Sync customers', !$connected);
             self::action_button('sync_orders', 'Sync orders', !$connected);
-            self::action_button('register_webhooks', 'Register webhooks', !$connected);
             self::action_button('clear_log', 'Clear debug log');
             ?>
+            <p style="margin-top:8px;"><a class="button" href="<?php echo esc_url(Sendloom_Api::base_url() . '/tracking'); ?>" target="_blank" rel="noopener">Open Sendloom Store Tracking ↗</a> <span class="description">Watch events arrive live while you test.</span></p>
 
             <h2 style="margin-top:24px;">Store diagnostics <small>(copy this when reporting a problem)</small></h2>
             <textarea readonly rows="6" style="width:100%;max-width:720px;font-family:monospace;font-size:11px;" onclick="this.select()"><?php echo esc_textarea(wp_json_encode($diag, JSON_PRETTY_PRINT)); ?></textarea>

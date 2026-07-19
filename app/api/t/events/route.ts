@@ -19,7 +19,8 @@ const BROWSER_TYPES = [
 
 const EventSchema = z.object({
   type: z.enum(BROWSER_TYPES),
-  email: z.string().email().optional(),
+  // Tolerant: a malformed email drops the FIELD, never the whole batch.
+  email: z.string().email().optional().catch(undefined),
   anonymousId: z.string().max(64).optional(),
   sessionId: z.string().max(64).optional(),
   eventId: z.string().max(64).optional(), // idempotency key from the tracker

@@ -20,11 +20,19 @@ export async function POST(req: NextRequest) {
     return Response.json({ ok: false, error: parsed.error.flatten() }, { status: 400 });
   }
 
+  // Auto-allowlist the connecting site's host so the browser tracker is
+  // accepted even when the real domain differs from what was seeded
+  // (www variants, different TLD, staging subdomain).
+  const host = parsed.data.storeUrl.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0].toLowerCase();
+  const domains = (store.domains ?? "").split(",").map((d) => d.trim().replace(/^www\./, "")).filter(Boolean);
+  if (host && !domains.includes(host)) domains.push(host);
+
   const updated = await db.store.update({
     where: { id: store.id },
     data: {
       status: "connected",
       url: parsed.data.storeUrl.replace(/^https?:\/\//, ""),
+      domains: domains.join(","),
       pluginVersion: parsed.data.pluginVersion ?? store.pluginVersion,
       lastSyncAt: new Date(),
     },

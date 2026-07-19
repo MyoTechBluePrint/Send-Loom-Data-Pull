@@ -19,10 +19,14 @@ class Sendloom_Api {
         return rtrim(get_option('sendloom_api_url', 'http://localhost:3009'), '/');
     }
 
-    public static function request($method, $path, $body = null) {
+    public static function request($method, $path, $body = null, $blocking = true) {
+        // Non-blocking mode is fire-and-forget: used for behavioural events on
+        // live page loads so a slow Sendloom endpoint can never stall the
+        // storefront. Admin actions (connect, test, sync) stay blocking.
         $args = [
-            'method'  => $method,
-            'timeout' => 10,
+            'method'   => $method,
+            'blocking' => $blocking,
+            'timeout'  => $blocking ? 10 : 2,
             'headers' => [
                 'Content-Type'   => 'application/json',
                 'x-sendloom-key' => get_option('sendloom_api_key', ''),
@@ -36,6 +40,10 @@ class Sendloom_Api {
         }
 
         $response = wp_remote_request(self::base_url() . $path, $args);
+
+        if (!$blocking) {
+            return ['ok' => true, 'queued' => true];
+        }
 
         if (is_wp_error($response)) {
             self::log_error($path, $response->get_error_message());
@@ -72,11 +80,11 @@ class Sendloom_Api {
         return $result;
     }
 
-    public static function send_event($type, $data = []) {
+    public static function send_event($type, $data = [], $blocking = true) {
         $event  = array_merge(['type' => $type], $data);
-        $result = self::request('POST', '/api/v1/events', $event);
+        $result = self::request('POST', '/api/v1/events', $event, $blocking);
         if (!empty($result['ok'])) {
-            update_option('sendloom_last_event', current_time('mysql') . ' · ' . $type);
+            update_option('sendloom_last_event', current_time('mysql') . ' · ' . $type . ($blocking ? '' : ' (queued)'));
         }
         return $result;
     }

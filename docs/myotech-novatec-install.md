@@ -33,7 +33,7 @@ Written for Steve. Twenty steps, roughly ten minutes per site.
     event appears in "Last 20 events" within seconds.
 12. Click **Sync products**, then **Sync customers**, then **Sync orders**
     (first 100-page batches each; large stores may take a minute).
-13. Optional: **Register webhooks** for the order backup channel.
+13. Orders push automatically when they complete; the manual **Sync orders** button backfills history.
 
 ## Verify tracking (per site)
 

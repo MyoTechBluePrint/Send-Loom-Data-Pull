@@ -7,6 +7,7 @@ import { cartStats } from "@/lib/server/carts";
 import { can, currentUser } from "@/lib/server/permissions";
 import { TrackingTestButtons } from "@/components/tracking-test-buttons";
 import { TrackingEventsTable, type QaEvent } from "@/components/tracking-events-table";
+import { LiveRefresh } from "@/components/live-refresh";
 
 export const dynamic = "force-dynamic";
 
@@ -47,7 +48,7 @@ export default async function TrackingPage() {
     <Shell
       title="Store Tracking QA"
       subtitle="Live events, cart lifecycle and store connections · install checks for MyoTech and Novatec"
-      actions={<TrackingTestButtons />}
+      actions={<div className="flex items-center gap-2"><LiveRefresh /><TrackingTestButtons /></div>}
     >
       {/* Stores */}
       <Card>

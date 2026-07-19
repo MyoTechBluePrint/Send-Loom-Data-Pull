@@ -152,7 +152,9 @@
     setInterval(watchCheckoutFields, 3000); // block-based checkout re-renders
   }
   if (page.type === "purchase") {
-    track("checkout_completed", {});
+    // Page view only: the plugin sends checkout_completed server-side with
+    // the order number, which is the authoritative record.
+    track("page_viewed", { pageType: "purchase" });
   }
 
   // ---- Popups ----
