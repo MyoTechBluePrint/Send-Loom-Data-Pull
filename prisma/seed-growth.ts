@@ -94,7 +94,7 @@ export async function seedGrowth(workspaceId: string) {
 // MyoTech + Novatec store records for the plugin rollout. Idempotent.
 export async function seedStores(workspaceId: string) {
   const defs = [
-    { name: "MyoTech", url: "myotechlabs.co.uk" },
+    { name: "MyoTech", url: "myotech.store" },
     { name: "Novatec", url: "novateclabs.co.uk" },
   ];
   const { randomBytes } = await import("node:crypto");

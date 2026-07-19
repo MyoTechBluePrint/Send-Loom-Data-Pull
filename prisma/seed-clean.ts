@@ -21,7 +21,7 @@ export async function main() {
   // The two real stores. Pending until the plugin connects.
   const { randomBytes } = await import("node:crypto");
   for (const d of [
-    { name: "MyoTech", url: "myotechlabs.co.uk" },
+    { name: "MyoTech", url: "myotech.store" },
     { name: "Novatec", url: "novateclabs.co.uk" },
   ]) {
     await db.store.create({
@@ -130,6 +130,12 @@ export async function launchTopUp(workspaceId: string) {
   await db.user.updateMany({
     where: { workspaceId, email: "ads@frenziapp.com" },
     data: { role: "ads_operator" },
+  });
+  // Domain correction (19 Jul): the real MyoTech site is myotech.store, not
+  // the invented myotechlabs.co.uk. Fix any store still carrying the old value.
+  await db.store.updateMany({
+    where: { workspaceId, name: "MyoTech", url: "myotechlabs.co.uk" },
+    data: { url: "myotech.store", domains: "myotech.store" },
   });
   const wanted: [string, string, string][] = [
     ["MyoTech · Discount signup (template)", "popup", "Time on page · 8s · all pages"],

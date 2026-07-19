@@ -12,7 +12,7 @@ const field = "mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 te
 type Saved = { name: string; url: string };
 
 const STORE_ROOTS: Record<string, string> = {
-  MyoTech: "https://myotechlabs.co.uk/",
+  MyoTech: "https://myotech.store/",
   Novatec: "https://novateclabs.co.uk/",
 };
 
@@ -83,7 +83,7 @@ export default function UtmBuilderPage() {
               </label>
             </div>
             {([
-              ["landing", "Landing page URL *", "https://myotechlabs.co.uk/product/…"],
+              ["landing", "Landing page URL *", "https://myotech.store/product/…"],
               ["campaign", "Campaign *", "july-nad-launch"],
               ["content", "Content (ad/creative)", "video-a"],
               ["term", "Term (keyword)", ""],
