@@ -670,7 +670,7 @@ export function ImportsClient({ batches, folders }: { batches: ImportBatch[]; fo
                           if (e.key === "Backspace" && !tagInput && tags.length) setTags(tags.slice(0, -1));
                         }}
                         onBlur={() => tagInput && addTag(tagInput)}
-                        placeholder={tags.length ? "Add another…" : "e.g. from-frenzi, myotech, whatsapp-group"}
+                        placeholder={tags.length ? "Add another…" : "e.g. email-list, whatsapp-group, customer-contacts"}
                         className="min-w-[140px] flex-1 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[12px] outline-none focus:border-brand"
                       />
                     </div>
