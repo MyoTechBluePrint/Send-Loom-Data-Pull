@@ -63,6 +63,11 @@ async function main() {
   });
   check("2 contacts imported (alice + carol)", confirm.imported === 2, JSON.stringify(confirm));
   check("1 merged (in-file duplicate)", confirm.merged === 1);
+  const taggedAlice = await db.contact.findUnique({
+    where: { workspaceId_email: { workspaceId: ws.id, email: `alice.${STAMP}@example.com` } },
+    include: { tags: { include: { tag: true } } },
+  });
+  check("import tag attached to imported contact", taggedAlice?.tags.some((ct) => ct.tag.name === `test-${STAMP}`) ?? false);
   check("segment created from batch", confirm.segmentId !== null);
 
   const alice = await db.contact.findUnique({

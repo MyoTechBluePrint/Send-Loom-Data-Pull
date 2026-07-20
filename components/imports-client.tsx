@@ -70,8 +70,34 @@ export function ImportsClient({ batches, folders }: { batches: ImportBatch[]; fo
   const [activeFolder, setActiveFolder] = useState<string | null>(null); // filter + filing destination
   const [newFolder, setNewFolder] = useState("");
   const [folderBusy, setFolderBusy] = useState(false);
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState("");
+  const [batchLabel, setBatchLabel] = useState<string | null>(null);
   const [projectId, setProjectId] = useState<string | null>(null);
   const MAX_BROWSER_BYTES = 4 * 1024 * 1024;
+
+  // Auto-suggested tags: brand names in the filename, the file's detected
+  // kind, and the library folder it is being filed into. Prefilled so mass
+  // drops usually need no typing; suppression lists never tag contacts.
+  function suggestTags(fileName: string, kind?: string): string[] {
+    if (kind === "suppression_list") return [];
+    const out = new Set<string>();
+    const base = fileName.toLowerCase();
+    for (const brand of ["myotech", "novatec", "frenzi", "savvy"]) if (base.includes(brand)) out.add(brand);
+    if (base.includes("whatsapp") || kind === "whatsapp_export") out.add("whatsapp-group");
+    if (kind === "woocommerce") out.add("woocommerce");
+    if (kind === "mailchimp") out.add("mailchimp");
+    if (kind === "klaviyo") out.add("klaviyo");
+    const folderName = folders.find((f) => f.id === activeFolder)?.name;
+    if (folderName) out.add(folderName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, ""));
+    return Array.from(out).slice(0, 5);
+  }
+
+  function addTag(raw: string) {
+    const clean = raw.trim().toLowerCase().replace(/[^a-z0-9 _-]/g, "").replace(/\s+/g, "-").slice(0, 40);
+    if (clean && !tags.includes(clean)) setTags((x) => [...x, clean]);
+    setTagInput("");
+  }
 
   async function handleFiles(files: FileList | File[]) {
     const list = Array.from(files);
@@ -134,6 +160,8 @@ export function ImportsClient({ batches, folders }: { batches: ImportBatch[]; fo
     setMapping(json.mapping);
     setPreview(json.preview);
     setTotalRows(json.totalRows);
+    setTags(suggestTags(job.fileName, job.kind));
+    setBatchLabel(job.fileName.replace(/\.[^.]+$/, ""));
     setWizard(true);
     setStep(1);
     setJobs((j) => j.map((x) => x.id === job.id ? { ...x, status: "mapping" } : x));
@@ -184,6 +212,8 @@ export function ImportsClient({ batches, folders }: { batches: ImportBatch[]; fo
       sourceType: "webinar",
       csv: DEMO_CSV,
     });
+    setTags(["webinar-july", "warm-lead"]);
+    setBatchLabel("Webinar attendees · July (demo file)");
     setBatchId(json.batchId);
     setColumns(json.columns);
     setMapping(json.mapping);
@@ -202,8 +232,8 @@ export function ImportsClient({ batches, folders }: { batches: ImportBatch[]; fo
   async function runConfirm() {
     const json = await call(`/api/imports/${batchId}/confirm`, {
       duplicateStrategy: dupeAction,
-      tags: ["webinar-july", "warm-lead"],
-      lawfulBasis: "Consent (webinar registration checkbox)",
+      tags,
+      lawfulBasis: "Consent (import evidence)",
       createSegment,
     });
     setResult(json);
@@ -607,10 +637,9 @@ export function ImportsClient({ batches, folders }: { batches: ImportBatch[]; fo
                 <CardHeader title="Source ledger entry" subtitle="Appended to every contact in this batch, permanently" />
                 <div className="space-y-3 px-5 py-4 text-[13px]">
                   {[
-                    ["Source name", "Webinar attendees · July (demo file)"],
-                    ["Source type", "Event/webinar registration"],
-                    ["Uploaded by", "steve@vitaliswellness.co.uk"],
-                    ["Lawful basis", "Consent (webinar registration checkbox)"],
+                    ["Source name", batchLabel ?? "This import"],
+                    ["Uploaded by", "you (recorded on every contact)"],
+                    ["Lawful basis", "Consent (import evidence)"],
                     ["Consent rule", "Opted-out contacts are never reactivated"],
                     ["Rows without consent", "Held as 'pending' · no marketing until confirmed"],
                   ].map(([k, v]) => (
@@ -625,12 +654,30 @@ export function ImportsClient({ batches, folders }: { batches: ImportBatch[]; fo
                 <CardHeader title="Tags & audience" />
                 <div className="space-y-3 px-5 py-4 text-[13px]">
                   <div>
-                    <p className="text-xs font-medium text-ink-3">Tags applied</p>
-                    <div className="mt-1.5 flex flex-wrap gap-1.5">
-                      {["webinar-july", "warm-lead"].map((t) => (
-                        <span key={t} className="rounded-full bg-brand-soft px-2.5 py-1 text-[11px] font-semibold text-brand">{t}</span>
+                    <p className="text-xs font-medium text-ink-3">Tag everyone in this import</p>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      {tags.map((tg) => (
+                        <span key={tg} className="flex items-center gap-1 rounded-full bg-brand-soft px-2.5 py-1 text-[11px] font-semibold text-brand">
+                          {tg}
+                          <button onClick={() => setTags(tags.filter((x) => x !== tg))} className="text-brand/60 hover:text-brand" aria-label={`Remove ${tg}`}>×</button>
+                        </span>
                       ))}
+                      <input
+                        value={tagInput}
+                        onChange={(e) => setTagInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === ",") { e.preventDefault(); addTag(tagInput); }
+                          if (e.key === "Backspace" && !tagInput && tags.length) setTags(tags.slice(0, -1));
+                        }}
+                        onBlur={() => tagInput && addTag(tagInput)}
+                        placeholder={tags.length ? "Add another…" : "e.g. from-frenzi, myotech, whatsapp-group"}
+                        className="min-w-[140px] flex-1 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[12px] outline-none focus:border-brand"
+                      />
                     </div>
+                    <p className="mt-1.5 text-[11px] leading-relaxed text-ink-3">
+                      Suggested automatically from the file name, its detected type and the library folder. Press Enter to add;
+                      tags become filters in Audiences and show on every contact.
+                    </p>
                   </div>
                   <label className="flex items-center justify-between rounded-lg border border-line px-3 py-2.5">
                     <span className="font-medium">Create audience from this import</span>
