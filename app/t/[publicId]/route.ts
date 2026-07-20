@@ -28,7 +28,14 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ publicId: s
     return new Response("// tracker unavailable", { status: 500, headers: { "Content-Type": "text/javascript" } });
   }
 
-  const endpoint = new URL(req.url).origin;
+  // Public origin, NOT new URL(req.url).origin: behind Render's proxy that
+  // yields the internal host (localhost:10000), which broke every tracker
+  // POST on the storefront. Forwarded headers carry the real public host.
+  const fwdHost = req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? "";
+  const fwdProto = req.headers.get("x-forwarded-proto") ?? "https";
+  const endpoint = fwdHost && !fwdHost.includes("localhost")
+    ? `${fwdProto}://${fwdHost.split(",")[0].trim()}`
+    : "https://sendloom.onrender.com";
   const prelude = `// Sendloom standalone tracker (headless storefront build)
 (function () {
   if (window.SENDLOOM_CFG) return; // plugin config wins if both are present
@@ -51,7 +58,9 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ publicId: s
 })();
 `;
 
-  return new Response(prelude + tracker, {
+  // GTM setups can inject the tag twice; boot the tracker exactly once.
+  const body = prelude + "if (!window.__sendloomBooted) { window.__sendloomBooted = true;\n" + tracker + "\n}";
+  return new Response(body, {
     headers: {
       "Content-Type": "text/javascript; charset=utf-8",
       "Cache-Control": "public, max-age=300",
