@@ -50,6 +50,7 @@ const nav: { section?: string; items: { href: string; label: string; icon: strin
       { href: "/analytics", label: "Analytics", icon: "∿" },
       { href: "/providers", label: "API Providers", icon: "↯" },
       { href: "/admin", label: "Admin", icon: "▣" },
+      { href: "/team", label: "Team", icon: "☺" },
       { href: "/settings", label: "Settings", icon: "⚙" },
       { href: "/team-handover", label: "Handover Guide", icon: "✦" },
     ],

@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
 
   const email = parsed.data.email.toLowerCase();
   const user = await db.user.findUnique({ where: { email } });
-  if (!user?.passwordHash || !verifyPassword(parsed.data.password, user.passwordHash)) {
+  if (!user?.passwordHash || user.disabled || !verifyPassword(parsed.data.password, user.passwordHash)) {
     // Audit the attempted email (never the password) so failed sign-ins are
     // diagnosable from Admin → Audit log instead of guesswork.
     const ws = await db.workspace.findFirst();

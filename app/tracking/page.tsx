@@ -10,6 +10,7 @@ import { TrackingEventsTable, type QaEvent } from "@/components/tracking-events-
 import { LiveRefresh } from "@/components/live-refresh";
 import { CopyButton } from "@/components/copy-button";
 import { TrackingModeToggle } from "@/components/tracking-mode-toggle";
+import { StoreSettingsEditor } from "@/components/store-settings-editor";
 import { looksBackend, normalizeHost } from "@/lib/server/tracking-domains";
 
 export const dynamic = "force-dynamic";
@@ -107,6 +108,7 @@ export default async function TrackingPage() {
                   <p className="font-medium">{s.name}</p>
                   <p className="text-xs text-ink-3">Storefront: <b>{s.url}</b> · plugin {s.pluginVersion ?? "not installed"}</p>
                   <p className="text-xs text-ink-3">Tracks: {s.domains || "any"}{s.backendDomains ? <> · rejects: <span className="text-red-700">{s.backendDomains}</span></> : null}</p>
+                  {showKeys && <div className="mt-1.5"><StoreSettingsEditor store={{ id: s.id, name: s.name, url: s.url, domains: s.domains, backendDomains: s.backendDomains }} /></div>}
                 </Td>
                 <Td><span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">{s.environment}</span></Td>
                 <Td>

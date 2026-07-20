@@ -25,6 +25,17 @@ passwords in Git, README, reports, chat logs or screenshots.**
 3. Save. Render restarts and the new hashes apply at boot.
 4. Tell the affected person their new password through a separate channel.
 
+## Self-service management (in-platform)
+
+- **Team page** (/team, owner-only): add logins, change roles, reset
+  passwords, disable accounts. Changes are audited and take effect on the
+  next page load. Accounts added here survive deploys, but a workspace RESET
+  re-seeds from SEED_USERS, so mirror long-term accounts there.
+- **Store settings** (Store Tracking → Edit domains, owner-only): storefront
+  domain, allowed tracking domains and backend domains per store.
+  Backend-looking values (api., admin., staging., localhost) are refused
+  unless the explicit override box is ticked; overrides are audited.
+
 ## Adding a worker
 
 Append `,new.person@company.com:TheirPassword` to `SEED_USERS` and save.
@@ -53,11 +64,10 @@ everyone until Steve unparks it).
 
 ## Disabling a worker
 
-Remove their pair from `SEED_USERS` and save; on restart their password hash
-is no longer refreshed but the old one remains valid, so ALSO rotate it out:
-easiest is to set their pair to a new random password nobody is given, save,
-then remove the pair on the next edit. (A proper disable flag ships with real
-user management.)
+Team page → Disable. Login is refused immediately and any existing session
+stops working on the next request. Also remove their pair from `SEED_USERS`
+if present, otherwise the boot seeding keeps their password hash fresh (the
+disable flag still blocks them either way).
 
 ## Roles (staging)
 

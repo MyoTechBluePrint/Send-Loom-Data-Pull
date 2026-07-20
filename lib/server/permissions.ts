@@ -48,5 +48,6 @@ export async function currentUser() {
   const jar = await cookies();
   const email = verifySessionToken(jar.get(SESSION_COOKIE)?.value);
   if (!email) return null;
-  return db.user.findUnique({ where: { email } });
+  const user = await db.user.findUnique({ where: { email } });
+  return user && !user.disabled ? user : null;
 }
