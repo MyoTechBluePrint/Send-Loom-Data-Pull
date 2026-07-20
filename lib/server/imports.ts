@@ -55,7 +55,7 @@ export function detectMapping(columns: string[]): Record<string, PlatformField> 
 
 export async function createBatchFromCsv(opts: {
   workspaceId: string; name: string; source: string; sourceType: string;
-  uploadedBy: string; csv: string; projectId?: string; classification?: string;
+  uploadedBy: string; csv: string; projectId?: string; classification?: string; folderId?: string;
 }) {
   const parsed = Papa.parse<Record<string, string>>(opts.csv.trim(), { header: true, skipEmptyLines: true });
   if (parsed.errors.length > 3) {
@@ -69,6 +69,7 @@ export async function createBatchFromCsv(opts: {
       workspaceId: opts.workspaceId, name: opts.name, source: opts.source,
       sourceType: opts.sourceType, uploadedBy: opts.uploadedBy,
       projectId: opts.projectId ?? null, classification: opts.classification ?? null,
+      folderId: opts.folderId ?? null,
       status: "mapping", mapping: JSON.stringify(mapping), totalRows: parsed.data.length,
     },
   });

@@ -42,7 +42,7 @@ const steps = ["Upload", "Map fields", "Quality review", "Source & consent", "Im
 type ReviewCounts = { ready: number; duplicate: number; invalid: number; blocked: number; missingConsent: number; needsReview: number };
 type Issue = { rowNumber: number; email: string; issue: string; status: string };
 
-export function ImportsClient({ batches }: { batches: ImportBatch[] }) {
+export function ImportsClient({ batches, folders }: { batches: ImportBatch[]; folders: { id: string; name: string; count: number }[] }) {
   const router = useRouter();
   const [wizard, setWizard] = useState(false);
   const [step, setStep] = useState(0);
@@ -67,6 +67,9 @@ export function ImportsClient({ batches }: { batches: ImportBatch[] }) {
   };
   const [jobs, setJobs] = useState<Job[]>([]);
   const [dragOver, setDragOver] = useState(false);
+  const [activeFolder, setActiveFolder] = useState<string | null>(null); // filter + filing destination
+  const [newFolder, setNewFolder] = useState("");
+  const [folderBusy, setFolderBusy] = useState(false);
   const [projectId, setProjectId] = useState<string | null>(null);
   const MAX_BROWSER_BYTES = 4 * 1024 * 1024;
 
@@ -124,6 +127,7 @@ export function ImportsClient({ batches }: { batches: ImportBatch[] }) {
       csv: job.text,
       projectId: projectId ?? undefined,
       classification: job.kind,
+      folderId: activeFolder ?? undefined,
     });
     setBatchId(json.batchId);
     setColumns(json.columns);
@@ -208,6 +212,24 @@ export function ImportsClient({ batches }: { batches: ImportBatch[] }) {
   }
 
   const sourcePerformance = batches.filter((b) => b.revenue > 0).sort((a, b) => b.revenue - a.revenue);
+  const visibleBatches = activeFolder ? batches.filter((b) => b.folderId === activeFolder) : batches;
+  const activeFolderName = folders.find((f) => f.id === activeFolder)?.name ?? null;
+  const unfiled = batches.filter((b) => !b.folderId).length;
+
+  async function createFolder() {
+    if (!newFolder.trim()) return;
+    setFolderBusy(true);
+    const r = await fetch("/api/folders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: newFolder.trim() }) });
+    const j = await r.json().catch(() => ({ ok: false }));
+    setFolderBusy(false);
+    if (j.ok) { setNewFolder(""); setActiveFolder(j.folder.id); router.refresh(); }
+    else setError(j.error ?? "Could not create folder");
+  }
+
+  async function fileBatch(batchId: string, folderId: string | null) {
+    await fetch("/api/folders", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ batchId, folderId }) });
+    router.refresh();
+  }
 
   return (
     <Shell
@@ -234,6 +256,39 @@ export function ImportsClient({ batches }: { batches: ImportBatch[] }) {
 
       {!wizard ? (
         <>
+          {/* Data library: folders the team files drops into */}
+          <Card className="mb-4">
+            <div className="flex flex-wrap items-center gap-2 px-5 py-3">
+              <span className="text-xs font-bold uppercase tracking-wide text-ink-3">Library</span>
+              <button onClick={() => setActiveFolder(null)} className={`rounded-full px-3 py-1 text-[12px] font-semibold transition ${activeFolder === null ? "bg-brand text-white" : "bg-[#f0efec] text-ink-2 hover:bg-[#e7e5e0]"}`}>
+                All · {batches.length}
+              </button>
+              {folders.map((f) => (
+                <button key={f.id} onClick={() => setActiveFolder(activeFolder === f.id ? null : f.id)} className={`rounded-full px-3 py-1 text-[12px] font-semibold transition ${activeFolder === f.id ? "bg-brand text-white" : "bg-[#f0efec] text-ink-2 hover:bg-[#e7e5e0]"}`}>
+                  ▣ {f.name} · {f.count}
+                </button>
+              ))}
+              {unfiled > 0 && folders.length > 0 && <span className="text-[11px] text-ink-3">{unfiled} unfiled</span>}
+              <div className="ml-auto flex items-center gap-1.5">
+                <input
+                  value={newFolder}
+                  onChange={(e) => setNewFolder(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && createFolder()}
+                  placeholder="New folder name"
+                  className="w-40 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[12px] outline-none focus:border-brand"
+                />
+                <button disabled={folderBusy || !newFolder.trim()} onClick={createFolder} className="rounded-lg bg-brand px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#5b21b6] disabled:opacity-50">
+                  Create
+                </button>
+              </div>
+            </div>
+            {activeFolder && (
+              <p className="border-t border-line px-5 py-2 text-[12px] text-ink-2">
+                Viewing and filing into <b>{activeFolderName}</b>: new drops land in this folder automatically. Click the folder again to go back to everything.
+              </p>
+            )}
+          </Card>
+
           <div
             onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
@@ -341,7 +396,7 @@ export function ImportsClient({ batches }: { batches: ImportBatch[] }) {
 
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
             <Card className="xl:col-span-2">
-              <CardHeader title="Import batches" subtitle="Live from the database · every upload quality-checked and source-tagged" />
+              <CardHeader title={activeFolderName ? `Import batches · ${activeFolderName}` : "Import batches"} subtitle="Live from the database · every upload quality-checked, source-tagged and filed in the library" />
               <div className="overflow-x-auto scroll-thin"><table className="w-full min-w-[640px]">
                 <thead className="border-b border-line">
                   <tr>
@@ -354,11 +409,19 @@ export function ImportsClient({ batches }: { batches: ImportBatch[] }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
-                  {batches.map((b) => (
+                  {visibleBatches.map((b) => (
                     <tr key={b.id} className="hover:bg-[#fafaf8]">
                       <Td>
                         <p className="font-medium">{b.name}</p>
                         <p className="text-xs text-ink-3">{b.source} · {b.format} · {b.date} · by {b.uploadedBy}</p>
+                        <select
+                          value={b.folderId ?? ""}
+                          onChange={(e) => fileBatch(b.id, e.target.value || null)}
+                          className="mt-1 rounded-lg border border-line bg-surface px-1.5 py-0.5 text-[11px] text-ink-2 outline-none focus:border-brand"
+                        >
+                          <option value="">No folder</option>
+                          {folders.map((f) => <option key={f.id} value={f.id}>▣ {f.name}</option>)}
+                        </select>
                       </Td>
                       <Td className="tabular text-right">{num(b.total)}</Td>
                       <Td className="tabular text-right text-emerald-700">{num(b.ready)}</Td>
@@ -367,6 +430,11 @@ export function ImportsClient({ batches }: { batches: ImportBatch[] }) {
                       <Td className="text-right"><Badge value={batchBadge[b.status]} label={b.status} /></Td>
                     </tr>
                   ))}
+                  {visibleBatches.length === 0 && (
+                    <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-ink-3">
+                      {activeFolderName ? `Nothing filed in ${activeFolderName} yet. Drop files while this folder is selected, or move existing imports here with the folder dropdown.` : "No imports yet."}
+                    </td></tr>
+                  )}
                 </tbody>
               </table></div>
             </Card>
@@ -465,6 +533,11 @@ export function ImportsClient({ batches }: { batches: ImportBatch[] }) {
                       </Td>
                     </tr>
                   ))}
+                  {visibleBatches.length === 0 && (
+                    <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-ink-3">
+                      {activeFolderName ? `Nothing filed in ${activeFolderName} yet. Drop files while this folder is selected, or move existing imports here with the folder dropdown.` : "No imports yet."}
+                    </td></tr>
+                  )}
                 </tbody>
               </table></div>
             </Card>

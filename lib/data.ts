@@ -383,6 +383,8 @@ export type ImportBatch = {
   name: string;
   source: string;
   format: string;
+  folderId?: string | null;
+  folderName?: string | null;
   date: string;
   uploadedBy: string;
   total: number;

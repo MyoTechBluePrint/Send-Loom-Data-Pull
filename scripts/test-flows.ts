@@ -203,6 +203,20 @@ async function main() {
     check("system events without store still accepted", m.action === "accept");
   }
 
+  console.log("Data library folders");
+  {
+    const folder = await db.dataFolder.create({ data: { workspaceId: ws.id, name: `Shelf ${STAMP}`, createdBy: "test-script" } });
+    const anyBatch = await db.importBatch.findFirstOrThrow({ where: { workspaceId: ws.id } });
+    await db.importBatch.update({ where: { id: anyBatch.id }, data: { folderId: folder.id } });
+    const inFolder = await db.importBatch.count({ where: { folderId: folder.id } });
+    check("batch filed into folder", inFolder === 1);
+    const dupe = await db.dataFolder.create({ data: { workspaceId: ws.id, name: `Shelf ${STAMP}`, createdBy: "x" } }).catch(() => null);
+    check("duplicate folder names refused", dupe === null);
+    await db.importBatch.update({ where: { id: anyBatch.id }, data: { folderId: null } });
+    await db.dataFolder.delete({ where: { id: folder.id } });
+    check("empty folder deletable", (await db.dataFolder.findUnique({ where: { id: folder.id } })) === null);
+  }
+
   console.log("Campaign send path");
   // Deterministic suppressed-contact case (must not depend on leftover data):
   // a contact exists AND its email is on the suppression list.

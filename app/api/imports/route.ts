@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { createBatchFromCsv } from "@/lib/server/imports";
 import { demoWorkspaceId } from "@/lib/server/views";
+import { currentUser } from "@/lib/server/permissions";
 
 const Body = z.object({
   name: z.string().min(1),
@@ -10,9 +11,12 @@ const Body = z.object({
   csv: z.string().min(1).max(5_000_000),
   projectId: z.string().optional(),
   classification: z.string().max(40).optional(),
+  folderId: z.string().optional(),
 });
 
 export async function POST(req: NextRequest) {
+  const user = await currentUser();
+  if (!user) return Response.json({ ok: false, error: "Sign in required" }, { status: 401 });
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return Response.json({ ok: false, error: parsed.error.flatten() }, { status: 400 });
 
@@ -23,10 +27,11 @@ export async function POST(req: NextRequest) {
       name: parsed.data.name,
       source: parsed.data.source,
       sourceType: parsed.data.sourceType,
-      uploadedBy: "steve@vitaliswellness.co.uk",
+      uploadedBy: user.email,
       csv: parsed.data.csv,
       projectId: parsed.data.projectId,
       classification: parsed.data.classification,
+      folderId: parsed.data.folderId,
     });
     return Response.json({ ok: true, ...result });
   } catch (e) {

@@ -166,6 +166,8 @@ model ImportBatch {
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
   projectId   String?
   project     ImportProject? @relation(fields: [projectId], references: [id])
+  folderId    String?
+  folder      DataFolder? @relation(fields: [folderId], references: [id])
   classification String? // contact_list | customer_list | suppression_list | savvy_mango | woocommerce | mailchimp | klaviyo | whatsapp_export | keyword_file | sales_notes | unknown
   name        String
   source      String
@@ -748,4 +750,20 @@ model TrackingReject {
   createdAt DateTime @default(now())
 
   @@index([storeId, createdAt])
+}
+
+// Library folders for the Data Dropzone: named shelves the team files
+// imports into (per-brand lists, supplier data, event leads…). Organisation
+// only; consent, suppression and classification rules are untouched.
+model DataFolder {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  description String?
+  createdBy   String
+  createdAt   DateTime @default(now())
+
+  batches ImportBatch[]
+
+  @@unique([workspaceId, name])
 }

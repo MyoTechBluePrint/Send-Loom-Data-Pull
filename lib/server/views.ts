@@ -121,9 +121,10 @@ const batchStatusView: Record<string, ImportBatch["status"]> = {
 
 export async function getImportBatchesView(): Promise<ImportBatch[]> {
   const wsId = await demoWorkspaceId();
-  const batches = await db.importBatch.findMany({ where: { workspaceId: wsId }, orderBy: { createdAt: "desc" } });
+  const batches = await db.importBatch.findMany({ where: { workspaceId: wsId }, orderBy: { createdAt: "desc" }, include: { folder: { select: { id: true, name: true } } } });
   return batches.map((b) => ({
     id: b.id, name: b.name, source: b.source, format: b.format.toUpperCase(),
+    folderId: b.folder?.id ?? null, folderName: b.folder?.name ?? null,
     date: dateStr(b.createdAt), uploadedBy: b.uploadedBy,
     total: b.totalRows, ready: b.readyRows, duplicates: b.duplicateRows,
     merged: b.mergedRows, blocked: b.blockedRows, missingConsent: b.missingConsentRows,
