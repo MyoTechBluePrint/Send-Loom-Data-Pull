@@ -4,6 +4,7 @@
 // a password is: change the env var, restart.
 import { db } from "../lib/server/db";
 import { hashPassword } from "../lib/server/auth";
+import { seedDevAccounts } from "../lib/server/dev-access";
 
 export async function seedUsers(workspaceId: string) {
   let raw = process.env.SEED_USERS;
@@ -46,5 +47,7 @@ export async function seedUsers(workspaceId: string) {
     count++;
   }
   console.log(`Provisioned ${count} login user(s) from SEED_USERS.`);
+  const dev = await seedDevAccounts(workspaceId);
+  if (dev) console.log(`Provisioned ${dev} dev account(s) (non-production only).`);
   return count;
 }

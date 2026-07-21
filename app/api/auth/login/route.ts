@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/server/db";
 import { audit } from "@/lib/server/audit";
 import { createSessionToken, verifyPassword, checkRateLimit, SESSION_COOKIE } from "@/lib/server/auth";
+import { DEV_ACCOUNT_DOMAIN, devAccessAllowed, seedDevAccounts } from "@/lib/server/dev-access";
 
 const Body = z.object({ email: z.string().email(), password: z.string().min(1), rememberMe: z.boolean().optional() });
 
@@ -16,6 +17,21 @@ export async function POST(req: NextRequest) {
   }
 
   const email = parsed.data.email.toLowerCase();
+  // Dev/preview only: signing into a reserved @sendloom.local account with
+  // the configured dev password provisions/refreshes those accounts first,
+  // so a fresh database never blocks authorised tooling. Dead in production.
+  if (
+    devAccessAllowed() &&
+    email.endsWith(DEV_ACCOUNT_DOMAIN) &&
+    process.env.SENDLOOM_DEV_PASSWORD &&
+    parsed.data.password === process.env.SENDLOOM_DEV_PASSWORD
+  ) {
+    const ws = await db.workspace.findFirst();
+    if (ws) {
+      await seedDevAccounts(ws.id);
+      await audit(ws.id, email, "auth.dev_accounts_provisioned", "Dev sign-in refreshed @sendloom.local accounts");
+    }
+  }
   const user = await db.user.findUnique({ where: { email } });
   if (!user?.passwordHash || user.disabled || !verifyPassword(parsed.data.password, user.passwordHash)) {
     // Audit the attempted email (never the password) so failed sign-ins are
