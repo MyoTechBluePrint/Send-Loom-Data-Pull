@@ -464,6 +464,18 @@ model Form {
   signups     Int      @default(0)
   isDemo      Boolean  @default(false)
   createdAt   DateTime @default(now())
+  // Builder config (null = the tracker's clean defaults)
+  headline       String?
+  body           String?
+  buttonLabel    String?
+  consentLabel   String?
+  successMessage String?
+  offerCode      String?
+  accent         String? // hex button/brand colour on-site
+  collectName    Boolean  @default(false)
+  triggerKind    String   @default("time_on_page") // time_on_page | exit_intent | scroll
+  triggerSeconds Int      @default(8)
+  updatedAt      DateTime @default(now()) @updatedAt
 }
 
 model LeadScore {

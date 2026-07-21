@@ -14,7 +14,7 @@ export default async function FormsPage() {
     <Shell
       title="Popups & Forms"
       subtitle={anyLive ? "Capture subscribers on-site · consent logged automatically" : "Templates ready · activate one after MyoTech/Novatec tracking connects"}
-      actions={<PrimaryButton>New form</PrimaryButton>}
+      actions={<Link href="/forms/new"><PrimaryButton>New form</PrimaryButton></Link>}
     >
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <Card className="xl:col-span-2">
@@ -32,7 +32,7 @@ export default async function FormsPage() {
               {forms.map((f) => (
                 <tr key={f.id} className="hover:bg-[#fafaf8]">
                   <Td>
-                    <p className="font-medium">{f.name}</p>
+                    <Link href={`/forms/${f.id}`} className="font-medium text-brand hover:underline">{f.name}</Link>
                     <p className="text-xs text-ink-3">{f.type}</p>
                   </Td>
                   <Td className="text-xs text-ink-2">{f.trigger}</Td>

@@ -171,21 +171,52 @@
         var popup = data.popups[0];
         if (popup.oncePerVisitor && get("sendloom_popup_" + popup.id)) return;
 
+        // Escape everything that reaches innerHTML: config is workspace
+        // content, the storefront must never execute it.
+        function esc(v) {
+          return String(v == null ? "" : v).replace(/[&<>"']/g, function (c) {
+            return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+          });
+        }
+
+        // Styles ship with the tracker so headless (GTM/snippet) stores get
+        // the same popup as plugin stores; the accent rides a CSS variable.
+        function injectStyles() {
+          if (document.getElementById("sendloom-popup-style")) return;
+          var st = document.createElement("style");
+          st.id = "sendloom-popup-style";
+          st.textContent =
+            "#sendloom-popup .sendloom-popup-backdrop{position:fixed;inset:0;background:rgba(15,12,25,.55);z-index:99998}" +
+            "#sendloom-popup .sendloom-popup-card{position:fixed;z-index:99999;top:50%;left:50%;transform:translate(-50%,-50%);width:min(92vw,380px);background:#fff;border-radius:14px;padding:28px 24px;box-shadow:0 24px 64px rgba(0,0,0,.25);font-family:inherit;text-align:center}" +
+            "#sendloom-popup h3{margin:0 0 8px;font-size:20px;line-height:1.25;color:#111}" +
+            "#sendloom-popup p{margin:0 0 16px;font-size:14px;color:#555}" +
+            "#sendloom-popup .sendloom-popup-form input[type=email],#sendloom-popup .sendloom-popup-form input[type=text]{width:100%;box-sizing:border-box;padding:10px 12px;font-size:14px;border:1px solid #ddd;border-radius:8px;margin-bottom:10px}" +
+            "#sendloom-popup .sendloom-popup-consent{display:flex;gap:8px;align-items:flex-start;text-align:left;font-size:11px;color:#777;margin-bottom:12px}" +
+            "#sendloom-popup .sendloom-popup-form button[type=submit]{width:100%;padding:11px 16px;font-size:14px;font-weight:600;color:#fff;background:var(--sl-accent,#6d28d9);border:0;border-radius:8px;cursor:pointer}" +
+            "#sendloom-popup .sendloom-popup-form button[type=submit]:hover{filter:brightness(.94)}" +
+            "#sendloom-popup .sendloom-popup-close{position:absolute;top:8px;right:12px;background:none;border:0;font-size:22px;color:#999;cursor:pointer;line-height:1}" +
+            "#sendloom-popup .sendloom-popup-code{margin:14px 0 4px;padding:10px;border:1px dashed var(--sl-accent,#6d28d9);border-radius:8px;font-weight:700;font-size:16px;letter-spacing:.06em;color:var(--sl-accent,#6d28d9)}";
+          document.head.appendChild(st);
+        }
+
         function show() {
           if (document.getElementById("sendloom-popup")) return;
           set("sendloom_popup_" + popup.id, "shown");
+          injectStyles();
           var wrap = document.createElement("div");
           wrap.id = "sendloom-popup";
+          if (popup.accent) wrap.style.setProperty("--sl-accent", String(popup.accent));
           wrap.innerHTML =
             '<div class="sendloom-popup-backdrop"></div>' +
             '<div class="sendloom-popup-card" role="dialog" aria-modal="true">' +
             '<button class="sendloom-popup-close" aria-label="Close">&times;</button>' +
-            "<h3>" + popup.headline + "</h3>" +
-            "<p>" + popup.body + "</p>" +
+            "<h3>" + esc(popup.headline) + "</h3>" +
+            "<p>" + esc(popup.body) + "</p>" +
             '<form class="sendloom-popup-form">' +
-            '<input type="email" required placeholder="you@email.com" />' +
-            '<label class="sendloom-popup-consent"><input type="checkbox" checked /> ' + popup.consentLabel + "</label>" +
-            '<button type="submit">' + popup.buttonLabel + "</button>" +
+            (popup.collectName ? '<input type="text" name="sl-name" placeholder="First name" autocomplete="given-name" />' : "") +
+            '<input type="email" required placeholder="you@email.com" autocomplete="email" />' +
+            '<label class="sendloom-popup-consent"><input type="checkbox" checked /> ' + esc(popup.consentLabel) + "</label>" +
+            '<button type="submit">' + esc(popup.buttonLabel) + "</button>" +
             "</form></div>";
           document.body.appendChild(wrap);
           track("popup_viewed", { popup: popup.id });
@@ -201,12 +232,16 @@
           wrap.querySelector("form").addEventListener("submit", function (e) {
             e.preventDefault();
             var em = wrap.querySelector('input[type="email"]').value;
+            var nameEl = wrap.querySelector('input[name="sl-name"]');
+            var nm = nameEl ? nameEl.value.trim() : "";
             var consent = wrap.querySelector('input[type="checkbox"]').checked;
             identify(em);
-            track("popup_submitted", { popup: popup.id, consent: consent }, em.trim().toLowerCase());
+            track("popup_submitted", { popup: popup.id, consent: consent, name: nm || undefined }, em.trim().toLowerCase());
             flush();
-            wrap.querySelector(".sendloom-popup-card").innerHTML = "<h3>Done — check your inbox soon.</h3>";
-            setTimeout(function () { wrap.remove(); }, 2500);
+            var doneHtml = "<h3>" + esc(popup.successMessage || "Done — check your inbox soon.") + "</h3>";
+            if (popup.offerCode) doneHtml += '<div class="sendloom-popup-code">' + esc(popup.offerCode) + "</div>";
+            wrap.querySelector(".sendloom-popup-card").innerHTML = doneHtml;
+            setTimeout(function () { wrap.remove(); }, popup.offerCode ? 7000 : 2500);
           });
         }
 
@@ -214,6 +249,14 @@
           document.addEventListener("mouseout", function (e) {
             if (!e.relatedTarget && e.clientY <= 0) show();
           });
+        } else if (popup.trigger && popup.trigger.kind === "scroll") {
+          var fired = false;
+          window.addEventListener("scroll", function () {
+            if (fired) return;
+            var h = document.documentElement;
+            var max = h.scrollHeight - h.clientHeight;
+            if (max > 0 && h.scrollTop / max > 0.5) { fired = true; show(); }
+          }, { passive: true });
         } else {
           setTimeout(show, ((popup.trigger && popup.trigger.seconds) || 8) * 1000);
         }

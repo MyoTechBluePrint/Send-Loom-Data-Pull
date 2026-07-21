@@ -134,6 +134,29 @@ export const eventIngestionService = {
       await touchCart(e.storeId, e.type, (scrubbed ?? {}) as Parameters<typeof touchCart>[2], contactId);
       await sweepAbandoned();
     }
+    // Form counters: the tracker reports which form drove the event.
+    if ((e.type === "popup_viewed" || e.type === "popup_submitted") && isCustomerStream) {
+      const formId = typeof e.payload?.popup === "string" ? e.payload.popup : undefined;
+      if (formId) {
+        await db.form.updateMany({
+          where: { id: formId, workspaceId: e.workspaceId },
+          data: e.type === "popup_viewed" ? { views: { increment: 1 } } : { signups: { increment: 1 } },
+        });
+      }
+    }
+    // A popup that collected a name fills empty name fields, never overwrites.
+    if (e.type === "popup_submitted" && isCustomerStream && contactId && typeof e.payload?.name === "string") {
+      const parts = e.payload.name.trim().slice(0, 120).split(/\s+/);
+      if (parts[0]) {
+        const c = await db.contact.findUnique({ where: { id: contactId }, select: { firstName: true, lastName: true } });
+        if (c && !c.firstName && !c.lastName) {
+          await db.contact.update({
+            where: { id: contactId },
+            data: { firstName: parts[0], lastName: parts.slice(1).join(" ") || null },
+          });
+        }
+      }
+    }
     // Popup submissions with an explicit consent tick grant email consent —
     // the one intake route that does, because the form showed a consent box.
     if (e.type === "popup_submitted" && isCustomerStream && contactId && e.payload?.consent === true) {

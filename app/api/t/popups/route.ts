@@ -1,5 +1,6 @@
 // PUBLIC popup config for a store's tracker. Returns only live popup-type
-// forms; the browser gets display config, never anything sensitive.
+// forms; the browser gets display config, never anything sensitive. The
+// tracker HTML-escapes everything it renders.
 import { NextRequest } from "next/server";
 import { db } from "@/lib/server/db";
 
@@ -21,22 +22,37 @@ export async function GET(req: NextRequest) {
       status: "live",
       type: { in: ["popup", "exit_intent", "floating_bar"] },
     },
+    orderBy: { createdAt: "desc" },
     take: 3,
   });
 
   return Response.json({
     ok: true,
-    popups: forms.map((f) => ({
-      id: f.id,
-      type: f.type,
-      // Display config. A full popup builder config lands later; this ships a
-      // clean default template per popup type.
-      headline: f.name.includes("offer") ? "Get 15% off your first order" : f.name,
-      body: "Join for early access and honest product education. Unsubscribe anytime.",
-      buttonLabel: "Claim my code",
-      consentLabel: "Email me offers and updates (you can opt out anytime)",
-      trigger: f.type === "exit_intent" ? { kind: "exit_intent" } : { kind: "time_on_page", seconds: 8 },
-      oncePerVisitor: true,
-    })),
+    popups: forms.map((f) => {
+      // Builder config first; clean defaults for legacy template rows.
+      const kind = f.triggerKind && f.triggerKind !== "time_on_page"
+        ? f.triggerKind
+        : f.type === "exit_intent"
+          ? "exit_intent"
+          : f.triggerKind || "time_on_page";
+      return {
+        id: f.id,
+        type: f.type,
+        headline: f.headline || f.name,
+        body: f.body || "Join for early access and honest product education. Unsubscribe anytime.",
+        buttonLabel: f.buttonLabel || "Sign up",
+        consentLabel: f.consentLabel || "Email me offers and updates (you can opt out anytime)",
+        successMessage: f.successMessage || "Done — check your inbox soon.",
+        offerCode: f.offerCode || null,
+        accent: f.accent || "#6d28d9",
+        collectName: f.collectName === true,
+        trigger: kind === "exit_intent"
+          ? { kind: "exit_intent" }
+          : kind === "scroll"
+            ? { kind: "scroll" }
+            : { kind: "time_on_page", seconds: f.triggerSeconds || 8 },
+        oncePerVisitor: true,
+      };
+    }),
   }, { headers });
 }
