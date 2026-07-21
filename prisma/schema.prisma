@@ -20,6 +20,7 @@ model Workspace {
   users       User[]
   stores      Store[]
   contacts    Contact[]
+  integrations Integration[]
   imports     ImportBatch[]
   segments    Segment[]
   tags        Tag[]
@@ -778,4 +779,79 @@ model DataFolder {
   batches ImportBatch[]
 
   @@unique([workspaceId, name])
+}
+
+// ---- Integration Platform (the infrastructure layer; MarketVox, MVSocial
+// and WooCommerce are catalog entries on it, never special cases in core) ----
+
+model Integration {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  slug        String // marketvox | mvsocial | woocommerce | shopify | custom-api | ...
+  name        String
+  kind        String    @default("custom") // trading | social | commerce | crm | automation | custom
+  status      String    @default("not_connected") // not_connected | connected | error | disabled
+  environment String    @default("live") // live | test
+  config      String? // JSON connector settings; never secrets
+  connectedAt DateTime?
+  lastEventAt DateTime?
+  createdAt   DateTime  @default(now())
+  apiKeys     ApiKey[]
+  webhooks    WebhookEndpoint[]
+
+  @@unique([workspaceId, slug])
+}
+
+model ApiKey {
+  id            String    @id @default(cuid())
+  workspaceId   String
+  integrationId String
+  integration   Integration @relation(fields: [integrationId], references: [id])
+  name          String
+  publicKey     String    @unique // pk_live_... (identifier, safe to show)
+  secretHash    String // scrypt salt:hash of the sk_ secret; shown once at creation
+  secretHint    String // last 4 characters for recognition
+  permissions   String // JSON array: ["contacts:read","contacts:write","events:write",...]
+  status        String    @default("active") // active | disabled | rotated
+  environment   String    @default("live")
+  ipAllowlist   String? // comma-separated; empty = any
+  expiresAt     DateTime?
+  lastUsedAt    DateTime?
+  rotatedFromId String?
+  createdAt     DateTime  @default(now())
+}
+
+model WebhookEndpoint {
+  id            String    @id @default(cuid())
+  workspaceId   String
+  integrationId String
+  integration   Integration @relation(fields: [integrationId], references: [id])
+  url           String
+  secret        String // whsec_...; used server-side to sign deliveries
+  events        String // JSON array of subscribed event types; [\"*\"] = all
+  status        String    @default("active") // active | disabled (auto after repeated failure)
+  failCount     Int       @default(0)
+  lastSuccessAt DateTime?
+  lastFailureAt DateTime?
+  createdAt     DateTime  @default(now())
+  deliveries    WebhookDelivery[]
+}
+
+model WebhookDelivery {
+  id           String    @id @default(cuid())
+  workspaceId  String
+  endpointId   String
+  endpoint     WebhookEndpoint @relation(fields: [endpointId], references: [id])
+  eventType    String
+  payload      String
+  status       String    @default("pending") // pending | success | failed | dead
+  attempts     Int       @default(0)
+  responseCode Int?
+  responseNote String?
+  nextRetryAt  DateTime?
+  deliveredAt  DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([status, nextRetryAt])
 }

@@ -6,6 +6,7 @@ import { db } from "./db";
 import { audit } from "./audit";
 import { recomputeLeadScore } from "./scoring";
 import { registerHandler } from "./queue";
+import { dispatchPlatformEvent } from "./platform";
 import { touchCart, sweepAbandoned } from "./carts";
 import { classifyEvent } from "./ingest-pipeline";
 import { eventDef } from "./event-registry";
@@ -107,6 +108,7 @@ export const eventIngestionService = {
         await db.contactSource.create({
           data: { contactId, source: `Event: ${e.type}`, sourceType: "api", detail: e.storeId ? `store ${e.storeId}` : undefined },
         });
+        await dispatchPlatformEvent(e.workspaceId, "contact.created", { contactId, email, source: e.type }).catch(() => {});
       }
     }
 
@@ -157,6 +159,14 @@ export const eventIngestionService = {
         }
       }
     }
+    // Platform webhook fan-out for storefront form activity.
+    if (isCustomerStream && (e.type === "popup_viewed" || e.type === "popup_closed" || e.type === "popup_submitted")) {
+      const hook = e.type === "popup_submitted" ? "form.submitted" : e.type === "popup_viewed" ? "popup.viewed" : "popup.closed";
+      await dispatchPlatformEvent(e.workspaceId, hook, {
+        formId: typeof e.payload?.popup === "string" ? e.payload.popup : null,
+        contactId, email: e.email ?? null,
+      }).catch(() => {});
+    }
     // Popup submissions with an explicit consent tick grant email consent —
     // the one intake route that does, because the form showed a consent box.
     if (e.type === "popup_submitted" && isCustomerStream && contactId && e.payload?.consent === true) {
@@ -167,6 +177,9 @@ export const eventIngestionService = {
           evidence: String(e.payload?.popup ?? "popup"), actor: "tracker",
         },
       });
+      await dispatchPlatformEvent(e.workspaceId, "consent.updated", {
+        contactId, channel: "email", status: "granted", source: "popup",
+      }).catch(() => {});
     }
     if (e.storeId) {
       await db.store.update({ where: { id: e.storeId }, data: { lastEventAt: occurredAt } }).catch(() => {});

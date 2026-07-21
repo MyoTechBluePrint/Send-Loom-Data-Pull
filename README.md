@@ -64,6 +64,8 @@ transport and no email ever leaves the platform.
 
 ## Docs
 
+- [docs/DEVELOPMENT_ACCESS_AND_QA.md](docs/DEVELOPMENT_ACCESS_AND_QA.md) — dev/test login system, environment safety matrix, how tooling inspects protected pages
+- [docs/INTEGRATION_PLATFORM.md](docs/INTEGRATION_PLATFORM.md) — the API platform: keys, permissions, webhooks, /api/v1, adding connectors
 - [STAGING.md](STAGING.md) — staging logins, password rotation, roles, demo reset, feedback/audit review
 - [ARCHITECTURE.md](ARCHITECTURE.md) — data model, services, provider layer, scaling plan
 - [API.md](API.md) — endpoint reference (plugin API + internal API)

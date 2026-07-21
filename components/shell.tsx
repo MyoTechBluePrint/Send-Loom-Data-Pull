@@ -45,6 +45,13 @@ const nav: { section?: string; items: { href: string; label: string; icon: strin
     ],
   },
   {
+    section: "Platform",
+    items: [
+      { href: "/integrations", label: "Integration Platform", icon: "⬡" },
+      { href: "/integrations/docs", label: "API Docs", icon: "⌘" },
+    ],
+  },
+  {
     section: "Control",
     items: [
       { href: "/analytics", label: "Analytics", icon: "∿" },

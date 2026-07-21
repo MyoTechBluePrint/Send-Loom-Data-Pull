@@ -271,8 +271,140 @@ async function main() {
   cart = await db.cart.findUnique({ where: { token } });
   check("purchase converts (not recovered: no link click)", cart?.status === "converted");
 
+  await platformTests(ws.id);
+
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
+}
+
+async function platformTests(wsId: string) {
+  console.log("Integration Platform");
+  const { NextRequest } = await import("next/server");
+  const platform = await import("../lib/server/platform");
+  const { GET: pingGet } = await import("../app/api/v1/ping/route");
+  const { GET: contactsGet, POST: contactsPost } = await import("../app/api/v1/contacts/route");
+  const { GET: segmentsGet } = await import("../app/api/v1/segments/route");
+  const { POST: trackPost } = await import("../app/api/v1/track/route");
+  const { POST: testSession } = await import("../app/api/auth/test-session/route");
+  const devAccess = await import("../lib/server/dev-access");
+
+  const integ = await db.integration.upsert({
+    where: { workspaceId_slug: { workspaceId: wsId, slug: "custom-api" } },
+    create: { workspaceId: wsId, slug: "custom-api", name: "Custom API", kind: "custom" },
+    update: {},
+  });
+
+  // Key auth + permissions
+  const full = await platform.createApiKey({
+    workspaceId: wsId, integrationId: integ.id, name: `flows ${STAMP}`,
+    permissions: ["contacts:read", "contacts:write", "events:write", "webhooks:manage"],
+  });
+  const req = (url: string, key: string, init?: RequestInit) =>
+    new NextRequest(`http://localhost${url}`, { ...init, headers: { authorization: `Bearer ${key}`, "content-type": "application/json", ...(init?.headers ?? {}) } } as ConstructorParameters<typeof NextRequest>[1]);
+
+  let res = await pingGet(req("/api/v1/ping", full.secretKey));
+  check("valid key pings 200", res.status === 200);
+  res = await pingGet(req("/api/v1/ping", full.secretKey.slice(0, -2) + "xx"));
+  check("tampered secret rejected 401", res.status === 401);
+  res = await pingGet(req("/api/v1/ping", "sk_live_nope_abcdef"));
+  check("unknown key rejected 401", res.status === 401);
+  res = await segmentsGet(req("/api/v1/segments", full.secretKey));
+  check("missing permission rejected 403", res.status === 403);
+
+  // Contact sync + consent + update path
+  const email = `platform.${STAMP}@example.com`;
+  res = await contactsPost(req("/api/v1/contacts", full.secretKey, { method: "POST", body: JSON.stringify({ email, firstName: "Plat", consent: { channel: "email", status: "granted", wording: "flows consent" }, attribution: { referralCode: "IB-1" } }) }));
+  check("contact create 201", res.status === 201);
+  res = await contactsPost(req("/api/v1/contacts", full.secretKey, { method: "POST", body: JSON.stringify({ email, lastName: "Form" }) }));
+  const upd = await res.json();
+  check("second post updates not creates", res.status === 200 && upd.contact.created === false);
+  const contact = await db.contact.findUnique({ where: { workspaceId_email: { workspaceId: wsId, email } } });
+  check("contact persisted with fields", contact?.firstName === "Plat" && contact?.lastName === "Form");
+  const consent = await db.consentRecord.findFirst({ where: { contactId: contact!.id }, orderBy: { id: "desc" } });
+  check("consent recorded with wording", consent?.evidence === "flows consent");
+
+  // Lifecycle events
+  res = await trackPost(req("/api/v1/track", full.secretKey, { method: "POST", body: JSON.stringify({ event: "custom.flows.test", email, data: { n: 1 } }) }));
+  check("track accepts 202", res.status === 202);
+  const tl = await db.timelineItem.findFirst({ where: { contactId: contact!.id, title: "custom.flows.test" } });
+  check("event lands on contact timeline", !!tl);
+
+  // Rotation kills the old secret
+  const rotated = await platform.rotateApiKey(full.keyId, "flows");
+  res = await pingGet(req("/api/v1/ping", full.secretKey));
+  check("rotated-out secret rejected", res.status === 401);
+  res = await pingGet(req("/api/v1/ping", rotated!.secretKey));
+  check("rotated-in secret accepted", res.status === 200);
+
+  // Tenant isolation: a second workspace's key can't see this workspace
+  const ws2 = await db.workspace.create({ data: { name: `Flows Tenant ${STAMP}` } });
+  const integ2 = await db.integration.create({ data: { workspaceId: ws2.id, slug: "custom-api", name: "Custom API", kind: "custom" } });
+  const key2 = await platform.createApiKey({ workspaceId: ws2.id, integrationId: integ2.id, name: "tenant2", permissions: ["contacts:read", "contacts:write"] });
+  res = await contactsGet(req(`/api/v1/contacts?email=${encodeURIComponent(email)}`, key2.secretKey));
+  const iso = await res.json();
+  check("tenant B cannot read tenant A contact", res.status === 200 && iso.count === 0);
+  res = await contactsPost(req("/api/v1/contacts", key2.secretKey, { method: "POST", body: JSON.stringify({ email }) }));
+  check("tenant B upsert creates its own copy", res.status === 201);
+  const aCopies = await db.contact.count({ where: { workspaceId: wsId, email } });
+  check("tenant A unaffected by tenant B write", aCopies === 1);
+
+  // Rate limiting (pure limiter check)
+  let allowed = 0;
+  for (let i = 0; i < 125; i++) if (checkRateLimit(`apikey:flows-${STAMP}`, 120, 60_000)) allowed++;
+  check("rate limiter caps at 120/min", allowed === 120);
+
+  // Webhook delivery + signature + retry
+  const http = await import("node:http");
+  const seen: { sig: string | null; body: string }[] = [];
+  const server = http.createServer((rq, rs) => {
+    let b = "";
+    rq.on("data", (c) => (b += c));
+    rq.on("end", () => { seen.push({ sig: rq.headers["x-sendloom-signature"] as string ?? null, body: b }); rs.writeHead(200); rs.end("ok"); });
+  });
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+  const port = (server.address() as { port: number }).port;
+
+  const ep = await db.webhookEndpoint.create({ data: { workspaceId: wsId, integrationId: integ.id, url: `http://127.0.0.1:${port}/hook`, secret: "whsec_flows_secret", events: JSON.stringify(["*"]) } });
+  await platform.dispatchPlatformEvent(wsId, "webhook.test", { flows: STAMP });
+  const okDel = await db.webhookDelivery.findFirst({ where: { endpointId: ep.id }, orderBy: { createdAt: "desc" } });
+  check("webhook delivered", okDel?.status === "success" && seen.length === 1);
+  const crypto = await import("node:crypto");
+  const parts = Object.fromEntries((seen[0]?.sig ?? "").split(",").map((p) => p.split("=") as [string, string]));
+  const expect = crypto.createHmac("sha256", "whsec_flows_secret").update(`${parts.t}.${seen[0]?.body}`).digest("hex");
+  check("webhook signature verifies", parts.v1 === expect);
+
+  // Failure → retry schedule → recovery
+  await db.webhookEndpoint.update({ where: { id: ep.id }, data: { url: "http://127.0.0.1:1/hook" } });
+  await platform.dispatchPlatformEvent(wsId, "webhook.test", { flows: `${STAMP}-fail` });
+  let failDel = await db.webhookDelivery.findFirst({ where: { endpointId: ep.id, status: "failed" }, orderBy: { createdAt: "desc" } });
+  check("failed delivery queued for retry", !!failDel?.nextRetryAt && failDel.attempts === 1);
+  await db.webhookEndpoint.update({ where: { id: ep.id }, data: { url: `http://127.0.0.1:${port}/hook` } });
+  await db.webhookDelivery.update({ where: { id: failDel!.id }, data: { nextRetryAt: new Date(Date.now() - 1000) } });
+  await platform.retryDueWebhooks();
+  failDel = await db.webhookDelivery.findUnique({ where: { id: failDel!.id } });
+  check("retry recovers to success", failDel?.status === "success");
+  server.close();
+
+  // Production guards
+  const env = process.env.NODE_ENV;
+  (process.env as Record<string, string | undefined>).NODE_ENV = "production";
+  delete process.env.SENDLOOM_ALLOW_TEST_AUTH;
+  check("dev access dead in production", devAccess.devAccessAllowed() === false);
+  const prodRes = await testSession(new NextRequest("http://localhost/api/auth/test-session", { method: "POST", headers: { "x-sendloom-test-secret": process.env.SENDLOOM_TEST_AUTH_SECRET ?? "x" } } as ConstructorParameters<typeof NextRequest>[1]));
+  check("test-session 404s in production", prodRes.status === 404);
+  (process.env as Record<string, string | undefined>).NODE_ENV = env;
+
+  // Cleanup tenant B (children first: sources, timeline, consent, events)
+  const bIds = (await db.contact.findMany({ where: { workspaceId: ws2.id }, select: { id: true } })).map((c) => c.id);
+  await db.contactSource.deleteMany({ where: { contactId: { in: bIds } } });
+  await db.timelineItem.deleteMany({ where: { contactId: { in: bIds } } });
+  await db.consentRecord.deleteMany({ where: { contactId: { in: bIds } } });
+  await db.event.deleteMany({ where: { workspaceId: ws2.id } });
+  await db.auditLog.deleteMany({ where: { workspaceId: ws2.id } }).catch(() => {});
+  await db.contact.deleteMany({ where: { workspaceId: ws2.id } });
+  await db.apiKey.deleteMany({ where: { workspaceId: ws2.id } });
+  await db.integration.deleteMany({ where: { workspaceId: ws2.id } });
+  await db.workspace.delete({ where: { id: ws2.id } });
 }
 
 main()
