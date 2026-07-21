@@ -37,7 +37,7 @@ function LoginForm() {
     <div className="flex min-h-screen items-center justify-center bg-[#14121f] px-4">
       <div className="w-full max-w-sm">
         <div className="mb-6 flex items-center justify-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#6d28d9] text-base font-bold text-white">S</div>
+          <img src="/logo.png" alt="Sendloom logo" className="h-10 w-10 rounded-xl bg-white object-contain p-0.5" />
           <div>
             <p className="text-base font-semibold leading-tight text-white">Sendloom</p>
             <p className="text-[11px] text-white/50">Growth Intelligence OS · staging</p>

@@ -69,7 +69,7 @@ export function Shell({ children, title, subtitle, actions }: { children: ReactN
       {navOpen && <button aria-label="Close menu" onClick={() => setNavOpen(false)} className="fixed inset-0 z-30 bg-black/50 lg:hidden" />}
       <aside className={`fixed inset-y-0 left-0 z-40 w-60 flex-col border-r border-[#262433] bg-[#14121f] text-white ${navOpen ? "flex" : "hidden"} lg:flex`}>
         <div className="flex items-center gap-2.5 px-5 py-5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#6d28d9] text-sm font-bold">S</div>
+          <img src="/logo.png" alt="Sendloom logo" className="h-9 w-9 rounded-lg bg-white object-contain p-0.5" />
           <div>
             <p className="text-sm font-semibold leading-tight">Sendloom</p>
             <p className="text-[11px] text-white/50">Growth Intelligence OS</p>
