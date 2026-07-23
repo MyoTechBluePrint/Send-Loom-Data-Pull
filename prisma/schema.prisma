@@ -866,3 +866,43 @@ model IntegrationRequest {
   summary       String?
   createdAt     DateTime @default(now())
 }
+
+// ---- Communications OS: lifecycle journeys ---------------------------------
+// Platforms (NITO first) post structured events; journeys turn lifecycle
+// stages into staged, multi-channel sequences. Email sends are real when the
+// provider is armed; unconfigured channels record HONEST simulated entries.
+// Every executed step lands on the contact timeline: the CRM record of who
+// was contacted, when, on which channel, and why.
+
+model Journey {
+  id          String   @id @default(cuid())
+  workspaceId String
+  key         String // private-wealth-intake | brokerage-blueprint | ...
+  name        String
+  platform    String // producing platform: nito | savvy-mango | homikasa | ...
+  trigger     String // event type that enrols, e.g. wealth.application_submitted
+  steps       String // JSON [{offsetHours, dueFrom?: "enrolment"|"slot", channel, kind, title}]
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  enrolments JourneyEnrolment[]
+
+  @@unique([workspaceId, key])
+}
+
+model JourneyEnrolment {
+  id        String    @id @default(cuid())
+  journeyId String
+  journey   Journey   @relation(fields: [journeyId], references: [id])
+  contactId String
+  stepIndex Int       @default(0)
+  status    String    @default("active") // active | completed | stopped
+  nextDueAt DateTime?
+  context   String? // JSON from the triggering event: refCode, checklist, slot…
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([journeyId, contactId])
+  @@index([status, nextDueAt])
+}
