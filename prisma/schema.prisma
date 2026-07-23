@@ -855,3 +855,14 @@ model WebhookDelivery {
 
   @@index([status, nextRetryAt])
 }
+
+// Durable idempotency for inbound integration requests (e.g. NITO signal
+// sends). The same requestId is acknowledged once and never re-processed,
+// so provider retries can never duplicate client emails.
+model IntegrationRequest {
+  id            String   @id // caller-supplied requestId, globally unique
+  integrationId String
+  kind          String // signal.send | ...
+  summary       String?
+  createdAt     DateTime @default(now())
+}

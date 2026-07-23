@@ -38,15 +38,33 @@ class SesProvider implements EmailProvider {
   }
 }
 
+// Resend transport: a real provider over plain HTTPS (no SDK). Returns the
+// provider's message id as evidence. Requires RESEND_API_KEY + RESEND_FROM
+// and the explicit EMAIL_SENDING_ENABLED switch.
+class ResendProvider implements EmailProvider {
+  name = "resend";
+  async send(msg: OutboundEmail): Promise<SendResult> {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ from: process.env.RESEND_FROM, to: msg.to, subject: msg.subject, html: msg.html }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    const d = (await res.json().catch(() => ({}))) as { id?: string; message?: string };
+    if (!res.ok || !d.id) {
+      return { providerId: `resend_err_${msg.campaignSendId}`, status: "failed", detail: `Resend refused (HTTP ${res.status}): ${d.message ?? "unknown"}` };
+    }
+    return { providerId: d.id, status: "sent", detail: "Delivered to Resend" };
+  }
+}
+
 export function activeProvider(): EmailProvider {
   // Staging safety: real sending requires BOTH the explicit env switch AND
   // credentials. Anything else falls back to the dev transport, so no team
   // member can trigger a live email from staging.
-  if (
-    process.env.EMAIL_SENDING_ENABLED === "true" &&
-    process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY && process.env.SES_FROM_ADDRESS
-  ) {
-    return new SesProvider();
+  if (process.env.EMAIL_SENDING_ENABLED === "true") {
+    if (process.env.RESEND_API_KEY && process.env.RESEND_FROM) return new ResendProvider();
+    if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY && process.env.SES_FROM_ADDRESS) return new SesProvider();
   }
   return new DevLogProvider();
 }
