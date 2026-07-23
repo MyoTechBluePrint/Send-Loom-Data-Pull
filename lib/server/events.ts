@@ -8,6 +8,7 @@ import { recomputeLeadScore } from "./scoring";
 import { registerHandler } from "./queue";
 import { dispatchPlatformEvent } from "./platform";
 import { touchCart, sweepAbandoned } from "./carts";
+import { sweepDueJourneys } from "./intelligence";
 import { classifyEvent } from "./ingest-pipeline";
 import { eventDef } from "./event-registry";
 
@@ -136,6 +137,9 @@ export const eventIngestionService = {
       await touchCart(e.storeId, e.type, (scrubbed ?? {}) as Parameters<typeof touchCart>[2], contactId);
       await sweepAbandoned();
     }
+    // Due journey steps ride the same traffic pulse (throttled internally);
+    // a cron on /api/v1/journeys/run stays the deterministic trigger.
+    await sweepDueJourneys().catch(() => undefined);
     // Form counters: the tracker reports which form drove the event.
     if ((e.type === "popup_viewed" || e.type === "popup_submitted") && isCustomerStream) {
       const formId = typeof e.payload?.popup === "string" ? e.payload.popup : undefined;

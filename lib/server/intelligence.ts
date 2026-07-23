@@ -217,6 +217,25 @@ export async function ingestIntelligenceEvent(workspaceId: string, evt: Intellig
   return { contactId, enrolled };
 }
 
+// Opportunistic runner, same pattern as the abandoned-cart sweep: cheap
+// enough to ride live event traffic (MyoTech tracking alone provides a
+// steady pulse), throttled to once per 5 minutes per process. A cron on
+// /api/v1/journeys/run remains the deterministic production trigger.
+let lastJourneySweep = 0;
+export async function sweepDueJourneys(): Promise<void> {
+  if (Date.now() - lastJourneySweep < 5 * 60_000) return;
+  lastJourneySweep = Date.now();
+  const workspaces = await db.journeyEnrolment.findMany({
+    where: { status: "active", nextDueAt: { lte: new Date() } },
+    select: { journey: { select: { workspaceId: true } } },
+    distinct: ["journeyId"],
+    take: 10,
+  });
+  for (const w of new Set(workspaces.map((x) => x.journey.workspaceId))) {
+    await processDueJourneySteps(w).catch(() => undefined);
+  }
+}
+
 export async function processDueJourneySteps(workspaceId: string, now: Date = new Date()): Promise<{ executed: number }> {
   const due = await db.journeyEnrolment.findMany({
     where: { status: "active", nextDueAt: { lte: now }, journey: { workspaceId, active: true } },
