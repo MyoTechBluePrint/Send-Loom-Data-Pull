@@ -34,16 +34,19 @@ function signalEmailHtml(b: Required<Pick<SignalBody, "brand" | "signal">> & Sig
   const dir = (s.direction ?? "").toUpperCase();
   const dirColor = dir === "SELL" ? "#dc2626" : "#16a34a";
   const cancelled = b.eventType === "signal.cancelled";
-  const subject = cancelled
-    ? `${brand.name}: signal cancelled · ${s.instrument}`
-    : `${brand.name}: new ${dir} signal · ${s.instrument}`;
+  const approval = b.eventType === "signal.approval";
+  const subject = approval
+    ? `Candidate ready for approval · ${s.instrument} ${dir}`
+    : cancelled
+      ? `${brand.name}: signal cancelled · ${s.instrument}`
+      : `${brand.name}: new ${dir} signal · ${s.instrument}`;
   const row = (k: string, v?: string) => v ? `<tr><td style="padding:6px 0;color:#6b7280;font-size:13px">${k}</td><td style="padding:6px 0;text-align:right;font-weight:700;font-size:13px;color:#111827">${esc(v)}</td></tr>` : "";
   const html = `
   <div style="background:#f4f5f7;padding:28px 12px;font-family:-apple-system,'Segoe UI',Arial,sans-serif">
     <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e5e7eb">
       <div style="background:${color};padding:16px 22px">
         <p style="margin:0;color:#ffffff;font-size:16px;font-weight:800">${esc(brand.name ?? "Your broker")}</p>
-        <p style="margin:2px 0 0;color:rgba(255,255,255,0.85);font-size:11px">${cancelled ? "Signal update" : "New trading signal"}</p>
+        <p style="margin:2px 0 0;color:rgba(255,255,255,0.85);font-size:11px">${approval ? "Signal candidate · action required" : cancelled ? "Signal update" : "New trading signal"}</p>
       </div>
       <div style="padding:22px">
         <p style="margin:0 0 4px;font-size:20px;font-weight:800;color:#111827">${esc(s.instrument ?? "")} <span style="color:${dirColor}">${esc(dir)}</span></p>
@@ -57,7 +60,8 @@ function signalEmailHtml(b: Required<Pick<SignalBody, "brand" | "signal">> & Sig
           ${row("Published", s.publishedAt)}
         </table>
         ${s.rationale ? `<p style="margin:14px 0 0;font-size:12.5px;line-height:1.6;color:#374151">${esc(s.rationale)}</p>` : ""}
-        ${brand.portalUrl ? `<a href="${esc(brand.portalUrl)}" style="display:block;margin-top:18px;background:${color};color:#ffffff;text-decoration:none;text-align:center;padding:12px 0;border-radius:9px;font-size:14px;font-weight:700">View in your portal</a>` : ""}
+        ${brand.portalUrl ? `<a href="${esc(brand.portalUrl)}" style="display:block;margin-top:18px;background:${color};color:#ffffff;text-decoration:none;text-align:center;padding:12px 0;border-radius:9px;font-size:14px;font-weight:700">${approval ? "Review &amp; approve" : "View in your portal"}</a>` : ""}
+        ${approval ? `<p style="margin:10px 0 0;font-size:10.5px;color:#9ca3af">The link is one-time and expires in 30 minutes. Signing in to the Operations Centre is still required.</p>` : ""}
         ${b.demo ? `<p style="margin:14px 0 0;font-size:11px;color:#b45309;font-weight:700">Demonstration signal · no live trading is available.</p>` : ""}
         <p style="margin:16px 0 0;font-size:10.5px;line-height:1.6;color:#9ca3af">${esc(b.disclosure ?? "A signal is a trade idea, not investment advice. Trading in leveraged products carries a high level of risk to your capital.")}</p>
       </div>
