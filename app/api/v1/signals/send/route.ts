@@ -16,7 +16,7 @@ type SignalBody = {
   version?: number;
   eventType?: string; // signal.published | signal.cancelled | signal.updated
   channel?: string; // email (this endpoint)
-  audience?: { type?: string; testRecipient?: string; segmentRef?: string };
+  audience?: { type?: string; testRecipient?: string; segmentRef?: string; recipients?: string[] };
   brand?: { name?: string; color?: string; portalUrl?: string };
   signal?: {
     instrument?: string; direction?: string; entry?: string; stopLoss?: string;
@@ -93,12 +93,22 @@ export async function POST(req: NextRequest) {
   const provider = activeProvider();
 
   // Audience: an explicit test recipient sends exactly one clearly-marked
-  // email; otherwise Sendloom resolves consented, unsuppressed contacts.
+  // email; an internal-team list is a short, explicit set of staff addresses
+  // named by the caller (their own people, so consent resolution does not
+  // apply — hard-capped at 10); otherwise Sendloom resolves consented,
+  // unsuppressed contacts.
   let recipients: string[] = [];
   let counts = { requested: 0, eligible: 0, suppressed: 0, noConsent: 0, noEmail: 0 };
   if (b.audience?.type === "test" && b.audience.testRecipient) {
     recipients = [b.audience.testRecipient];
     counts = { requested: 1, eligible: 1, suppressed: 0, noConsent: 0, noEmail: 0 };
+  } else if (b.audience?.type === "internal") {
+    const list = (b.audience.recipients ?? []).filter((r) => typeof r === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(r)).slice(0, 10);
+    if (!list.length) {
+      return Response.json({ ok: false, error: "audience.type 'internal' requires 1–10 valid recipient addresses.", requestId: auth.requestId }, { status: 400 });
+    }
+    recipients = list;
+    counts = { requested: (b.audience.recipients ?? []).length, eligible: list.length, suppressed: 0, noConsent: 0, noEmail: 0 };
   } else {
     const resolved = await resolveAudience(auth.workspaceId, b.audience?.segmentRef ? "segment" : null, b.audience?.segmentRef ?? null);
     recipients = resolved.eligible.map((r: { email: string }) => r.email).slice(0, 500);
@@ -118,8 +128,9 @@ export async function POST(req: NextRequest) {
     } catch { failed++; }
   }
 
+  const audLabel = b.audience?.type === "test" ? " (test recipient)" : b.audience?.type === "internal" ? ` (internal team · ${recipients.length})` : b.audience?.segmentRef ? ` (segment ${b.audience.segmentRef})` : " (all consented)";
   await audit(auth.workspaceId, `integration:${auth.integrationSlug}`, "nito.signal_email",
-    `${b.signal.instrument} ${b.signal.direction ?? ""} · ${sent} sent, ${failed} failed via ${provider.name}${b.audience?.type === "test" ? " (test recipient)" : ""}`);
+    `${b.signal.instrument} ${b.signal.direction ?? ""} · ${sent} sent, ${failed} failed via ${provider.name}${audLabel}`);
 
   return ok({
     accepted: true, jobId: b.requestId, channel: "email", provider: provider.name,
