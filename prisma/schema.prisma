@@ -36,6 +36,12 @@ model Workspace {
   audits      AuditLog[]
   compliance  ComplianceCheck[]
   intake      IntakeItem[]
+
+  // Billing. Optional on purpose: a workspace with no Subscription row is
+  // treated as complimentary, so nothing that existed before billing can be
+  // locked out. See lib/server/entitlements.ts.
+  subscription Subscription?
+  usage        UsageCounter[]
 }
 
 model User {
@@ -905,4 +911,144 @@ model JourneyEnrolment {
 
   @@unique([journeyId, contactId])
   @@index([status, nextDueAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Subscriptions, trials and entitlements
+//
+// Bolted alongside the existing model, never into it: no existing table is
+// altered, so nothing that works today can regress. A workspace with no
+// Subscription row behaves exactly as it did before.
+//
+// Plans live in the database, not in code, because the spec requires prices,
+// limits and trial rules to be editable from the admin area without a deploy.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Plan {
+  id        String  @id @default(cuid())
+  key       String  @unique // launch | growth | scale | enterprise | internal
+  name      String
+  blurb     String?
+  // Pence, so no floating-point money. null = "contact sales" (Enterprise).
+  monthlyPence Int?
+  annualPence  Int?
+  currency     String @default("GBP")
+
+  // Named entitlements as JSON so a new limit never needs a migration.
+  // Shape: { "monthly_contacts": 5000, "revenue_attribution": true, ... }
+  // -1 means unlimited. See lib/server/entitlements.ts for the contract.
+  entitlements String @default("{}")
+
+  recommended Boolean @default(false) // renders as "Most Popular"
+  contactSales Boolean @default(false)
+  visible     Boolean @default(true)  // hide without deleting; keeps history intact
+  sortOrder   Int     @default(0)
+
+  // Stripe wiring. Null until Steve connects the account and the sync runs.
+  stripeProductId     String?
+  stripeMonthlyPriceId String?
+  stripeAnnualPriceId  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id          String    @id @default(cuid())
+  workspaceId String    @unique // one subscription per workspace
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+
+  planId String?
+  plan   Plan?   @relation(fields: [planId], references: [id])
+
+  // See SUBSCRIPTION_STATES in lib/server/subscription-states.ts. Held as a
+  // string rather than an enum so a new state does not require a migration
+  // during a fast-moving commercial build.
+  status String @default("trialing_no_pm")
+
+  billingCycle String @default("monthly") // monthly | annual
+
+  // Trial lifecycle. The spec's 3-day and 7-day marks are stored per account
+  // rather than computed from a constant, so admin can extend an individual
+  // trial without the dates drifting from what the customer was told.
+  trialStartedAt   DateTime?
+  trialStageOneEndsAt DateTime? // day 3: choose plan + verify payment method
+  trialEndsAt      DateTime?    // day 7: first charge
+  firstBillingAt   DateTime?
+  firstChargePence Int?
+
+  // Payment method verification (the GBP 0 authorisation).
+  paymentMethodVerifiedAt DateTime?
+  paymentMethodBrand      String? // "visa" | "applepay" | ...
+  paymentMethodLast4      String? // display only, never full card data
+
+  // Stripe references. No raw card data is ever stored.
+  stripeCustomerId     String? @unique
+  stripeSubscriptionId String? @unique
+  stripePaymentMethodId String?
+
+  // Cancellation
+  cancelScheduledAt DateTime? // access continues until this moment
+  cancelledAt       DateTime?
+  cancelReason      String?
+
+  // Payment recovery
+  paymentFailedAt   DateTime?
+  paymentRetryCount Int      @default(0)
+  accessRestrictedAt DateTime? // the date shown to the customer
+
+  // Grandfathering and overrides. Existing in-house workspaces are created
+  // as complimentary with this set, so the paywall can never touch them.
+  complimentary Boolean @default(false)
+  notes         String?
+  // Per-account entitlement overrides, same shape as Plan.entitlements.
+  // Merged OVER the plan, so one account can be granted more without a
+  // bespoke plan.
+  entitlementOverrides String @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  events SubscriptionEvent[]
+
+  @@index([status])
+}
+
+// Append-only history. Every state change, webhook, admin override and
+// customer action lands here, which is what makes billing disputes and the
+// spec's audit requirement answerable.
+model SubscriptionEvent {
+  id             String       @id @default(cuid())
+  subscriptionId String
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id])
+
+  type      String // trial.started | plan.selected | pm.verified | charge.succeeded | ...
+  fromStatus String?
+  toStatus   String?
+  actorLabel String  @default("system") // email | "system" | "stripe:webhook"
+  detail     String?
+  // Stripe event id, so replayed webhooks are provably idempotent.
+  externalId String? @unique
+  createdAt  DateTime @default(now())
+
+  @@index([subscriptionId, createdAt])
+}
+
+// Usage against metered entitlements for the current period. Kept separate
+// from the counters the product already computes so billing never changes
+// what the analytics show.
+model UsageCounter {
+  id          String   @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  key         String   // matches an entitlement key, e.g. monthly_email_sends
+  periodStart DateTime
+  periodEnd   DateTime
+  used        Int      @default(0)
+  updatedAt   DateTime @updatedAt
+
+  @@unique([workspaceId, key, periodStart])
+  @@index([workspaceId, key])
 }
