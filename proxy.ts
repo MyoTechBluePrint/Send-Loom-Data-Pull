@@ -1,11 +1,16 @@
 // Staging auth gate. Every page and internal API requires a valid session
-// cookie. Open: /login, /api/auth/*, /api/health, and /api/v1/* (the store
-// API authenticates with its own per-store key).
+// cookie. Open: /login, /signup, /pricing, /api/auth/*, /api/health,
+// /api/billing/webhook (signed by the payment provider, never by a session)
+// and /api/v1/* (the store API authenticates with its own per-store key).
 import { NextRequest, NextResponse } from "next/server";
 
 const SESSION_COOKIE = "sendloom_session";
 // /api/t = email open/click tracking, fetched by mail clients with no session.
-const OPEN_PREFIXES = ["/login", "/api/auth", "/api/health", "/api/v1", "/api/t", "/t/", "/r/"];
+const OPEN_PREFIXES = [
+  "/login", "/signup", "/pricing",
+  "/api/auth", "/api/health", "/api/v1", "/api/t", "/t/", "/r/",
+  "/api/billing/webhook", "/api/billing/plans",
+];
 
 async function verifyToken(token: string | undefined, secret: string): Promise<boolean> {
   if (!token) return false;

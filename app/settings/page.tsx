@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { Shell, PrimaryButton, GhostButton } from "@/components/shell";
 import { Card, CardHeader, Badge } from "@/components/ui";
@@ -152,28 +153,21 @@ export default function SettingsPage() {
       )}
 
       {tab === "Billing" && (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          {[
-            { name: "Starter", price: "£29/mo", desc: "Up to 5,000 contacts · 50k sends", current: false },
-            { name: "Professional", price: "£79/mo", desc: "Up to 25,000 contacts · 150k sends · A/B testing, full automations", current: true },
-            { name: "Enterprise", price: "Custom", desc: "Unlimited · dedicated IPs · IP restrictions · SLA", current: false },
-          ].map((p) => (
-            <Card key={p.name} className={`px-5 py-5 ${p.current ? "ring-2 ring-brand" : ""}`}>
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold">{p.name}</p>
-                {p.current && <span className="rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-bold text-brand">Current</span>}
-              </div>
-              <p className="mt-2 text-2xl font-semibold tracking-tight">{p.price}</p>
-              <p className="mt-2 text-xs leading-relaxed text-ink-2">{p.desc}</p>
-              <button className={`mt-4 w-full rounded-lg px-3 py-2 text-xs font-semibold ${p.current ? "border border-line text-ink-3" : "bg-brand text-white"}`}>
-                {p.current ? "Manage via Stripe portal" : p.name === "Enterprise" ? "Contact sales" : "Switch plan"}
-              </button>
-            </Card>
-          ))}
-          <Card className="px-5 py-4 md:col-span-3">
-            <p className="text-xs text-ink-3">Usage this cycle: <span className="font-semibold text-foreground">96,417 of 150,000 sends</span> · 18,432 of 25,000 contacts · renews 1 Aug 2026 · Stripe subscription active</p>
-          </Card>
-        </div>
+        // Billing now has a real, account-specific page driven by the
+        // subscription system. The placeholder cards that used to sit here
+        // showed invented plans and usage, so they have been replaced with a
+        // route to the live data rather than kept alongside it.
+        <Card className="px-5 py-6">
+          <p className="text-sm font-semibold">Billing has moved to its own page</p>
+          <p className="mt-1.5 max-w-xl text-[13px] leading-relaxed text-ink-2">
+            Your plan, trial status, exact next payment date and amount, saved payment method, usage
+            against your allowances and every invoice are all on the billing page.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Link href="/settings/billing"><PrimaryButton>Open billing</PrimaryButton></Link>
+            <Link href="/plans"><GhostButton>Compare plans</GhostButton></Link>
+          </div>
+        </Card>
       )}
 
       {tab === "API & webhooks" && (

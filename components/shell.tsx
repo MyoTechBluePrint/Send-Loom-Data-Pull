@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
 import { Walkthrough, WALKTHROUGH_KEY } from "@/components/walkthrough";
 import { GlobalSearch } from "@/components/global-search";
+import { TrialStatus } from "@/components/billing/trial-status";
 
 type Me = { name: string; roleLabel: string; env: string };
 
@@ -58,6 +59,7 @@ const nav: { section?: string; items: { href: string; label: string; icon: strin
       { href: "/providers", label: "API Providers", icon: "↯" },
       { href: "/admin", label: "Admin", icon: "▣" },
       { href: "/team", label: "Team", icon: "☺" },
+      { href: "/settings/billing", label: "Billing", icon: "◈" },
       { href: "/settings", label: "Settings", icon: "⚙" },
       { href: "/team-handover", label: "Handover Guide", icon: "✦" },
     ],
@@ -90,7 +92,12 @@ export function Shell({ children, title, subtitle, actions }: { children: ReactN
               )}
               <div className="space-y-0.5">
                 {group.items.map((item) => {
-                  const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+                  // /settings is an exact match so /settings/billing does not
+                  // light up both entries.
+                  const active =
+                    item.href === "/" || item.href === "/settings"
+                      ? pathname === item.href
+                      : pathname.startsWith(item.href);
                   return (
                     <Link
                       key={item.href}
@@ -180,7 +187,12 @@ export function Shell({ children, title, subtitle, actions }: { children: ReactN
             {actions}
           </div>
         </header>
-        <main className="px-5 py-6 xl:px-8">{children}</main>
+        <main className="px-5 py-6 xl:px-8">
+          {/* Renders nothing for complimentary and enterprise accounts, so the
+              in-house workspaces see the app exactly as they always have. */}
+          <TrialStatus />
+          {children}
+        </main>
         <Walkthrough />
         <GlobalSearch />
       </div>
