@@ -309,35 +309,11 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Final CTA: full-bleed band — lifestyle photo under a two-tone blue wash */}
-      <section className="relative overflow-hidden bg-[#3478f6]">
+      {/* Final CTA: full-bleed band — lifestyle photo under a translucent black wash */}
+      <section className="relative overflow-hidden bg-[#0a0a0c]">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/lifestyle.jpg" alt="" aria-hidden className="absolute inset-0 h-full w-full object-cover object-[center_30%]" />
-        <div aria-hidden className="absolute inset-0 bg-gradient-to-br from-[#5b93f8]/90 via-[#3478f6]/82 to-[#1d4ed8]/90" />
-        {/* Texture across the whole band, not just the content column */}
-        {/* Faint geometric: two-tone hexagonal lattice with an embossed offset —
-            a dark copy sits below-right, a light copy above-left, so the
-            pattern reads as pressed into the surface. */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0"
-          style={{
-            backgroundImage: [
-              "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='49' viewBox='0 0 28 49'%3E%3Cpath d='M13.99 9.25l13 7.5v15l-13 7.5L1 31.75v-15l12.99-7.5zM3 17.9v12.7l10.99 6.34 11-6.35V17.9l-11-6.34L3 17.9zM0 15l12.98-7.5V0h-2v6.35L0 12.69v2.3zm0 18.5L12.98 41v8h-2v-6.85L0 35.81v-2.3zM15 0v7.5L27.99 15H28v-2.31h-.01L17 6.35V0h-2zm0 49v-8l12.99-7.5H28v2.31h-.01L17 42.15V49h-2z' fill='%23ffffff' fill-opacity='0.05' fill-rule='evenodd'/%3E%3C/svg%3E\")",
-              "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='49' viewBox='0 0 28 49'%3E%3Cpath d='M13.99 9.25l13 7.5v15l-13 7.5L1 31.75v-15l12.99-7.5zM3 17.9v12.7l10.99 6.34 11-6.35V17.9l-11-6.34L3 17.9zM0 15l12.98-7.5V0h-2v6.35L0 12.69v2.3zm0 18.5L12.98 41v8h-2v-6.85L0 35.81v-2.3zM15 0v7.5L27.99 15H28v-2.31h-.01L17 6.35V0h-2zm0 49v-8l12.99-7.5H28v2.31h-.01L17 42.15V49h-2z' fill='%230b2a6b' fill-opacity='0.07' fill-rule='evenodd'/%3E%3C/svg%3E\")",
-              "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='49' viewBox='0 0 28 49'%3E%3Cpath d='M13.99 9.25l13 7.5v15l-13 7.5L1 31.75v-15l12.99-7.5zM3 17.9v12.7l10.99 6.34 11-6.35V17.9l-11-6.34L3 17.9zM0 15l12.98-7.5V0h-2v6.35L0 12.69v2.3zm0 18.5L12.98 41v8h-2v-6.85L0 35.81v-2.3zM15 0v7.5L27.99 15H28v-2.31h-.01L17 6.35V0h-2zm0 49v-8l12.99-7.5H28v2.31h-.01L17 42.15V49h-2z' fill='%23ffffff' fill-opacity='0.06' fill-rule='evenodd'/%3E%3C/svg%3E\")",
-            ].join(", "),
-            // Three scales of the same lattice so the geometry never reads as
-            // one uniform repeat: small and large in whisper-white, a navy
-            // mid-size offset for the two-tone emboss.
-            backgroundSize: "56px 98px, 92px 161px, 148px 259px",
-            backgroundPosition: "0 0, 30px 18px, 74px 40px",
-          }}
-        />
-        {/* Inner vignette: the band itself gains 3D depth */}
-        <div aria-hidden className="pointer-events-none absolute inset-0 shadow-[inset_0_24px_48px_rgba(11,42,107,0.20),inset_0_-24px_48px_rgba(255,255,255,0.07)]" />
-        <div aria-hidden className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full opacity-30 blur-3xl" style={{ background: "radial-gradient(closest-side, #ffffff, transparent 70%)" }} />
-        <div aria-hidden className="pointer-events-none absolute -bottom-32 -left-16 h-64 w-64 rounded-full opacity-20 blur-3xl" style={{ background: "radial-gradient(closest-side, #1e3a8a, transparent 70%)" }} />
+        <div aria-hidden className="absolute inset-0 bg-gradient-to-br from-black/55 via-black/30 to-black/60" />
         <Reveal>
           <div className="relative mx-auto flex max-w-5xl flex-col items-center gap-8 px-8 py-24 text-white sm:flex-row sm:justify-between sm:px-14 lg:py-32">
             <div className="flex items-center gap-5">
