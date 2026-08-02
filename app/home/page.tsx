@@ -309,15 +309,15 @@ export default function HomePage() {
       {/* Final CTA: full-bleed two-tone blue band */}
       <section className="relative overflow-hidden bg-gradient-to-br from-[#5b93f8] via-[#3478f6] to-[#1d4ed8]">
         {/* Texture across the whole band, not just the content column */}
-        <div aria-hidden className="pointer-events-none absolute inset-0" style={{ backgroundImage: "radial-gradient(rgba(255,255,255,0.28) 1.5px, transparent 1.5px)", backgroundSize: "20px 20px" }} />
+        <div aria-hidden className="pointer-events-none absolute inset-0" style={{ backgroundImage: "repeating-linear-gradient(135deg, rgba(255,255,255,0.13) 0px, rgba(255,255,255,0.13) 1.5px, transparent 1.5px, transparent 16px)" }} />
         <div aria-hidden className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full opacity-30 blur-3xl" style={{ background: "radial-gradient(closest-side, #ffffff, transparent 70%)" }} />
         <div aria-hidden className="pointer-events-none absolute -bottom-32 -left-16 h-64 w-64 rounded-full opacity-20 blur-3xl" style={{ background: "radial-gradient(closest-side, #1e3a8a, transparent 70%)" }} />
         <Reveal>
           <div className="relative mx-auto flex max-w-5xl flex-col items-center gap-8 px-8 py-20 text-white sm:flex-row sm:justify-between sm:px-14">
             <div className="flex items-center gap-5">
-              <span className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-gradient-to-b from-white to-[#dbe7fd] p-2 shadow-lg shadow-[#1d4ed8]/40">
+              <span className="block h-16 w-16 shrink-0 overflow-hidden rounded-2xl shadow-lg shadow-[#1d4ed8]/40">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/logo.png" alt="SendLoom" className="h-full w-full object-contain" />
+                <img src="/logo.png" alt="SendLoom" className="h-full w-full object-cover" />
               </span>
               <div>
                 <h2 className="text-3xl font-bold leading-tight tracking-tight">Ready to send<br />better marketing?</h2>
