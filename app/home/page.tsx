@@ -248,8 +248,12 @@ export default function HomePage() {
       </section>
 
       {/* Stats — PLACEHOLDER numbers, replace before paid traffic */}
-      <section className="relative overflow-hidden bg-gradient-to-b from-[#1a1a1d] to-[#0a0a0c] py-14" data-placeholder="marketing-stats">
-        <div aria-hidden className="pointer-events-none absolute inset-0 opacity-50" style={{ backgroundImage: "radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px)", backgroundSize: "22px 22px" }} />
+      <section className="relative overflow-hidden py-20" data-placeholder="marketing-stats">
+        {/* Lifestyle photo as the stage; deep blue-black overlay keeps the
+            numerals readable and on-brand */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/lifestyle.jpg" alt="" aria-hidden className="absolute inset-0 h-full w-full object-cover object-[center_35%]" />
+        <div aria-hidden className="absolute inset-0 bg-gradient-to-r from-[#0a0a14]/85 via-[#101322]/75 to-[#0a0a14]/85" />
         <div className="mx-auto grid max-w-4xl grid-cols-2 gap-8 px-6 sm:grid-cols-4">
           {STATS.map((s, i) => (
             <Reveal key={s.l} delay={i * 80}>
