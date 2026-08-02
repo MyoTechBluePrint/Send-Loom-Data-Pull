@@ -53,6 +53,9 @@ model User {
   role        String   @default("member") // owner | admin | marketing | editor | viewer
   passwordHash String? // scrypt salt:hash · null = cannot log in
   disabled    Boolean  @default(false) // blocked from logging in; sessions die immediately
+  // When this person accepted the terms and privacy policy at signup. Null for
+  // accounts provisioned by seed or by an administrator, who never saw a form.
+  termsAcceptedAt DateTime?
   twoFactor   Boolean  @default(false)
   createdAt   DateTime @default(now())
 

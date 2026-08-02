@@ -4,6 +4,7 @@ import { db } from "@/lib/server/db";
 import { audit } from "@/lib/server/audit";
 import { demoWorkspaceId } from "@/lib/server/views";
 import { verifySessionToken, SESSION_COOKIE } from "@/lib/server/auth";
+import { trackFunnel } from "@/lib/server/billing/analytics-events";
 
 const Body = z.object({
   name: z.string().min(1).max(140),
@@ -25,5 +26,6 @@ export async function POST(req: NextRequest) {
     },
   });
   await audit(workspaceId, actor, "campaign.draft_created", `'${parsed.data.name}'`);
+  await trackFunnel("campaign_created", { workspaceId, once: true });
   return Response.json({ ok: true, id: campaign.id });
 }

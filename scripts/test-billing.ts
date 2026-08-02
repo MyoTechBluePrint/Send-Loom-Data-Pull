@@ -14,10 +14,14 @@ config({ path: ".env.local" });
 config({ path: ".env" });
 
 import { db } from "../lib/server/db";
-import { startTrial, recommendPlan, trialProgress } from "../lib/server/trial";
+import { startTrial, saveOnboardingProfile, recommendPlan, trialProgress } from "../lib/server/trial";
 import { advanceWorkspace, applyFailedCharge, applySuccessfulCharge } from "../lib/server/billing/lifecycle";
 import { applyCheckoutCompleted, recordEvent } from "../lib/server/billing/provider";
 import { resolveEntitlements, UNLIMITED } from "../lib/server/entitlements";
+import {
+  getWorkspaceSubscriptionContext, canUseFeature, getUsageLimit,
+  getRemainingUsage, isComplimentaryWorkspace,
+} from "../lib/server/billing/subscription-context";
 import { guard } from "../lib/server/billing/guard";
 import { trialDates } from "../lib/server/subscription-states";
 
@@ -59,6 +63,7 @@ async function cleanup(workspaceIds: string[]) {
       await db.subscription.delete({ where: { id: sub.id } });
     }
     await db.usageCounter.deleteMany({ where: { workspaceId: id } });
+    await db.event.deleteMany({ where: { workspaceId: id } });
     await db.auditLog.deleteMany({ where: { workspaceId: id } });
     await db.contact.deleteMany({ where: { workspaceId: id } });
     await db.user.deleteMany({ where: { workspaceId: id } });
@@ -82,11 +87,16 @@ async function main() {
     const ws = await makeAccount("Billing test · happy path");
     created.push(ws);
 
-    await startTrial(ws, { contactsBand: "1k_10k", primaryGoal: "recover_carts", platform: "woocommerce" }, "test");
+    await startTrial(ws, { companyName: "Happy Path Ltd" }, "test");
+    await saveOnboardingProfile(ws, { businessType: "ecommerce", expectedContacts: 6000, expectedSends: 50000, expectedSites: 2, primaryGoal: "recover_carts" }, "test");
     const sub = await db.subscription.findUniqueOrThrow({ where: { workspaceId: ws } });
 
     check("1. New user starts a trial", sub.status === "trialing_no_pm", sub.status);
     check("2. Trial begins without payment details", sub.paymentMethodVerifiedAt === null && sub.stripePaymentMethodId === null);
+    check("   A self-serve signup is persisted as an external account", sub.accountType === "external", sub.accountType);
+
+    const trialEvents = await db.event.count({ where: { workspaceId: ws, type: "trial_started", stream: "internal" } });
+    check("   Funnel records trial_started exactly once", trialEvents === 1, `${trialEvents} events`);
 
     const dates = trialDates(sub.trialStartedAt!);
     const stageOneDays = Math.round((dates.trialStageOneEndsAt.getTime() - dates.trialStartedAt.getTime()) / DAY);
@@ -107,9 +117,15 @@ async function main() {
     await advanceWorkspace(ws, { now: new Date(sub.trialStartedAt!.getTime() + 3 * DAY + HOUR) });
     check("   Day three moves the account to trial_action_required", (await statusOf(ws)) === "trial_action_required");
 
-    // The recommendation must not simply reach for the dearest plan.
-    const rec = await recommendPlan(ws, { contactsBand: "1k_10k" });
+    // The recommendation must not simply reach for the dearest plan, and it
+    // must actually read the persisted onboarding answers.
+    const rec = await recommendPlan(ws);
     check("5/8. Recommendation picks the plan that fits, not the dearest", rec.planKey === "growth", rec.planKey);
+    check("   Recommendation explains itself from the stored profile", rec.signals.some((s) => s.includes("6,000")), rec.signals.join("; "));
+
+    const profSub = await db.subscription.findUniqueOrThrow({ where: { workspaceId: ws } });
+    check("   Onboarding answers are persisted on the subscription",
+      profSub.businessType === "ecommerce" && profSub.expectedContacts === 6000 && profSub.onboardedAt !== null);
 
     // £0 verification.
     const verified = await applyCheckoutCompleted({
@@ -240,6 +256,20 @@ async function main() {
     const adminEvents = await db.subscriptionEvent.count({ where: { subscriptionId: sub3.id, type: { startsWith: "admin." } } });
     check("26. Admin overrides are recorded", adminEvents >= 1);
 
+    // ── The derived context (the one place lifecycle state comes from) ──────
+    console.log("\nSubscription context");
+    const ctxWs = await makeAccount("Billing test · context");
+    created.push(ctxWs);
+    await startTrial(ctxWs, {}, "test");
+
+    const ctx1 = await getWorkspaceSubscriptionContext(ctxWs);
+    check("Context derives the no-payment-method stage", ctx1.trial?.stage === "no_payment_method", ctx1.trial?.stage ?? "null");
+    check("Context is read-only: deriving it changes nothing", (await statusOf(ctxWs)) === "trialing_no_pm");
+    check("canUseFeature reflects the trial", (await canUseFeature(ctxWs, "revenue_attribution")) === true);
+    check("getUsageLimit reads the trial ceiling", (await getUsageLimit(ctxWs, "monthly_email_sends")) === 500);
+    check("getRemainingUsage counts down from the ceiling", (await getRemainingUsage(ctxWs, "monthly_email_sends")) === 500);
+    check("isComplimentaryWorkspace is false for a trial", (await isComplimentaryWorkspace(ctxWs)) === false);
+
     // ── The check that matters most on this instance ─────────────────────────
     console.log("\nIn-house accounts");
     const after = await db.subscription.findMany({
@@ -253,6 +283,11 @@ async function main() {
         return a && a.status === b.status && a.complimentary === b.complimentary && a.planId === b.planId;
       });
     check("27. Existing in-house accounts are completely unchanged", unchanged, `${before.length} before, ${after.length} after`);
+
+    const types = await db.subscription.findMany({ where: { complimentary: true }, select: { accountType: true } });
+    check("   In-house accounts carry an explicit non-external account type",
+      types.every((t) => t.accountType === "grandfathered" || t.accountType === "internal"),
+      types.map((t) => t.accountType).join(", "));
 
     for (const b of before) {
       const ent = await resolveEntitlements(b.workspaceId);

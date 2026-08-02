@@ -111,6 +111,66 @@ export async function POST(req: NextRequest) {
       break;
     }
 
+    case "customer.subscription.trial_will_end": {
+      // Stripe fires this ~3 days before trial_end. Our own lifecycle job
+      // sends the 48h/24h notices; this is a belt-and-braces trigger for the
+      // 48h one in case the cron is down. notifyOnce absorbs the duplicate.
+      const bundle = await contextFor(workspaceId, origin);
+      if (bundle) await notifyOnce(bundle.subscriptionId, "billing.charge_48h", bundle.ctx, bundle.email);
+      const subTwe = await db.subscription.findUnique({ where: { workspaceId } });
+      if (subTwe) {
+        await recordEvent(subTwe.id, {
+          type: "stripe.trial_will_end", actorLabel: "stripe:webhook", externalId: event.id,
+          detail: "Stripe trial-ending notice received.",
+        });
+      }
+      break;
+    }
+
+    case "invoice.created": {
+      // Recorded for the audit trail; the money truth arrives with
+      // invoice.paid or invoice.payment_failed.
+      const subIc = await db.subscription.findUnique({ where: { workspaceId } });
+      if (subIc) {
+        await recordEvent(subIc.id, {
+          type: "stripe.invoice_created", actorLabel: "stripe:webhook", externalId: event.id,
+          detail: `Invoice ${str(obj, "id") ?? "?"} created for ${typeof obj.amount_due === "number" ? `£${(obj.amount_due / 100).toFixed(2)}` : "an amount pending"}.`,
+        });
+      }
+      break;
+    }
+
+    case "invoice.payment_action_required": {
+      // Strong Customer Authentication is pending: the charge is neither
+      // succeeded nor failed. Flag the account as needing action without
+      // punishing it; failure, if it comes, arrives as its own event.
+      const subPar = await db.subscription.findUnique({ where: { workspaceId } });
+      if (subPar && (subPar.status === "active" || subPar.status === "payment_processing" || subPar.status === "trial_ending")) {
+        await db.subscription.update({ where: { id: subPar.id }, data: { status: "past_due" } });
+        await recordEvent(subPar.id, {
+          type: "stripe.payment_action_required",
+          fromStatus: subPar.status, toStatus: "past_due",
+          actorLabel: "stripe:webhook", externalId: event.id,
+          detail: "The bank requires authentication to complete the payment.",
+        });
+      }
+      break;
+    }
+
+    case "setup_intent.succeeded": {
+      // Payment-method setup confirmed at the provider. The full grant happens
+      // on checkout.session.completed; this is recorded so the setup step is
+      // independently visible in the event history.
+      const subSi = await db.subscription.findUnique({ where: { workspaceId } });
+      if (subSi) {
+        await recordEvent(subSi.id, {
+          type: "stripe.setup_succeeded", actorLabel: "stripe:webhook", externalId: event.id,
+          detail: "Payment method setup completed at the provider.",
+        });
+      }
+      break;
+    }
+
     case "customer.subscription.deleted": {
       const sub = await db.subscription.findUnique({ where: { workspaceId } });
       if (sub && sub.status !== "cancelled") {

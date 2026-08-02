@@ -6,6 +6,7 @@ import { db } from "./db";
 import { audit } from "./audit";
 import { evaluateSegmentMembers } from "./segments";
 import { guard } from "./billing/guard";
+import { trackFunnel } from "./billing/analytics-events";
 import { recordUsage } from "./entitlements";
 
 export type OutboundEmail = {
@@ -176,7 +177,10 @@ export async function sendCampaign(campaignId: string, actor: string) {
   });
 
   // Meter what actually went out, not what was attempted.
-  if (sent > 0) await recordUsage(campaign.workspaceId, "monthly_email_sends", sent);
+  if (sent > 0) {
+    await recordUsage(campaign.workspaceId, "monthly_email_sends", sent);
+    await trackFunnel("first_send_completed", { workspaceId: campaign.workspaceId, once: true });
+  }
 
   await audit(
     campaign.workspaceId, actor, "campaign.sent",

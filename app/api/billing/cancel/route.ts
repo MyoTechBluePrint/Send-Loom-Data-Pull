@@ -10,6 +10,7 @@ import { currentUser, can } from "@/lib/server/permissions";
 import { audit } from "@/lib/server/audit";
 import { cancelAtProvider, recordEvent } from "@/lib/server/billing/provider";
 import { contextFor, notifyOnce } from "@/lib/server/billing/notifications";
+import { trackFunnel } from "@/lib/server/billing/analytics-events";
 import { DATA_RETENTION_DAYS } from "@/lib/server/billing/lifecycle";
 import { formatBillingMoment } from "@/lib/server/subscription-states";
 
@@ -69,6 +70,7 @@ export async function POST(req: NextRequest) {
 
   const bundle = await contextFor(user.workspaceId, req.nextUrl.origin);
   if (bundle) await notifyOnce(bundle.subscriptionId, "billing.cancelled", bundle.ctx, bundle.email);
+  await trackFunnel("subscription_cancelled", { workspaceId: user.workspaceId, payload: { reason: reason ?? null } });
 
   return Response.json({
     ok: true,

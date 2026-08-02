@@ -4,6 +4,7 @@ import { db } from "@/lib/server/db";
 import { audit } from "@/lib/server/audit";
 import { readSignedBody } from "@/lib/server/apiAuth";
 import { looksBackend, normalizeHost, splitDomains } from "@/lib/server/tracking-domains";
+import { trackFunnel } from "@/lib/server/billing/analytics-events";
 
 const Body = z.object({
   storeUrl: z.string().min(3),
@@ -49,6 +50,7 @@ export async function POST(req: NextRequest) {
   });
 
   await audit(store.workspaceId, `plugin:${store.id}`, "store.connected", `Plugin connected from ${parsed.data.storeUrl} (plugin ${parsed.data.pluginVersion ?? "?"}, Woo ${parsed.data.wooVersion ?? "?"})`);
+  await trackFunnel("website_connected", { workspaceId: store.workspaceId, once: true });
 
   return Response.json({ ok: true, store: { id: updated.id, publicId: updated.publicId, name: updated.name, environment: updated.environment, workspaceId: updated.workspaceId } });
 }

@@ -13,6 +13,7 @@
 import { db } from "@/lib/server/db";
 import { audit } from "@/lib/server/audit";
 import { isExempt } from "@/lib/server/subscription-states";
+import { trackFunnel } from "./analytics-events";
 import { providerMode, recordEvent } from "./provider";
 import { contextFor, notifyOnce, type NotificationKey } from "./notifications";
 
@@ -258,6 +259,8 @@ export async function applySuccessfulCharge(
     externalId: args.externalId,
     detail: JSON.stringify({ grossPence: gross, creditPence: credit, chargedPence: net, simulated: Boolean(args.simulated) }),
   });
+  await trackFunnel("first_payment_succeeded", { workspaceId, once: true, payload: { chargedPence: net, simulated: Boolean(args.simulated) } });
+  if (from.startsWith("trial")) await trackFunnel("trial_converted", { workspaceId, once: true });
 
   await audit(
     workspaceId,
@@ -321,6 +324,7 @@ export async function applyFailedCharge(
     externalId: args.externalId,
     detail: args.reason ?? "Payment declined",
   });
+  await trackFunnel("first_payment_failed", { workspaceId, once: true, payload: { reason: args.reason ?? null } });
 
   await audit(
     workspaceId,

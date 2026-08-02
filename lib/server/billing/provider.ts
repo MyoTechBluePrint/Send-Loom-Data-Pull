@@ -16,6 +16,7 @@
 
 import { db } from "@/lib/server/db";
 import { audit } from "@/lib/server/audit";
+import { trackFunnel } from "./analytics-events";
 import { stripeConfigured, stripeRequest } from "./stripe";
 import type { Plan, Subscription } from "@prisma/client";
 
@@ -89,6 +90,8 @@ export async function startCheckout(args: {
       detail: JSON.stringify({ planKey: plan.key, cycle: args.cycle, amount }),
     },
   });
+  await trackFunnel("plan_selected", { workspaceId: args.workspaceId, payload: { planKey: plan.key, cycle: args.cycle } });
+  await trackFunnel("payment_method_setup_started", { workspaceId: args.workspaceId, once: true });
 
   if (providerMode() === "simulated") {
     const q = new URLSearchParams({ plan: plan.key, cycle: args.cycle });
@@ -190,6 +193,7 @@ export async function applyCheckoutCompleted(args: {
     detail: JSON.stringify({ planKey: plan.key, cycle: args.cycle, firstChargePence: charge }),
   });
 
+  await trackFunnel("payment_method_verified", { workspaceId: args.workspaceId, once: true });
   await audit(
     args.workspaceId,
     args.actorLabel,

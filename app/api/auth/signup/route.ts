@@ -1,25 +1,30 @@
 // Self-serve signup. Creates a workspace, its owner, and a 7-day trial in one
-// transaction, then signs the person straight in — no confirmation-email
-// detour before they have seen the product.
+// step, then signs the person straight in — no confirmation-email detour
+// before they have seen the product. (The platform has no email-verification
+// flow today, so none is invented here.)
+//
+// The form asks only what the brief allows at this stage: name, work email,
+// password, business name, terms. The commercial questions come after the
+// account exists, at /onboarding/business, and are skippable.
 //
 // Existing accounts are untouched by this route: it only ever creates new
-// workspaces. Nobody already using SendLoom passes through here.
+// workspaces, and every workspace it creates is accountType "external".
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/server/db";
 import { audit } from "@/lib/server/audit";
 import { createSessionToken, hashPassword, checkRateLimit, SESSION_COOKIE } from "@/lib/server/auth";
-import { startTrial, type SignupProfile } from "@/lib/server/trial";
+import { startTrial } from "@/lib/server/trial";
+import { trackFunnel } from "@/lib/server/billing/analytics-events";
 
 const Body = z.object({
-  name: z.string().min(1).max(80),
-  email: z.string().email(),
+  firstName: z.string().min(1, "Enter your first name.").max(60),
+  lastName: z.string().min(1, "Enter your last name.").max(60),
+  email: z.string().email("Enter a valid work email."),
   password: z.string().min(8, "Use at least 8 characters."),
-  companyName: z.string().max(120).optional(),
+  companyName: z.string().min(1, "Enter your business or brand name.").max(120),
   websiteUrl: z.string().max(300).optional(),
-  platform: z.enum(["woocommerce", "shopify", "other", "none"]).optional(),
-  contactsBand: z.enum(["under_1k", "1k_10k", "10k_50k", "50k_plus", "unsure"]).optional(),
-  primaryGoal: z.enum(["recover_carts", "grow_list", "send_campaigns", "understand_revenue", "other"]).optional(),
+  acceptTerms: z.literal(true, { error: "Please accept the terms and privacy policy." }),
 });
 
 /** Signups can be closed with an env flag without a deploy of the UI. */
@@ -45,37 +50,39 @@ export async function POST(req: NextRequest) {
 
   const email = parsed.data.email.toLowerCase().trim();
   if (await db.user.findUnique({ where: { email } })) {
-    // Deliberately explicit here, unlike sign-in. Someone trying to create an
+    // Deliberately explicit here, unlike sign-in: someone trying to create an
     // account needs to know it already exists, and it is their own address.
     return Response.json({ ok: false, error: "An account already uses this email. Sign in instead." }, { status: 409 });
   }
 
-  const profile: SignupProfile = {
-    companyName: parsed.data.companyName?.trim() || undefined,
-    websiteUrl: parsed.data.websiteUrl?.trim() || undefined,
-    platform: parsed.data.platform,
-    contactsBand: parsed.data.contactsBand,
-    primaryGoal: parsed.data.primaryGoal,
-  };
+  await trackFunnel("signup_started", { email, payload: { ip } });
 
-  const workspaceName = profile.companyName || parsed.data.name.trim();
+  const workspaceName = parsed.data.companyName.trim();
+  const fullName = `${parsed.data.firstName.trim()} ${parsed.data.lastName.trim()}`;
 
   const workspace = await db.workspace.create({ data: { name: workspaceName } });
   await db.user.create({
     data: {
       workspaceId: workspace.id,
       email,
-      name: parsed.data.name.trim(),
+      name: fullName,
       role: "owner",
       passwordHash: hashPassword(parsed.data.password),
+      termsAcceptedAt: new Date(),
     },
   });
 
-  await startTrial(workspace.id, profile, email);
-  await audit(workspace.id, email, "auth.signup", `New workspace "${workspaceName}" created · 7-day trial started · ip ${ip}`);
+  await startTrial(
+    workspace.id,
+    { companyName: workspaceName, websiteUrl: parsed.data.websiteUrl?.trim() || undefined },
+    email
+  );
+
+  await trackFunnel("signup_completed", { workspaceId: workspace.id, email, once: true });
+  await audit(workspace.id, email, "auth.signup", `New workspace "${workspaceName}" created · terms accepted · 7-day trial started · ip ${ip}`);
 
   const token = createSessionToken(email, Date.now(), 30);
-  const res = Response.json({ ok: true, next: "/welcome" });
+  const res = Response.json({ ok: true, next: "/onboarding/trial" });
   res.headers.set(
     "Set-Cookie",
     `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${30 * 24 * 3600}${process.env.NODE_ENV === "production" ? "; Secure" : ""}`

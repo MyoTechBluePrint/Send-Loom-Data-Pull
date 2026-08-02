@@ -7,6 +7,7 @@ import { currentUser } from "@/lib/server/permissions";
 import { db } from "@/lib/server/db";
 import { PlanCards } from "@/components/billing/plan-cards";
 import { formatBillingMoment } from "@/lib/server/subscription-states";
+import { trackFunnel } from "@/lib/server/billing/analytics-events";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,8 @@ export default async function PlansPage() {
   const sub = await db.subscription.findUnique({ where: { workspaceId: user.workspaceId } });
   // Nothing to sell to an in-house account.
   if (sub?.complimentary) redirect("/settings/billing");
+
+  await trackFunnel("plan_viewed", { workspaceId: user.workspaceId, once: true });
 
   const gate = sub?.status === "trial_action_required";
   const ends = sub?.trialEndsAt;

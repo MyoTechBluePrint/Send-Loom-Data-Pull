@@ -1,22 +1,32 @@
-// Trial lifecycle: starting a trial, and recommending the plan that actually
-// fits what the account is doing.
+// Trial lifecycle: starting a trial, capturing the commercial profile, and
+// recommending the plan that actually fits.
 //
-// The recommendation is the reason the signup questions are worth asking. We
-// only ask what feeds it, so the customer gets something back immediately
-// instead of filling in a form for our benefit.
+// The onboarding questions exist only to feed the recommendation, so the
+// answers are persisted on the subscription itself and read back every time a
+// recommendation is made. Nothing is asked that is not used here.
 
 import { db } from "@/lib/server/db";
 import { trialDates } from "@/lib/server/subscription-states";
+import { trackFunnel } from "@/lib/server/billing/analytics-events";
+
+export type BusinessType =
+  | "ecommerce" | "professional_services" | "hospitality" | "property"
+  | "financial_services" | "agency" | "creator_media" | "other";
+
+export type PrimaryGoal =
+  | "generate_sales" | "recover_carts" | "build_journeys" | "grow_list"
+  | "improve_retention" | "send_newsletters" | "manage_clients";
 
 export type SignupProfile = {
-  /** Their store or website. Also the thing we connect tracking to later. */
+  businessType?: BusinessType;
+  /** Approximate current contact count, as a number. */
+  expectedContacts?: number;
+  /** Expected monthly email volume. */
+  expectedSends?: number;
+  /** Websites or brands they intend to connect. */
+  expectedSites?: number;
+  primaryGoal?: PrimaryGoal;
   websiteUrl?: string;
-  /** Roughly how many contacts they hold today. Drives plan sizing. */
-  contactsBand?: "under_1k" | "1k_10k" | "10k_50k" | "50k_plus" | "unsure";
-  /** What they want first. Drives which onboarding path we open on. */
-  primaryGoal?: "recover_carts" | "grow_list" | "send_campaigns" | "understand_revenue" | "other";
-  /** Platform, so we can offer the right connector. */
-  platform?: "woocommerce" | "shopify" | "other" | "none";
   companyName?: string;
 };
 
@@ -33,10 +43,17 @@ export async function startTrial(workspaceId: string, profile: SignupProfile = {
     data: {
       workspaceId,
       status: "trialing_no_pm",
+      accountType: "external",
       trialStartedAt: dates.trialStartedAt,
       trialStageOneEndsAt: dates.trialStageOneEndsAt,
       trialEndsAt: dates.trialEndsAt,
       firstBillingAt: dates.firstBillingAt,
+      businessType: profile.businessType ?? null,
+      expectedContacts: profile.expectedContacts ?? null,
+      expectedSends: profile.expectedSends ?? null,
+      expectedSites: profile.expectedSites ?? null,
+      primaryGoal: profile.primaryGoal ?? null,
+      websiteUrl: profile.websiteUrl ?? null,
       notes: profile.companyName ? `Signup: ${profile.companyName}` : null,
       entitlementOverrides: "{}",
     },
@@ -51,12 +68,46 @@ export async function startTrial(workspaceId: string, profile: SignupProfile = {
       detail: JSON.stringify({
         stageOneEnds: dates.trialStageOneEndsAt.toISOString(),
         trialEnds: dates.trialEndsAt.toISOString(),
-        profile,
       }),
     },
   });
+  await trackFunnel("trial_started", { workspaceId, once: true });
 
   return sub;
+}
+
+/**
+ * Save or update the onboarding answers after the account exists.
+ * Skippable questions arrive as undefined and do not erase earlier answers.
+ */
+export async function saveOnboardingProfile(workspaceId: string, profile: SignupProfile, actorLabel: string) {
+  const sub = await db.subscription.findUnique({ where: { workspaceId } });
+  if (!sub) return null;
+
+  const updated = await db.subscription.update({
+    where: { id: sub.id },
+    data: {
+      businessType: profile.businessType ?? sub.businessType,
+      expectedContacts: profile.expectedContacts ?? sub.expectedContacts,
+      expectedSends: profile.expectedSends ?? sub.expectedSends,
+      expectedSites: profile.expectedSites ?? sub.expectedSites,
+      primaryGoal: profile.primaryGoal ?? sub.primaryGoal,
+      websiteUrl: profile.websiteUrl ?? sub.websiteUrl,
+      onboardedAt: sub.onboardedAt ?? new Date(),
+    },
+  });
+
+  await db.subscriptionEvent.create({
+    data: {
+      subscriptionId: sub.id,
+      type: "onboarding.completed",
+      actorLabel,
+      detail: JSON.stringify(profile),
+    },
+  });
+  await trackFunnel("onboarding_completed", { workspaceId, once: true });
+
+  return updated;
 }
 
 export type Recommendation = {
@@ -67,55 +118,83 @@ export type Recommendation = {
   signals: string[];
 };
 
-const BAND_CONTACTS: Record<string, number> = {
-  under_1k: 500,
-  "1k_10k": 6000,
-  "10k_50k": 30000,
-  "50k_plus": 80000,
-  unsure: 1000,
-};
-
 /**
- * Recommend a plan from real usage first, falling back to what they told us at
- * signup. Deliberately picks the SMALLEST plan that fits: the spec is explicit
- * that this must not push everyone to the most expensive option, and a customer
- * who is upsold into a plan they do not need churns.
+ * Recommend a plan. Deterministic and explainable, per the brief: real usage
+ * beats the stated expectation once there is any, and the answer is the
+ * SMALLEST plan that clears every dimension, never the dearest.
+ *
+ * Plan ceilings are read from the database so an admin price/limit change
+ * moves the recommendation without touching code.
  */
-export async function recommendPlan(workspaceId: string, profile: SignupProfile = {}): Promise<Recommendation> {
-  const [contacts, stores, automations, users] = await Promise.all([
+export async function recommendPlan(workspaceId: string): Promise<Recommendation> {
+  const [sub, contacts, stores, automations, users, plans] = await Promise.all([
+    db.subscription.findUnique({ where: { workspaceId } }),
     db.contact.count({ where: { workspaceId } }),
     db.store.count({ where: { workspaceId } }),
-    db.automation.count({ where: { workspaceId } }),
-    db.user.count({ where: { workspaceId } }),
+    db.automation.count({ where: { workspaceId, status: "live" } }),
+    db.user.count({ where: { workspaceId, disabled: false } }),
+    db.plan.findMany({ where: { visible: true, contactSales: false }, orderBy: { sortOrder: "asc" } }),
   ]);
 
-  // Real usage beats a self-reported band once there is any.
-  const statedContacts = profile.contactsBand ? BAND_CONTACTS[profile.contactsBand] ?? 0 : 0;
-  const effectiveContacts = Math.max(contacts, statedContacts);
+  const effective = {
+    contacts: Math.max(contacts, sub?.expectedContacts ?? 0),
+    sends: sub?.expectedSends ?? 0,
+    sites: Math.max(stores, sub?.expectedSites ?? 0),
+    users,
+    automations,
+  };
 
   const signals: string[] = [];
   if (contacts > 0) signals.push(`${contacts.toLocaleString()} contacts imported`);
-  else if (statedContacts) signals.push(`around ${statedContacts.toLocaleString()} contacts expected`);
-  if (stores > 0) signals.push(`${stores} connected ${stores === 1 ? "website" : "websites"}`);
-  if (automations > 0) signals.push(`${automations} ${automations === 1 ? "automation" : "automations"}`);
+  else if (effective.contacts) signals.push(`around ${effective.contacts.toLocaleString()} contacts expected`);
+  if (effective.sends) signals.push(`about ${effective.sends.toLocaleString()} emails a month`);
+  if (effective.sites > 0) signals.push(`${effective.sites} ${effective.sites === 1 ? "website" : "websites"}`);
+  if (automations > 0) signals.push(`${automations} live ${automations === 1 ? "automation" : "automations"}`);
   if (users > 1) signals.push(`${users} team members`);
 
-  // Smallest plan that clears every dimension.
-  let planKey: Recommendation["planKey"] = "launch";
-  if (effectiveContacts > 25000 || stores > 3 || users > 5 || automations > 25) planKey = "scale";
-  else if (effectiveContacts > 2500 || stores > 1 || users > 1 || automations > 3) planKey = "growth";
+  // Smallest visible plan whose limits cover every dimension.
+  const fits = (entJson: string): boolean => {
+    let ent: Record<string, number | boolean>;
+    try { ent = JSON.parse(entJson); } catch { return false; }
+    const covers = (key: string, need: number) => {
+      const v = ent[key];
+      if (typeof v !== "number") return true;
+      return v === -1 || v >= need;
+    };
+    return (
+      covers("monthly_contacts", effective.contacts) &&
+      covers("monthly_email_sends", effective.sends) &&
+      covers("connected_domains", effective.sites) &&
+      covers("team_members", effective.users) &&
+      covers("active_automations", effective.automations)
+    );
+  };
 
-  // Wanting revenue attribution is a genuine Growth reason, not an upsell:
-  // Launch does not include it.
-  if (planKey === "launch" && profile.primaryGoal === "understand_revenue") {
-    planKey = "growth";
-    signals.push("revenue attribution requested");
+  let chosen = plans.find((p) => fits(p.entitlements)) ?? plans[plans.length - 1];
+
+  // Revenue attribution is a genuine plan boundary, not an upsell: it is off
+  // on Launch, and several goals depend on it.
+  const wantsAttribution = sub?.primaryGoal === "generate_sales" || sub?.primaryGoal === "improve_retention" || sub?.primaryGoal === "recover_carts";
+  if (chosen && wantsAttribution) {
+    try {
+      const ent = JSON.parse(chosen.entitlements) as Record<string, number | boolean>;
+      if (ent.revenue_attribution !== true) {
+        const next = plans.find((p) => {
+          try { return (JSON.parse(p.entitlements) as Record<string, unknown>).revenue_attribution === true; } catch { return false; }
+        });
+        if (next) {
+          chosen = next;
+          signals.push("revenue tracking needed for your goal");
+        }
+      }
+    } catch { /* keep the size-based choice */ }
   }
 
-  const names = { launch: "SendLoom Launch", growth: "SendLoom Growth", scale: "SendLoom Scale" };
+  const planKey = (chosen?.key ?? "launch") as Recommendation["planKey"];
+  const name = chosen?.name ?? "SendLoom Launch";
   const reason = signals.length
-    ? `You have ${signals.join(", ")}. ${names[planKey]} covers that without you having to cut anything back.`
-    : `${names[planKey]} is the right starting point for a new list. You can move up at any time, and we will tell you when your usage says you should.`;
+    ? `${name} is recommended because you have ${signals.join(", ")}. It covers that without you having to cut anything back.`
+    : `${name} is the right starting point for a new list. You can move up at any time, and we will tell you when your usage says you should.`;
 
   return { planKey, reason, signals };
 }
