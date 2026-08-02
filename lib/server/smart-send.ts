@@ -1,0 +1,351 @@
+// Smart sending: gradual campaign delivery through backend batch jobs.
+//
+// The model, deliberately simple and restartable:
+//   - Starting a gradual campaign snapshots the eligible audience into
+//     CampaignSend rows (status "queued") and computes the batch cadence from
+//     the chosen duration. The unique (campaignId, contactId) constraint means
+//     this is idempotent: restarting can never enqueue anyone twice.
+//   - runDueBatches() — called by the same cron seam as billing — delivers one
+//     batch per due campaign per tick. Before EVERY batch it re-checks
+//     suppression and consent for each recipient, honours the send window,
+//     and applies the safety rails (bounce/complaint thresholds, workspace
+//     sending rights).
+//   - Pause, resume and cancel are one status field. Cancel marks the unsent
+//     rows "cancelled" so the numbers always add up.
+
+import { db } from "@/lib/server/db";
+import { audit } from "./audit";
+import { guard } from "./billing/guard";
+import { canSend } from "./subscription-states";
+import { resolveEntitlements } from "./entitlements";
+import { recordUsage } from "./entitlements";
+import {
+  activeProvider, resolveAudience, deliverToContact,
+} from "./sending";
+import { parseBlocks, validateBlocks } from "./email-blocks";
+import { renderPreview, resolveFeeds } from "./email-render";
+import { trackFunnel } from "./billing/analytics-events";
+
+export const DURATIONS_MIN = [15, 30, 60, 120, 240, 480, 720, 1440] as const;
+
+/** Safety rails: pause a run rather than keep sending into trouble. */
+export const SAFETY = {
+  maxBounceRate: 0.05,      // 5% of a campaign's attempted sends
+  maxComplaintRate: 0.002,  // 0.2%
+  minSampleForRates: 50,    // do not judge rates on tiny samples
+};
+
+export type SmartSendProgress = {
+  state: string | null;
+  sent: number;
+  queued: number;
+  failed: number;
+  suppressed: number;
+  cancelled: number;
+  total: number;
+  nextBatchAt: string | null;
+  estimatedCompletionAt: string | null;
+  pauseReason: string | null;
+};
+
+/**
+ * Start a campaign send. mode=immediate delegates to the existing loop;
+ * mode=gradual enqueues and lets the tick deliver.
+ */
+export async function startSmartSend(campaignId: string, actor: string, opts: {
+  mode: "immediate" | "gradual";
+  durationMins?: number;
+  batchSize?: number;
+  windowStart?: number | null; // hour 0-23
+  windowEnd?: number | null;
+}): Promise<{ ok: true; queued: number } | { ok: false; error: string }> {
+  const campaign = await db.campaign.findUnique({ where: { id: campaignId } });
+  if (!campaign) return { ok: false, error: "Campaign not found." };
+  if (campaign.status === "sent" || campaign.status === "sending") {
+    return { ok: false, error: "Campaign already sent or sending." };
+  }
+
+  // Content gate: same rule as immediate sending.
+  const blocks = parseBlocks(campaign.content);
+  if (blocks.length) {
+    const errors = validateBlocks(blocks).filter((i) => i.level === "error");
+    if (errors.length) return { ok: false, error: `The email cannot be sent yet: ${errors[0].message}` };
+  }
+
+  const { eligible } = await resolveAudience(campaign.workspaceId, campaign.audienceType, campaign.audienceRef);
+  if (!eligible.length) return { ok: false, error: "No eligible recipients (consent and suppression rules applied)." };
+
+  const allowance = await guard(campaign.workspaceId, "monthly_email_sends", eligible.length);
+  if (!allowance.allowed) return { ok: false, error: allowance.error };
+
+  // Freeze the content: resolve feeds once, snapshot the render.
+  let resolved = blocks;
+  if (blocks.length) {
+    resolved = await resolveFeeds(blocks, campaign.workspaceId, null);
+    const snapshot = await renderPreview({ workspaceId: campaign.workspaceId, blocks: resolved, brandId: campaign.brandId });
+    await db.campaign.update({
+      where: { id: campaignId },
+      data: { renderedHtml: snapshot.html, renderedText: snapshot.textBody, content: JSON.stringify(resolved) },
+    });
+  }
+
+  // Enqueue everyone, idempotently.
+  let queued = 0;
+  for (const c of eligible) {
+    try {
+      await db.campaignSend.create({ data: { campaignId, contactId: c.id, status: "queued" } });
+      queued++;
+    } catch {
+      /* already queued from an earlier attempt: fine */
+    }
+  }
+
+  const batchSize = Math.max(10, Math.min(opts.batchSize ?? 100, 1000));
+  const durationMins = opts.mode === "gradual" ? Math.max(15, Math.min(opts.durationMins ?? 60, 7 * 1440)) : 0;
+
+  await db.campaign.update({
+    where: { id: campaignId },
+    data: {
+      status: "sending",
+      audienceSnapshot: eligible.length,
+      sendMode: opts.mode,
+      sendDurationMins: durationMins || null,
+      sendBatchSize: batchSize,
+      sendWindowStart: opts.windowStart ?? null,
+      sendWindowEnd: opts.windowEnd ?? null,
+      sendState: "running",
+      nextBatchAt: new Date(),
+    },
+  });
+
+  await audit(
+    campaign.workspaceId, actor, "campaign.smart_send_started",
+    `'${campaign.name}' · ${opts.mode}${durationMins ? ` over ${durationMins}m` : ""} · ${eligible.length} recipients · batches of ${batchSize}`
+  );
+
+  if (opts.mode === "immediate") {
+    // Deliver now through the batch runner until drained.
+    let guardRail = 0;
+    while (guardRail++ < 1000) {
+      const done = await runCampaignBatch(campaignId);
+      if (done !== "continue") break;
+    }
+  }
+
+  return { ok: true, queued };
+}
+
+export async function pauseSmartSend(campaignId: string, actor: string, reason = "Paused by operator") {
+  await db.campaign.update({ where: { id: campaignId }, data: { sendState: "paused", sendPausedAt: new Date(), sendPauseReason: reason } });
+  const c = await db.campaign.findUnique({ where: { id: campaignId }, select: { workspaceId: true, name: true } });
+  if (c) await audit(c.workspaceId, actor, "campaign.send_paused", `'${c.name}': ${reason}`);
+}
+
+export async function resumeSmartSend(campaignId: string, actor: string) {
+  await db.campaign.update({ where: { id: campaignId }, data: { sendState: "running", sendPauseReason: null, nextBatchAt: new Date() } });
+  const c = await db.campaign.findUnique({ where: { id: campaignId }, select: { workspaceId: true, name: true } });
+  if (c) await audit(c.workspaceId, actor, "campaign.send_resumed", `'${c.name}'`);
+}
+
+export async function cancelSmartSend(campaignId: string, actor: string) {
+  const cancelled = await db.campaignSend.updateMany({
+    where: { campaignId, status: "queued" },
+    data: { status: "cancelled" },
+  });
+  await db.campaign.update({ where: { id: campaignId }, data: { sendState: "cancelled", status: "sent", sentAt: new Date() } });
+  const c = await db.campaign.findUnique({ where: { id: campaignId }, select: { workspaceId: true, name: true } });
+  if (c) await audit(c.workspaceId, actor, "campaign.send_cancelled", `'${c.name}': ${cancelled.count} unsent recipients cancelled · already-sent emails are unaffected`);
+  return cancelled.count;
+}
+
+export async function smartSendProgress(campaignId: string): Promise<SmartSendProgress> {
+  const [campaign, groups] = await Promise.all([
+    db.campaign.findUnique({ where: { id: campaignId } }),
+    db.campaignSend.groupBy({ by: ["status"], where: { campaignId }, _count: { _all: true } }),
+  ]);
+  const count = (s: string) => groups.find((g) => g.status === s)?._count._all ?? 0;
+  const sent = count("sent");
+  const queued = count("queued");
+  const total = groups.reduce((n, g) => n + g._count._all, 0);
+
+  let eta: string | null = null;
+  if (campaign?.sendState === "running" && queued > 0 && campaign.sendDurationMins && campaign.sendBatchSize) {
+    const batchesLeft = Math.ceil(queued / campaign.sendBatchSize);
+    const totalBatches = Math.max(1, Math.ceil((campaign.audienceSnapshot || total) / campaign.sendBatchSize));
+    const intervalMs = (campaign.sendDurationMins * 60_000) / totalBatches;
+    eta = new Date(Date.now() + batchesLeft * intervalMs).toISOString();
+  }
+
+  return {
+    state: campaign?.sendState ?? null,
+    sent, queued,
+    failed: count("failed"),
+    suppressed: count("suppressed"),
+    cancelled: count("cancelled"),
+    total,
+    nextBatchAt: campaign?.nextBatchAt?.toISOString() ?? null,
+    estimatedCompletionAt: eta,
+    pauseReason: campaign?.sendPauseReason ?? null,
+  };
+}
+
+function inWindow(now: Date, start: number | null, end: number | null): boolean {
+  if (start === null || end === null) return true;
+  const h = now.getHours();
+  // Window may wrap midnight (e.g. 20 -> 8).
+  return start <= end ? h >= start && h < end : h >= start || h < end;
+}
+
+/**
+ * Deliver one due batch for one campaign.
+ * Returns "continue" (more to do), "done", or "skipped".
+ */
+export async function runCampaignBatch(campaignId: string, now = new Date()): Promise<"continue" | "done" | "skipped"> {
+  const campaign = await db.campaign.findUnique({ where: { id: campaignId } });
+  if (!campaign || campaign.sendState !== "running") return "skipped";
+  if (campaign.nextBatchAt && campaign.nextBatchAt.getTime() > now.getTime()) return "skipped";
+
+  // Send window: outside it, schedule the next look at the window's opening.
+  if (!inWindow(now, campaign.sendWindowStart, campaign.sendWindowEnd)) {
+    const next = new Date(now);
+    next.setMinutes(0, 0, 0);
+    next.setHours(campaign.sendWindowStart ?? 0);
+    if (next <= now) next.setDate(next.getDate() + 1);
+    await db.campaign.update({ where: { id: campaign.id }, data: { nextBatchAt: next } });
+    return "skipped";
+  }
+
+  // Workspace-level rails: billing state and sending rights, re-checked per
+  // batch, not once at start.
+  const resolvedEnt = await resolveEntitlements(campaign.workspaceId);
+  if (!resolvedEnt.unmetered && !canSend(resolvedEnt.status)) {
+    await pauseSmartSend(campaign.id, "system", "Workspace sending is paused by billing state.");
+    return "skipped";
+  }
+
+  // Bounce/complaint rails from this campaign's own delivery record.
+  const [attempted, bounced, complained] = await Promise.all([
+    db.campaignSend.count({ where: { campaignId, status: { in: ["sent", "bounced", "complained", "failed"] } } }),
+    db.campaignSend.count({ where: { campaignId, status: "bounced" } }),
+    db.campaignSend.count({ where: { campaignId, status: "complained" } }),
+  ]);
+  if (attempted >= SAFETY.minSampleForRates) {
+    if (bounced / attempted > SAFETY.maxBounceRate) {
+      await pauseSmartSend(campaign.id, "system", `Bounce rate ${(100 * bounced / attempted).toFixed(1)}% exceeded ${SAFETY.maxBounceRate * 100}%.`);
+      return "skipped";
+    }
+    if (complained / attempted > SAFETY.maxComplaintRate) {
+      await pauseSmartSend(campaign.id, "system", `Complaint rate exceeded ${SAFETY.maxComplaintRate * 100}%.`);
+      return "skipped";
+    }
+  }
+
+  const batch = await db.campaignSend.findMany({
+    where: { campaignId, status: "queued" },
+    include: { contact: { select: { id: true, email: true } } },
+    take: campaign.sendBatchSize,
+    orderBy: { createdAt: "asc" },
+  });
+
+  if (batch.length === 0) {
+    await db.campaign.update({
+      where: { id: campaign.id },
+      data: { status: "sent", sentAt: campaign.sentAt ?? new Date(), sendState: "complete", nextBatchAt: null, isDemo: false },
+    });
+    await audit(campaign.workspaceId, "system", "campaign.smart_send_complete", `'${campaign.name}' finished.`);
+    return "done";
+  }
+
+  // Pre-batch recheck: suppression and consent may have changed since
+  // enqueueing. Anyone no longer eligible is marked suppressed, not sent.
+  const suppressions = new Set(
+    (await db.suppressionRecord.findMany({ where: { workspaceId: campaign.workspaceId } })).map((s) => s.email)
+  );
+
+  const provider = activeProvider();
+  const blocks = parseBlocks(campaign.content);
+  let sent = 0;
+
+  for (const row of batch) {
+    const email = row.contact.email;
+    if (!email || suppressions.has(email)) {
+      await db.campaignSend.update({ where: { id: row.id }, data: { status: "suppressed" } });
+      continue;
+    }
+    const latest = await db.consentRecord.findFirst({
+      where: { contactId: row.contactId, channel: "email" }, orderBy: { createdAt: "desc" },
+    });
+    if (latest?.status !== "granted") {
+      await db.campaignSend.update({ where: { id: row.id }, data: { status: "suppressed" } });
+      continue;
+    }
+
+    // deliverToContact would create a duplicate row; the row exists, so we
+    // inline its delivery here against the existing row.
+    try {
+      const { renderForRecipient } = await import("./email-render");
+      let html: string;
+      if (blocks.length) {
+        const full = await db.contact.findUnique({ where: { id: row.contactId }, select: { firstName: true, lastName: true } });
+        const rendered = await renderForRecipient({
+          workspaceId: campaign.workspaceId,
+          campaignId: campaign.id,
+          sendId: row.id,
+          contact: { id: row.contactId, email, firstName: full?.firstName, lastName: full?.lastName },
+          blocks,
+          brandId: campaign.brandId,
+        });
+        html = rendered.html;
+      } else {
+        html = campaign.content ?? `<p>${campaign.name}</p>`;
+      }
+      const brand = campaign.brandId
+        ? await db.brand.findUnique({ where: { id: campaign.brandId }, select: { senderName: true, senderEmail: true, replyToEmail: true } })
+        : null;
+      await provider.send({
+        to: email,
+        subject: campaign.subject ?? campaign.name,
+        html,
+        campaignSendId: row.id,
+        from: brand?.senderEmail ? `${brand.senderName ?? "SendLoom"} <${brand.senderEmail}>` : undefined,
+        replyTo: brand?.replyToEmail ?? undefined,
+      });
+      await db.campaignSend.update({ where: { id: row.id }, data: { status: "sent" } });
+      sent++;
+    } catch {
+      await db.campaignSend.update({ where: { id: row.id }, data: { status: "failed" } });
+    }
+  }
+
+  if (sent > 0) {
+    await recordUsage(campaign.workspaceId, "monthly_email_sends", sent);
+    await trackFunnel("first_send_completed", { workspaceId: campaign.workspaceId, once: true });
+  }
+
+  // Schedule the next batch from the duration.
+  const totalBatches = Math.max(1, Math.ceil((campaign.audienceSnapshot || 1) / campaign.sendBatchSize));
+  const intervalMs = campaign.sendMode === "gradual" && campaign.sendDurationMins
+    ? Math.max(30_000, (campaign.sendDurationMins * 60_000) / totalBatches)
+    : 0;
+  await db.campaign.update({
+    where: { id: campaign.id },
+    data: { nextBatchAt: new Date(now.getTime() + intervalMs) },
+  });
+
+  return "continue";
+}
+
+/** Deliver every due batch across the workspace. Called by the cron seam. */
+export async function runDueBatches(now = new Date()): Promise<{ campaignId: string; result: string }[]> {
+  const due = await db.campaign.findMany({
+    where: { sendState: "running", nextBatchAt: { lte: now } },
+    select: { id: true },
+    take: 20,
+  });
+  const results: { campaignId: string; result: string }[] = [];
+  for (const c of due) {
+    const r = await runCampaignBatch(c.id, now);
+    results.push({ campaignId: c.id, result: r });
+  }
+  return results;
+}

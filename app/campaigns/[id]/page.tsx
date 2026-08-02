@@ -5,6 +5,7 @@ import { Card, CardHeader, Stat, Badge, HBarChart, Th, Td } from "@/components/u
 import { gbp, num } from "@/lib/data";
 import { db } from "@/lib/server/db";
 import { CampaignEmailPanel } from "@/components/campaign-email-panel";
+import { SmartSendPanel } from "@/components/smart-send-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +46,8 @@ export default async function CampaignReport({ params }: { params: Promise<{ id:
       <div className="mt-3">
         <CampaignEmailPanel campaignId={c.id} />
       </div>
+
+      <SmartSendPanel campaignId={c.id} sent={c.status === "sent"} />
 
       <div className="mt-3 grid grid-cols-2 gap-4 xl:grid-cols-4">
         <Stat label="Recipients" value={num(c.audienceSnapshot)} />
