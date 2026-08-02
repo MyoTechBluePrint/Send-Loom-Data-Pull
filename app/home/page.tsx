@@ -183,7 +183,7 @@ export default function HomePage() {
                 alt="SendLoom dashboard on a MacBook and iPhone"
                 width={1024}
                 height={560}
-                className="relative w-full max-w-none drop-shadow-[0_28px_48px_rgba(29,29,31,0.2)] lg:w-[115%]"
+                className="relative w-full max-w-none drop-shadow-[0_32px_56px_rgba(29,29,31,0.22)] lg:w-[135%]"
               />
             </div>
           </Reveal>
@@ -306,14 +306,14 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Final CTA */}
-      <section className="px-6 pb-16">
+      {/* Final CTA: full-bleed two-tone blue band */}
+      <section className="relative overflow-hidden bg-gradient-to-br from-[#5b93f8] via-[#3478f6] to-[#1d4ed8]">
+        {/* Texture across the whole band, not just the content column */}
+        <div aria-hidden className="pointer-events-none absolute inset-0" style={{ backgroundImage: "radial-gradient(rgba(255,255,255,0.14) 1px, transparent 1px)", backgroundSize: "22px 22px" }} />
+        <div aria-hidden className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full opacity-30 blur-3xl" style={{ background: "radial-gradient(closest-side, #ffffff, transparent 70%)" }} />
+        <div aria-hidden className="pointer-events-none absolute -bottom-32 -left-16 h-64 w-64 rounded-full opacity-20 blur-3xl" style={{ background: "radial-gradient(closest-side, #1e3a8a, transparent 70%)" }} />
         <Reveal>
-          <div className="relative mx-auto flex max-w-5xl flex-col items-center gap-8 overflow-hidden rounded-[32px] bg-gradient-to-br from-[#5b93f8] via-[#3478f6] to-[#1d4ed8] px-8 py-14 text-white shadow-[0_32px_80px_-20px_rgba(52,120,246,0.55)] sm:flex-row sm:justify-between sm:px-14">
-            {/* Quiet dot grid: texture, not decoration */}
-            <div aria-hidden className="pointer-events-none absolute inset-0" style={{ backgroundImage: "radial-gradient(rgba(255,255,255,0.14) 1px, transparent 1px)", backgroundSize: "22px 22px" }} />
-            <div aria-hidden className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full opacity-30 blur-3xl" style={{ background: "radial-gradient(closest-side, #ffffff, transparent 70%)" }} />
-            <div aria-hidden className="pointer-events-none absolute -bottom-32 -left-16 h-64 w-64 rounded-full opacity-20 blur-3xl" style={{ background: "radial-gradient(closest-side, #1e3a8a, transparent 70%)" }} />
+          <div className="relative mx-auto flex max-w-5xl flex-col items-center gap-8 px-8 py-20 text-white sm:flex-row sm:justify-between sm:px-14">
             <div className="flex items-center gap-5">
               <span className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-gradient-to-b from-white to-[#dbe7fd] text-3xl font-black shadow-lg shadow-[#1d4ed8]/40" style={{ color: blue }}>S</span>
               <div>
