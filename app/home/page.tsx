@@ -77,12 +77,21 @@ const QUOTES = [
 
 const LOGOS = ["GLOW", "DRIFT & CO.", "ICONIC", "STUDIO B", "NORTHBOUND", "SÖLACE"];
 
-function PayButtons({ compact = false }: { compact?: boolean }) {
+function PayButtons({ compact = false, onDark = false }: { compact?: boolean; onDark?: boolean }) {
   // The trial needs no card, so every payment affordance routes into signup;
   // real Apple Pay arrives at checkout via Stripe on day three.
+  // On dark surfaces Apple Pay flips to Apple's white variant, so it never
+  // sits black-on-black.
   return (
     <div className={compact ? "w-full max-w-xs" : "w-full"}>
-      <Link href="/signup" className="flex h-12 w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-b from-[#2c2c2e] to-black text-[16px] font-semibold text-white shadow-md shadow-black/25 transition active:scale-[0.98]">
+      <Link
+        href="/signup"
+        className={`flex h-12 w-full items-center justify-center gap-1.5 rounded-xl text-[16px] font-semibold shadow-md transition active:scale-[0.98] ${
+          onDark
+            ? "bg-gradient-to-b from-white to-[#e8e8ec] text-black shadow-black/40"
+            : "bg-gradient-to-b from-[#2c2c2e] to-black text-white shadow-black/25"
+        }`}
+      >
         <AppleLogo /> Pay
       </Link>
       <Link href="/signup" className="mt-2.5 flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-black/10 bg-white text-[15px] font-semibold transition hover:border-black/25 active:scale-[0.98]" style={{ color: ink }}>
@@ -204,11 +213,15 @@ export default function HomePage() {
       </section>
 
       {/* Device showcase: CSS devices, no screenshots */}
-      <section className="overflow-hidden bg-gradient-to-b from-white via-[#eef3fe] to-white pb-24 pt-4">
-        <Reveal>
-          <div className="relative mx-auto max-w-4xl px-6">
+      <section className="overflow-hidden bg-gradient-to-b from-white via-[#eef3fe] to-white pb-24 pt-8">
+        <div className="mx-auto mb-10 max-w-xl px-6 text-center">
+          <h2 className="text-3xl font-bold tracking-tight">One platform. Every device.</h2>
+          <p className="mt-2 text-[14px] text-black/50">Campaigns, automations and revenue, live wherever you are.</p>
+        </div>
+        <div>
+          <div className="relative mx-auto max-w-5xl px-6">
             {/* MacBook */}
-            <div className="mx-auto w-full max-w-2xl">
+            <div className="mx-auto w-full max-w-3xl">
               <div className="rounded-t-2xl border border-black/10 bg-[#0e0e10] p-2.5 shadow-2xl">
                 <div className="overflow-hidden rounded-lg bg-white">
                   <div className="flex">
@@ -243,7 +256,7 @@ export default function HomePage() {
               <div className="mx-auto h-2.5 w-[110%] -translate-x-[4.5%] rounded-b-xl bg-gradient-to-b from-[#d7d7db] to-[#b9b9bf]" />
             </div>
             {/* iPhone */}
-            <div className="absolute -bottom-4 right-8 hidden w-40 sm:block">
+            <div className="absolute -bottom-6 right-4 hidden w-52 rotate-2 sm:block">
               <div className="rounded-[26px] border border-black/10 bg-[#0e0e10] p-1.5 shadow-2xl">
                 <div className="overflow-hidden rounded-[20px] bg-white p-2">
                   <div className="mx-auto mb-1.5 h-1 w-10 rounded-full bg-black/80" />
@@ -261,7 +274,7 @@ export default function HomePage() {
               </div>
             </div>
           </div>
-        </Reveal>
+        </div>
       </section>
 
       {/* Features */}
@@ -282,7 +295,8 @@ export default function HomePage() {
       </section>
 
       {/* Stats — PLACEHOLDER numbers, replace before paid traffic */}
-      <section className="bg-[#0e0e10] py-14" data-placeholder="marketing-stats">
+      <section className="relative overflow-hidden bg-gradient-to-b from-[#1a1a1d] to-[#0a0a0c] py-14" data-placeholder="marketing-stats">
+        <div aria-hidden className="pointer-events-none absolute inset-0 opacity-50" style={{ backgroundImage: "radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px)", backgroundSize: "22px 22px" }} />
         <div className="mx-auto grid max-w-4xl grid-cols-2 gap-8 px-6 sm:grid-cols-4">
           {STATS.map((s, i) => (
             <Reveal key={s.l} delay={i * 80}>
@@ -345,16 +359,24 @@ export default function HomePage() {
       {/* Final CTA */}
       <section className="px-6 pb-16">
         <Reveal>
-          <div className="relative mx-auto flex max-w-5xl flex-col items-center gap-8 overflow-hidden rounded-[32px] bg-[#0e0e10] px-8 py-14 text-white shadow-[0_32px_80px_-20px_rgba(14,14,16,0.5)] sm:flex-row sm:justify-between sm:px-14">
-            <div aria-hidden className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full opacity-25 blur-3xl" style={{ background: "radial-gradient(closest-side, #3478f6, transparent 70%)" }} />
+          <div className="relative mx-auto flex max-w-5xl flex-col items-center gap-8 overflow-hidden rounded-[32px] bg-gradient-to-br from-[#5b93f8] via-[#3478f6] to-[#1d4ed8] px-8 py-14 text-white shadow-[0_32px_80px_-20px_rgba(52,120,246,0.55)] sm:flex-row sm:justify-between sm:px-14">
+            {/* Quiet dot grid: texture, not decoration */}
+            <div aria-hidden className="pointer-events-none absolute inset-0" style={{ backgroundImage: "radial-gradient(rgba(255,255,255,0.14) 1px, transparent 1px)", backgroundSize: "22px 22px" }} />
+            <div aria-hidden className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full opacity-30 blur-3xl" style={{ background: "radial-gradient(closest-side, #ffffff, transparent 70%)" }} />
+            <div aria-hidden className="pointer-events-none absolute -bottom-32 -left-16 h-64 w-64 rounded-full opacity-20 blur-3xl" style={{ background: "radial-gradient(closest-side, #1e3a8a, transparent 70%)" }} />
             <div className="flex items-center gap-5">
-              <span className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-gradient-to-b from-[#5b93f8] to-[#2c63d9] text-3xl font-black text-white shadow-lg shadow-[#3478f6]/40">S</span>
+              <span className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-gradient-to-b from-white to-[#dbe7fd] text-3xl font-black shadow-lg shadow-[#1d4ed8]/40" style={{ color: blue }}>S</span>
               <div>
                 <h2 className="text-3xl font-bold leading-tight tracking-tight">Ready to send<br />better marketing?</h2>
-                <p className="mt-2 text-[13px] text-white/50">Start your 3 day free trial. No commitment.</p>
+                <p className="mt-2 text-[13px] text-white/70">Start your 3 day free trial. No commitment.</p>
               </div>
             </div>
-            <PayButtons compact />
+            <div className="relative">
+              <PayButtons compact onDark />
+              <Link href="/signup" className="mt-3 block text-center text-[12px] font-medium text-white/50 underline-offset-4 hover:text-white hover:underline">
+                Enter Card Details
+              </Link>
+            </div>
           </div>
         </Reveal>
       </section>
