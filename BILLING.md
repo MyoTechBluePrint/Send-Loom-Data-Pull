@@ -80,6 +80,23 @@ An owner can also run it from **Admin → Subscriptions → Run lifecycle now**.
 Every transition and notification is guarded to happen once, so calling it
 repeatedly is safe.
 
+## The customer journey
+
+1. `/signup` — one short form: name, work email, password, business name,
+   optional website, terms acceptance (persisted as `User.termsAcceptedAt`).
+2. `/onboarding/trial` — trial confirmed, the two dates that matter, one
+   button in. (`/welcome` redirects here.)
+3. `/onboarding/business` — the commercial questions, all skippable. Answers
+   are stored on the subscription and drive the plan recommendation.
+4. `/plans` (alias `/billing/plans`) — plan selection with the recommendation
+   and exact dates. `/billing/checkout` also lands here.
+5. Checkout — Stripe Checkout in Stripe mode; the labelled simulation without.
+6. `/settings/billing` — plan, dates, amounts, usage, invoices, cancellation.
+
+Accounts carry an explicit `accountType`: `external` (self-serve signups, the
+only type billed), `grandfathered` (existed before billing), `internal`
+(deliberately comped). Never inferred from an email domain.
+
 ## Where things live
 
 | Concern | File |
