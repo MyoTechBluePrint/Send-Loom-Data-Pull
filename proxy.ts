@@ -10,6 +10,7 @@ const OPEN_PREFIXES = [
   "/login", "/signup", "/pricing", "/home",
   "/api/auth", "/api/health", "/api/v1", "/api/t", "/t/", "/r/",
   "/api/billing/webhook", "/api/billing/plans",
+  "/api/t/delivery", // provider webhooks authenticate by signature, not session
 ];
 
 async function verifyToken(token: string | undefined, secret: string): Promise<boolean> {

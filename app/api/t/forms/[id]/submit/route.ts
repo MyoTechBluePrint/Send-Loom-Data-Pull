@@ -15,6 +15,7 @@ import { audit } from "@/lib/server/audit";
 import { evaluateCondition, parseRules, applyActions, type Action } from "@/lib/server/conditions";
 import { issueCoupon } from "@/lib/server/promotions";
 import { eventIngestionService } from "@/lib/server/events";
+import { checkRateLimit } from "@/lib/server/auth";
 
 const Body = z.object({
   store: z.string().min(1), // store publicId, same handshake as the tracker
@@ -46,6 +47,18 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
   const store = await db.store.findUnique({ where: { publicId: b.store } });
   if (!store) return Response.json({ ok: false }, { status: 403, headers });
+
+  // Abuse protection on a deliberately public endpoint: per-IP rate limit,
+  // and a honeypot — the tracker renders a visually hidden "website" field
+  // that humans never fill. A filled honeypot gets a fake success, so bots
+  // learn nothing.
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "local";
+  if (!checkRateLimit(`form:${id}:${ip}`, 30, 15 * 60 * 1000)) {
+    return Response.json({ ok: false, error: "Too many submissions." }, { status: 429, headers });
+  }
+  if (b.answers.website?.trim()) {
+    return Response.json({ ok: true, submissionId: "ok", finished: true, nextStep: null, successMessage: "Done — thank you.", couponCode: null }, { headers });
+  }
 
   const form = await db.form.findFirst({
     where: { id, workspaceId: store.workspaceId, status: "live" },
