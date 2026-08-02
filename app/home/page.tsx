@@ -77,7 +77,10 @@ export default function HomePage() {
       </header>
 
       {/* Hero + subscription card */}
-      <section className="mx-auto grid max-w-6xl items-start gap-12 px-6 pb-20 pt-10 lg:grid-cols-[1.1fr_0.9fr] lg:gap-16">
+      <section className="relative mx-auto grid max-w-6xl items-start gap-12 px-6 pb-20 pt-10 lg:grid-cols-[1.1fr_0.9fr] lg:gap-16">
+        {/* Ambient atmosphere: two soft washes, Apple-quiet */}
+        <div aria-hidden className="pointer-events-none absolute -top-32 right-0 h-[560px] w-[560px] rounded-full opacity-[0.14] blur-3xl" style={{ background: "radial-gradient(closest-side, #3478f6, transparent 70%)" }} />
+        <div aria-hidden className="pointer-events-none absolute -left-40 top-64 h-[420px] w-[420px] rounded-full opacity-[0.08] blur-3xl" style={{ background: "radial-gradient(closest-side, #a78bfa, transparent 70%)" }} />
         <div className="pt-6">
           <Reveal>
             <h1 className="text-5xl font-bold leading-[1.04] tracking-tight sm:text-6xl">
@@ -123,7 +126,8 @@ export default function HomePage() {
 
         {/* The centrepiece: one subscription, Apple One treatment */}
         <Reveal delay={150}>
-          <div className="rounded-[28px] border border-black/[0.06] bg-white p-7 shadow-[0_24px_60px_-12px_rgba(29,29,31,0.18)]">
+          <div className="relative rounded-[28px] border border-black/[0.06] bg-white/95 p-7 shadow-[0_2px_6px_rgba(29,29,31,0.05),0_28px_80px_-16px_rgba(52,120,246,0.35)] ring-1 ring-white backdrop-blur">
+            <div aria-hidden className="pointer-events-none absolute inset-x-8 -bottom-6 h-12 rounded-full bg-[#3478f6]/20 blur-2xl" />
             <p className="mx-auto w-fit rounded-full bg-[#eaf1fe] px-3 py-1 text-[11px] font-bold uppercase tracking-widest" style={{ color: blue }}>
               3 Day Free Trial
             </p>
@@ -157,7 +161,7 @@ export default function HomePage() {
       </section>
 
       {/* Device showcase: CSS devices, no screenshots */}
-      <section className="overflow-hidden bg-gradient-to-b from-white via-[#f4f7fe] to-white pb-20">
+      <section className="overflow-hidden bg-gradient-to-b from-white via-[#eef3fe] to-white pb-24 pt-4">
         <Reveal>
           <div className="relative mx-auto max-w-4xl px-6">
             {/* MacBook */}
@@ -222,8 +226,8 @@ export default function HomePage() {
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
           {FEATURES.map((f, i) => (
             <Reveal key={f.t} delay={i * 60}>
-              <div className="h-full rounded-2xl border border-black/[0.06] bg-white p-4 text-center shadow-[0_1px_3px_rgba(29,29,31,0.05)] transition hover:-translate-y-0.5 hover:shadow-md">
-                <span className="mx-auto grid h-9 w-9 place-items-center rounded-xl bg-[#eaf1fe] text-[15px]" style={{ color: blue }}>{f.icon}</span>
+              <div className="h-full rounded-2xl border border-black/[0.06] bg-gradient-to-b from-white to-[#fafbff] p-4 text-center shadow-[0_1px_2px_rgba(29,29,31,0.04),0_12px_28px_-12px_rgba(29,29,31,0.12)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_2px_4px_rgba(29,29,31,0.05),0_20px_44px_-12px_rgba(52,120,246,0.25)]">
+                <span className="mx-auto grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-b from-[#5b93f8] to-[#3478f6] text-[16px] text-white shadow-md shadow-[#3478f6]/30">{f.icon}</span>
                 <p className="mt-2.5 text-[12px] font-bold leading-tight">{f.t}</p>
                 <p className="mt-1 text-[10px] leading-snug text-black/45">{f.d}</p>
               </div>
@@ -233,13 +237,13 @@ export default function HomePage() {
       </section>
 
       {/* Stats — PLACEHOLDER numbers, replace before paid traffic */}
-      <section className="border-y border-black/[0.05] bg-[#fafafa] py-10" data-placeholder="marketing-stats">
-        <div className="mx-auto grid max-w-4xl grid-cols-2 gap-6 px-6 sm:grid-cols-4">
+      <section className="bg-[#0e0e10] py-14" data-placeholder="marketing-stats">
+        <div className="mx-auto grid max-w-4xl grid-cols-2 gap-8 px-6 sm:grid-cols-4">
           {STATS.map((s, i) => (
             <Reveal key={s.l} delay={i * 80}>
               <div className="text-center">
-                <p className="text-2xl font-bold tracking-tight">{s.n}</p>
-                <p className="mt-0.5 text-[12px] text-black/45">{s.l}</p>
+                <p className="bg-gradient-to-b from-white to-white/60 bg-clip-text text-3xl font-bold tracking-tight text-transparent">{s.n}</p>
+                <p className="mt-1 text-[12px] text-white/40">{s.l}</p>
               </div>
             </Reveal>
           ))}
@@ -292,12 +296,13 @@ export default function HomePage() {
       {/* Final CTA */}
       <section className="px-6 pb-16">
         <Reveal>
-          <div className="mx-auto flex max-w-5xl flex-col items-center gap-8 rounded-[32px] bg-gradient-to-br from-[#eef3fe] to-[#f7f4fe] px-8 py-14 sm:flex-row sm:justify-between sm:px-14">
+          <div className="relative mx-auto flex max-w-5xl flex-col items-center gap-8 overflow-hidden rounded-[32px] bg-[#0e0e10] px-8 py-14 text-white shadow-[0_32px_80px_-20px_rgba(14,14,16,0.5)] sm:flex-row sm:justify-between sm:px-14">
+            <div aria-hidden className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full opacity-25 blur-3xl" style={{ background: "radial-gradient(closest-side, #3478f6, transparent 70%)" }} />
             <div className="flex items-center gap-5">
               <span className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl text-3xl font-black text-white shadow-lg shadow-[#3478f6]/30" style={{ background: blue }}>S</span>
               <div>
                 <h2 className="text-3xl font-bold leading-tight tracking-tight">Ready to send<br />better marketing?</h2>
-                <p className="mt-2 text-[13px] text-black/50">Start your 3 day free trial. No commitment.</p>
+                <p className="mt-2 text-[13px] text-white/50">Start your 3 day free trial. No commitment.</p>
               </div>
             </div>
             <PayButtons compact />
