@@ -6,6 +6,7 @@ import Papa from "papaparse";
 import { db } from "./db";
 import { audit } from "./audit";
 import { eventIngestionService } from "./events";
+import { guard } from "./billing/guard";
 
 export const PLATFORM_FIELDS = [
   "email", "firstName", "lastName", "phone", "country", "city", "postcode",
@@ -170,6 +171,23 @@ export async function confirmBatch(opts: {
   const batch = await db.importBatch.findUniqueOrThrow({ where: { id: opts.batchId }, include: { rows: true } });
   const mapping = JSON.parse(batch.mapping ?? "{}") as Record<string, PlatformField>;
 
+  // Contact allowance, checked before a single row is written. Refusing the
+  // whole import is kinder than importing half of it: the customer keeps a
+  // file they can retry rather than a half-loaded list they have to reconcile.
+  // Complimentary and enterprise workspaces skip this entirely.
+  const importable = batch.rows.filter((r) => r.status !== "invalid" && r.status !== "blocked").length;
+  const allowance = await guard(batch.workspaceId, "monthly_contacts", importable);
+  if (!allowance.allowed) {
+    return {
+      ok: false as const,
+      error: allowance.error,
+      blockedBy: allowance.reason,
+      upgradeTo: allowance.upgradeTo,
+      wouldImport: importable,
+      imported: 0, merged: 0, skipped: 0,
+    };
+  }
+
   const tagIds: string[] = [];
   for (const name of opts.tags) {
     const tag = await db.tag.upsert({
@@ -290,5 +308,5 @@ export async function confirmBatch(opts: {
 
   await audit(batch.workspaceId, opts.actor, "import.completed", `'${batch.name}': ${imported} imported, ${merged} merged, ${skipped} skipped, ${batch.blockedRows} blocked`);
 
-  return { imported, merged, skipped, blocked: batch.blockedRows, segmentId };
+  return { ok: true as const, imported, merged, skipped, blocked: batch.blockedRows, segmentId };
 }

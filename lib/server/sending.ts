@@ -5,6 +5,8 @@
 import { db } from "./db";
 import { audit } from "./audit";
 import { evaluateSegmentMembers } from "./segments";
+import { guard } from "./billing/guard";
+import { recordUsage } from "./entitlements";
 
 export type OutboundEmail = {
   to: string;
@@ -120,6 +122,24 @@ export async function sendCampaign(campaignId: string, actor: string) {
     return { ok: false as const, error: "No eligible recipients: everyone in this audience lacks granted email consent or is suppressed." };
   }
 
+  // Entitlement check, at the point of spend. Complimentary and enterprise
+  // workspaces short-circuit to allowed inside guard(), so this changes
+  // nothing for the accounts that were here before billing existed.
+  const allowance = await guard(campaign.workspaceId, "monthly_email_sends", eligible.length);
+  if (!allowance.allowed) {
+    await audit(
+      campaign.workspaceId, actor, "campaign.send_blocked",
+      `'${campaign.name}' blocked: ${allowance.error} · ${eligible.length} recipients · nothing was sent and nothing was changed`
+    );
+    return {
+      ok: false as const,
+      error: allowance.error,
+      blockedBy: allowance.reason,
+      upgradeTo: allowance.upgradeTo,
+      wouldSend: eligible.length,
+    };
+  }
+
   await db.campaign.update({ where: { id: campaignId }, data: { status: "sending", audienceSnapshot: eligible.length } });
 
   const provider = activeProvider();
@@ -154,6 +174,9 @@ export async function sendCampaign(campaignId: string, actor: string) {
     where: { id: campaignId },
     data: { status: "sent", sentAt: new Date(), isDemo: false },
   });
+
+  // Meter what actually went out, not what was attempted.
+  if (sent > 0) await recordUsage(campaign.workspaceId, "monthly_email_sends", sent);
 
   await audit(
     campaign.workspaceId, actor, "campaign.sent",

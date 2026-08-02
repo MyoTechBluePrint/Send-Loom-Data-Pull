@@ -57,6 +57,7 @@ const nav: { section?: string; items: { href: string; label: string; icon: strin
     items: [
       { href: "/analytics", label: "Analytics", icon: "∿" },
       { href: "/providers", label: "API Providers", icon: "↯" },
+      { href: "/admin/subscriptions", label: "Subscriptions", icon: "◈" },
       { href: "/admin", label: "Admin", icon: "▣" },
       { href: "/team", label: "Team", icon: "☺" },
       { href: "/settings/billing", label: "Billing", icon: "◈" },
@@ -92,10 +93,10 @@ export function Shell({ children, title, subtitle, actions }: { children: ReactN
               )}
               <div className="space-y-0.5">
                 {group.items.map((item) => {
-                  // /settings is an exact match so /settings/billing does not
-                  // light up both entries.
+                  // /settings and /admin are exact matches so their nested
+                  // pages do not light up two entries at once.
                   const active =
-                    item.href === "/" || item.href === "/settings"
+                    item.href === "/" || item.href === "/settings" || item.href === "/admin"
                       ? pathname === item.href
                       : pathname.startsWith(item.href);
                   return (

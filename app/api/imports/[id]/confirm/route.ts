@@ -22,5 +22,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     actor: user.email,
     ...parsed.data,
   });
-  return Response.json({ ok: true, ...result });
+  // 402 when the import was refused for want of contact allowance, so the
+  // wizard can offer an upgrade rather than showing a generic failure.
+  return Response.json(result, { status: result.ok ? 200 : 402 });
 }

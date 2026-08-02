@@ -5,6 +5,7 @@ import { audit } from "@/lib/server/audit";
 import { demoWorkspaceId } from "@/lib/server/views";
 import { recomputeLeadScore } from "@/lib/server/scoring";
 import { verifySessionToken, SESSION_COOKIE } from "@/lib/server/auth";
+import { guard } from "@/lib/server/billing/guard";
 
 const Body = z.object({
   name: z.string().min(1).max(120),
@@ -22,6 +23,17 @@ export async function POST(req: NextRequest) {
   if (!email && !phone) return Response.json({ ok: false, error: "Give at least an email or a phone number." }, { status: 400 });
 
   const workspaceId = await demoWorkspaceId();
+
+  // Contact allowance, enforced server side so the limit cannot be bypassed by
+  // calling this route directly. No-ops for complimentary accounts.
+  const allowance = await guard(workspaceId, "monthly_contacts", 1);
+  if (!allowance.allowed) {
+    return Response.json(
+      { ok: false, error: allowance.error, upgradeTo: allowance.upgradeTo, blockedBy: allowance.reason },
+      { status: 402 }
+    );
+  }
+
   const normEmail = email ? email.toLowerCase() : null;
   if (normEmail) {
     const existing = await db.contact.findUnique({ where: { workspaceId_email: { workspaceId, email: normEmail } } });

@@ -200,7 +200,36 @@ export type Allowance = {
 };
 
 /**
- * Check a metered entitlement against recorded usage for the current period.
+ * How much of an entitlement is in use right now.
+ *
+ * Some limits are stocks and some are flows, and getting that wrong is how a
+ * limit silently stops working. Contacts, websites, automations and team
+ * members are counted live from the tables that own them, because that is what
+ * the number means. Sends and AI credits are consumption within a period, so
+ * they come from the counter.
+ */
+export async function usedFor(workspaceId: string, key: EntitlementKey): Promise<number> {
+  switch (key) {
+    case "monthly_contacts":
+      return db.contact.count({ where: { workspaceId } });
+    case "connected_domains":
+      return db.store.count({ where: { workspaceId } });
+    case "active_automations":
+      return db.automation.count({ where: { workspaceId, status: "live" } });
+    case "team_members":
+      return db.user.count({ where: { workspaceId, disabled: false } });
+    default: {
+      const { start, end } = currentPeriod();
+      const row = await db.usageCounter.findFirst({
+        where: { workspaceId, key, periodStart: start, periodEnd: end },
+      });
+      return row?.used ?? 0;
+    }
+  }
+}
+
+/**
+ * Check a metered entitlement against current usage.
  * `additional` lets a caller ask "may I send 200 more?" before doing the work.
  */
 export async function checkAllowance(
@@ -211,11 +240,7 @@ export async function checkAllowance(
   const limit = await limitFor(workspaceId, key);
   if (limit === null) return { allowed: true, limit: null, used: 0, remaining: null };
 
-  const { start, end } = currentPeriod();
-  const row = await db.usageCounter.findFirst({
-    where: { workspaceId, key, periodStart: start, periodEnd: end },
-  });
-  const used = row?.used ?? 0;
+  const used = await usedFor(workspaceId, key);
   const allowed = used + additional <= limit;
   return {
     allowed,

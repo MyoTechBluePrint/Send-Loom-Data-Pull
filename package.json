@@ -10,6 +10,8 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:reset": "prisma migrate reset --force",
     "test:flows": "tsx scripts/test-flows.ts",
+    "test:billing": "tsx scripts/test-billing.ts",
+    "db:seed-plans": "tsx scripts/seed-plans.ts",
     "postinstall": "prisma generate",
     "plugin:zip": "bash scripts/build-plugin.sh"
   },
