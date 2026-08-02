@@ -128,7 +128,7 @@ export default function HomePage() {
         <div aria-hidden className="pointer-events-none absolute -left-40 top-64 h-[420px] w-[420px] rounded-full opacity-[0.08] blur-3xl" style={{ background: "radial-gradient(closest-side, #a78bfa, transparent 70%)" }} />
         <div className="pt-6">
           <Reveal>
-            <h1 className="text-5xl font-bold leading-[1.04] tracking-tight sm:text-6xl">
+            <h1 className="text-6xl font-bold leading-[1.02] tracking-[-0.02em] sm:text-7xl">
               Marketing that<br />feels{" "}
               <span className="bg-gradient-to-b from-[#5b93f8] to-[#2c63d9] bg-clip-text text-transparent">effortless.</span>
             </h1>
@@ -183,7 +183,7 @@ export default function HomePage() {
                 alt="SendLoom dashboard on a MacBook and iPhone"
                 width={1024}
                 height={560}
-                className="relative w-full max-w-xl drop-shadow-[0_24px_40px_rgba(29,29,31,0.18)]"
+                className="relative w-full max-w-none drop-shadow-[0_28px_48px_rgba(29,29,31,0.2)] lg:w-[115%]"
               />
             </div>
           </Reveal>
