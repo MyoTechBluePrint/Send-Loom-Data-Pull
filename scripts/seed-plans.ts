@@ -26,7 +26,7 @@ const PLANS = [
     entitlements: {
       connected_domains: 1,
       monthly_contacts: 2500,
-      monthly_email_sends: 10000,
+      monthly_email_sends: 20000,
       team_members: 1,
       active_automations: 3,
       ai_credits: 100,
@@ -47,10 +47,10 @@ const PLANS = [
     sortOrder: 2,
     entitlements: {
       connected_domains: 3,
-      monthly_contacts: 25000,
+      monthly_contacts: 10000,
       monthly_email_sends: 100000,
       team_members: 5,
-      active_automations: 25,
+      active_automations: 15,
       ai_credits: 1000,
       data_retention_days: 730,
       revenue_attribution: true,
@@ -68,10 +68,10 @@ const PLANS = [
     sortOrder: 3,
     entitlements: {
       connected_domains: 10,
-      monthly_contacts: 100000,
+      monthly_contacts: 50000,
       monthly_email_sends: 500000,
-      team_members: 20,
-      active_automations: UNLIMITED,
+      team_members: 15,
+      active_automations: 100,
       ai_credits: 5000,
       data_retention_days: 1095,
       revenue_attribution: true,
@@ -138,17 +138,31 @@ async function main() {
   // ── Protect everyone already using SendLoom ───────────────────────────────
   const internal = await db.plan.findUnique({ where: { key: "internal" } });
   const workspaces = await db.workspace.findMany({ select: { id: true, name: true } });
-  let granted = 0, already = 0;
+  let granted = 0, already = 0, backfilled = 0;
 
   for (const w of workspaces) {
     const existing = await db.subscription.findUnique({ where: { workspaceId: w.id } });
-    if (existing) { already++; continue; }
+    if (existing) {
+      // Backfill: a complimentary account created before accountType existed
+      // is, by definition, grandfathered. Stated explicitly rather than left
+      // to be inferred later from a default.
+      if (existing.complimentary && existing.accountType === "external") {
+        await db.subscription.update({
+          where: { id: existing.id },
+          data: { accountType: "grandfathered" },
+        });
+        backfilled++;
+      }
+      already++;
+      continue;
+    }
     const sub = await db.subscription.create({
       data: {
         workspaceId: w.id,
         planId: internal!.id,
         status: "complimentary",
         complimentary: true,
+        accountType: "grandfathered",
         notes: "Grandfathered: workspace existed before billing shipped. In-house account, never billed.",
       },
     });
@@ -164,7 +178,7 @@ async function main() {
     granted++;
   }
 
-  console.log(`\nExisting workspaces protected: ${granted} granted complimentary, ${already} already had a subscription.`);
+  console.log(`\nExisting workspaces protected: ${granted} granted complimentary, ${already} already had a subscription, ${backfilled} marked grandfathered.`);
   console.log("New signups will start a 7-day trial; nobody currently using SendLoom is affected.");
   await db.$disconnect();
 }

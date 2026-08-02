@@ -960,6 +960,18 @@ model Subscription {
   workspaceId String    @unique // one subscription per workspace
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
 
+  // Commercial profile captured at onboarding. Held here rather than on the
+  // workspace because its only job is to size the subscription: expected
+  // volumes drive the plan recommendation, and nothing is asked that this
+  // does not use.
+  businessType     String? // ecommerce | professional_services | hospitality | ...
+  expectedContacts Int?
+  expectedSends    Int?
+  expectedSites    Int?
+  primaryGoal      String?
+  websiteUrl       String?
+  onboardedAt      DateTime?
+
   planId String?
   plan   Plan?   @relation(fields: [planId], references: [id])
 
@@ -1001,6 +1013,14 @@ model Subscription {
 
   // Account credit applied to the next charge, in pence. Set by admin.
   creditPence Int @default(0)
+
+  // How this account came to exist. Persisted and explicit, never inferred
+  // from an email domain: an internal workspace is internal because a
+  // migration or an administrator said so, not because of who signed up.
+  //   external      - a real self-serve signup. The only type that is billed.
+  //   grandfathered - existed before billing shipped. Never billed.
+  //   internal      - deliberately comped by an administrator. Never billed.
+  accountType String @default("external")
 
   // Grandfathering and overrides. Existing in-house workspaces are created
   // as complimentary with this set, so the paywall can never touch them.
