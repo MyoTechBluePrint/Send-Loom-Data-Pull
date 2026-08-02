@@ -121,7 +121,7 @@ export default function HomePage() {
           <Reveal>
             <h1 className="text-5xl font-bold leading-[1.04] tracking-tight sm:text-6xl">
               Marketing that<br />feels{" "}
-              <span className="bg-gradient-to-r from-[#3478f6] to-[#7c8cf8] bg-clip-text text-transparent">effortless.</span>
+              <span className="bg-gradient-to-b from-[#5b93f8] to-[#2c63d9] bg-clip-text text-transparent">effortless.</span>
             </h1>
           </Reveal>
           <Reveal delay={100}>
