@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/server/db";
 import { readSignedBody } from "@/lib/server/apiAuth";
 import { eventIngestionService } from "@/lib/server/events";
+import { recordRedemption } from "@/lib/server/promotions";
 
 const OrderSchema = z.object({
   externalId: z.string(),
@@ -48,6 +49,12 @@ export async function POST(req: NextRequest) {
       placedAt: o.placedAt ? new Date(o.placedAt) : new Date(),
       contactId: contact?.id ?? null,
     };
+    // A coupon on the order marks the generated code redeemed, idempotently.
+    // This is how form- and campaign-issued codes report back.
+    if (o.coupon) {
+      await recordRedemption(o.coupon, o.number ?? o.externalId, o.email ?? null).catch(() => {});
+    }
+
     if (existing) {
       await db.order.update({ where: { id: existing.id }, data });
     } else {
