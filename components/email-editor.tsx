@@ -8,6 +8,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type Block = Record<string, unknown> & { id: string; type: string };
 type Issue = { level: "error" | "warning"; message: string; blockId?: string };
+type PickOption = { id: string; label: string };
+export type EditorResources = { products: PickOption[]; promotions: PickOption[]; elements: PickOption[]; polls: PickOption[] };
 
 const BLOCK_MENU: { type: string; label: string; make: () => Partial<Block> }[] = [
   { type: "heading", label: "Heading", make: () => ({ text: "Heading", level: 1 }) },
@@ -53,6 +55,12 @@ export function EmailEditor(props: {
   const [notice, setNotice] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
   const [testTo, setTestTo] = useState("");
+  const [resources, setResources] = useState<EditorResources>({ products: [], promotions: [], elements: [], polls: [] });
+  const dragFrom = useRef<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/editor/resources").then((r) => r.json()).then((j) => j.ok && setResources(j)).catch(() => {});
+  }, []);
 
   // Undo/redo: a bounded history of block states.
   const history = useRef<Block[][]>([props.initialBlocks]);
@@ -129,18 +137,27 @@ export function EmailEditor(props: {
     apply(blocks.map((b) => (b.id === id ? { ...b, ...patch } : b)));
   };
 
-  async function save() {
+  const save = useCallback(async (silent = false) => {
     setSaving(true);
-    setNotice(null);
+    if (!silent) setNotice(null);
     try {
       const r = await props.onSave(JSON.stringify(blocks), subject, brandId);
-      setNotice(r.ok ? "Saved." : r.error ?? "Could not save.");
+      if (!silent) setNotice(r.ok ? "Saved." : r.error ?? "Could not save.");
       if (r.ok) setDirty(false);
       if (r.issues) setIssues(r.issues);
     } finally {
       setSaving(false);
     }
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [blocks, subject, brandId]);
+
+  // Autosave: two seconds after the last edit, silently. The Save button
+  // stays for reassurance and for forcing an immediate write.
+  useEffect(() => {
+    if (!dirty || props.readOnly) return;
+    const t = setTimeout(() => save(true), 2000);
+    return () => clearTimeout(t);
+  }, [dirty, blocks, subject, brandId, save, props.readOnly]);
 
   async function sendTest() {
     if (!testTo) { setNotice("Enter an address for the test."); return; }
@@ -190,10 +207,27 @@ export function EmailEditor(props: {
             {blocks.map((b) => (
               <li
                 key={b.id}
-                className={`group mb-1 flex items-center gap-1 rounded-lg border px-2 py-1.5 text-[12px] ${
+                draggable={!props.readOnly}
+                onDragStart={() => { dragFrom.current = b.id; }}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const from = dragFrom.current;
+                  dragFrom.current = null;
+                  if (!from || from === b.id) return;
+                  const i = blocks.findIndex((x) => x.id === from);
+                  const j = blocks.findIndex((x) => x.id === b.id);
+                  if (i < 0 || j < 0) return;
+                  const next = [...blocks];
+                  const [moved] = next.splice(i, 1);
+                  next.splice(j, 0, moved);
+                  apply(next);
+                }}
+                className={`group mb-1 flex cursor-grab items-center gap-1 rounded-lg border px-2 py-1.5 text-[12px] active:cursor-grabbing ${
                   selected === b.id ? "border-brand bg-brand-soft" : "border-line bg-surface"
                 } ${issues.some((i) => i.blockId === b.id && i.level === "error") ? "!border-red-400" : ""}`}
               >
+                <span className="select-none text-ink-3/60" aria-hidden>⋮⋮</span>
                 <button onClick={() => setSelected(b.id)} className="flex-1 text-left font-medium capitalize">
                   {String(b.type).replace(/_/g, " ")}
                 </button>
@@ -266,14 +300,14 @@ export function EmailEditor(props: {
             {selectedBlock ? `Edit ${String(selectedBlock.type).replace(/_/g, " ")}` : "Select a block to edit"}
           </p>
           {selectedBlock && !props.readOnly && (
-            <BlockProps block={selectedBlock} onChange={(patch) => update(selectedBlock.id, patch)} />
+            <BlockProps block={selectedBlock} onChange={(patch) => update(selectedBlock.id, patch)} resources={resources} />
           )}
         </div>
 
         {!props.readOnly && (
           <div className="rounded-xl border border-line bg-surface p-3">
             <button
-              onClick={save} disabled={saving}
+              onClick={() => save(false)} disabled={saving}
               className="w-full rounded-lg bg-gradient-to-b from-[#7c3aed] to-[#5b21b6] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
             >
               {saving ? "Saving…" : dirty ? "Save changes" : "Saved"}
@@ -301,11 +335,61 @@ export function EmailEditor(props: {
   );
 }
 
+/** Wrap the current textarea selection in a tag: the honest minimum of rich text. */
+function wrapSelection(el: HTMLTextAreaElement, before: string, after: string): string {
+  const { selectionStart: s, selectionEnd: e, value } = el;
+  return value.slice(0, s) + before + value.slice(s, e) + after + value.slice(e);
+}
+
+function Picker({ label: l, value, options, onChange, emptyHint }: {
+  label: string; value: string; options: PickOption[]; onChange: (id: string) => void; emptyHint: string;
+}) {
+  const input = "mt-1 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[13px] outline-none focus:border-brand";
+  return (
+    <label className="mt-2 block">
+      <span className="text-[11px] font-medium text-ink-3">{l}</span>
+      {options.length === 0 ? (
+        <p className="mt-1 rounded-lg border border-dashed border-line px-2.5 py-2 text-[11px] text-ink-3">{emptyHint}</p>
+      ) : (
+        <select className={input} value={value} onChange={(e) => onChange(e.target.value)}>
+          <option value="">Choose…</option>
+          {options.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+        </select>
+      )}
+    </label>
+  );
+}
+
 /** Property inputs per block type. Small on purpose: fields, not a canvas. */
-function BlockProps({ block, onChange }: { block: Block; onChange: (patch: Record<string, unknown>) => void }) {
+function BlockProps({ block, onChange, resources }: { block: Block; onChange: (patch: Record<string, unknown>) => void; resources: EditorResources }) {
   const input = "mt-1 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[13px] outline-none focus:border-brand";
   const label = "mt-2 block text-[11px] font-medium text-ink-3";
   const t = block.type;
+
+  const toolbar = (key: string) => (
+    <span className="mt-1 flex gap-1">
+      {[
+        { t: "B", b: "<strong>", a: "</strong>", title: "Bold" },
+        { t: "I", b: "<em>", a: "</em>", title: "Italic" },
+        { t: "Link", b: '<a href="https://">', a: "</a>", title: "Link" },
+        { t: "¶", b: "<p>", a: "</p>", title: "Paragraph" },
+      ].map((btn) => (
+        <button
+          key={btn.t}
+          type="button"
+          title={btn.title}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            const el = (e.currentTarget.parentElement?.nextElementSibling ?? null) as HTMLTextAreaElement | null;
+            if (el && el.tagName === "TEXTAREA") onChange({ [key]: wrapSelection(el, btn.b, btn.a) });
+          }}
+          className="rounded border border-line px-2 py-0.5 text-[11px] font-semibold text-ink-2 hover:border-brand hover:text-brand"
+        >
+          {btn.t}
+        </button>
+      ))}
+    </span>
+  );
 
   const linksEditor = (key: "links") => (
     <>
@@ -337,7 +421,8 @@ function BlockProps({ block, onChange }: { block: Block; onChange: (patch: Recor
     case "columns":
       return (<div>
         {t === "text" ? (<>
-          <span className={label}>HTML content</span>
+          <span className={label}>Content</span>
+          {toolbar("html")}
           <textarea rows={5} className={input} value={String(block.html ?? "")} onChange={(e) => onChange({ html: e.target.value })} />
         </>) : (<>
           <span className={label}>Left column HTML</span>
@@ -382,20 +467,31 @@ function BlockProps({ block, onChange }: { block: Block; onChange: (patch: Recor
       return <div>{linksEditor("links")}<p className="mt-1 text-[10px] text-ink-3">Blank = the brand kit&apos;s links.</p></div>;
     case "product":
       return (<div>
-        <span className={label}>Product ID (from Commerce → Products)</span>
-        <input className={input} value={String(block.productId ?? "")} onChange={(e) => onChange({ productId: e.target.value })} />
+        <Picker label="Product" value={String(block.productId ?? "")} options={resources.products}
+          onChange={(id) => onChange({ productId: id })} emptyHint="No products synced yet. Connect a store in Commerce." />
         <span className={label}>Button label</span>
         <input className={input} value={String(block.cta ?? "Shop now")} onChange={(e) => onChange({ cta: e.target.value })} />
       </div>);
-    case "product_grid":
+    case "product_grid": {
+      const ids = (block.productIds as string[]) ?? [];
       return (<div>
-        <span className={label}>Product IDs (comma separated)</span>
-        <textarea rows={2} className={input} value={((block.productIds as string[]) ?? []).join(", ")} onChange={(e) => onChange({ productIds: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })} />
+        <span className={label}>Products in the grid</span>
+        <ul className="mt-1 space-y-1">
+          {ids.map((id, i) => (
+            <li key={`${id}${i}`} className="flex items-center justify-between gap-2 rounded-lg border border-line px-2 py-1 text-[11px]">
+              <span className="truncate">{resources.products.find((p) => p.id === id)?.label ?? id}</span>
+              <button onClick={() => onChange({ productIds: ids.filter((_, n) => n !== i) })} className="shrink-0 text-red-600">✕</button>
+            </li>
+          ))}
+        </ul>
+        <Picker label="Add a product" value="" options={resources.products.filter((p) => !ids.includes(p.id))}
+          onChange={(id) => id && onChange({ productIds: [...ids, id] })} emptyHint="No products synced yet." />
         <span className={label}>Columns</span>
         <select className={input} value={String(block.columns ?? 2)} onChange={(e) => onChange({ columns: Number(e.target.value) })}>
           <option value="2">2</option><option value="3">3</option>
         </select>
       </div>);
+    }
     case "product_feed":
       return (<div>
         <span className={label}>Rule</span>
@@ -415,8 +511,8 @@ function BlockProps({ block, onChange }: { block: Block; onChange: (patch: Recor
       </div>);
     case "coupon":
       return (<div>
-        <span className={label}>Promotion ID (from Commerce → Promotions)</span>
-        <input className={input} value={String(block.promotionId ?? "")} onChange={(e) => onChange({ promotionId: e.target.value })} />
+        <Picker label="Promotion" value={String(block.promotionId ?? "")} options={resources.promotions}
+          onChange={(id) => onChange({ promotionId: id })} emptyHint="No promotions yet. Create one in Commerce → Promotions." />
         <span className={label}>Heading</span>
         <input className={input} value={String(block.heading ?? "Your discount code")} onChange={(e) => onChange({ heading: e.target.value })} />
         <span className={label}>Shop URL</span>
@@ -425,13 +521,13 @@ function BlockProps({ block, onChange }: { block: Block; onChange: (patch: Recor
       </div>);
     case "poll":
       return (<div>
-        <span className={label}>Poll ID (from Audience → Polls)</span>
-        <input className={input} value={String(block.pollId ?? "")} onChange={(e) => onChange({ pollId: e.target.value })} />
+        <Picker label="Poll" value={String(block.pollId ?? "")} options={resources.polls}
+          onChange={(id) => onChange({ pollId: id })} emptyHint="No polls yet. Create one in Audience → Polls." />
       </div>);
     case "global":
       return (<div>
-        <span className={label}>Saved element ID (from Brands → Elements)</span>
-        <input className={input} value={String(block.elementId ?? "")} onChange={(e) => onChange({ elementId: e.target.value })} />
+        <Picker label="Saved element" value={String(block.elementId ?? "")} options={resources.elements}
+          onChange={(id) => onChange({ elementId: id })} emptyHint="No saved elements yet. Create one in Brands." />
         <p className="mt-1 text-[10px] text-ink-3">Linked: central edits update this template. Duplicate the block to detach a local copy.</p>
       </div>);
     case "footer":

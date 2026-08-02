@@ -15,6 +15,25 @@ type Row = {
   usedByCampaigns: number; updatedAt: string; updatedBy: string | null;
 };
 
+/** A live-rendered thumbnail: the template's real HTML, scaled down. */
+function Thumb({ id }: { id: string }) {
+  const [html, setHtml] = useState<string | null>(null);
+  useEffect(() => {
+    fetch(`/api/templates/${id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "preview" }) })
+      .then((r) => r.json()).then((j) => j.ok && setHtml(j.html)).catch(() => {});
+  }, [id]);
+  return (
+    <div className="pointer-events-none h-40 overflow-hidden rounded-t-2xl border-b border-line bg-[#efeee9]">
+      {html ? (
+        <iframe title="preview" srcDoc={html} sandbox="" scrolling="no"
+          className="h-[640px] w-[400%] origin-top-left scale-25 border-0" />
+      ) : (
+        <div className="h-full animate-pulse bg-black/[0.03]" />
+      )}
+    </div>
+  );
+}
+
 export default function TemplatesPage() {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [categories, setCategories] = useState<string[]>([]);
@@ -117,55 +136,61 @@ export default function TemplatesPage() {
           <div className="px-5 py-10 text-center">
             <p className="text-sm font-medium">{showArchived ? "Nothing archived." : "No templates yet."}</p>
             {!showArchived && (
-              <p className="mt-1 text-[13px] text-ink-3">
-                Create one here, or build an email on a campaign and use &quot;Save as template&quot;.
-              </p>
+              <>
+                <p className="mt-1 text-[13px] text-ink-3">
+                  Add the starter set, or build an email on a campaign and use &quot;Save as template&quot;.
+                </p>
+                <button
+                  onClick={async () => {
+                    const r = await fetch("/api/templates/starters", { method: "POST" });
+                    const j = await r.json();
+                    setNotice(j.ok ? `Added ${j.created} starter templates.` : "Could not add starters.");
+                    load();
+                  }}
+                  className="mt-4 rounded-lg bg-gradient-to-b from-[#7c3aed] to-[#5b21b6] px-4 py-2 text-[13px] font-semibold text-white"
+                >
+                  Add starter templates
+                </button>
+              </>
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-[13px]">
-              <thead className="border-b border-line">
-                <tr><Th>Template</Th><Th>Category</Th><Th>Brand</Th><Th>Blocks</Th><Th>Used by</Th><Th>Updated</Th><Th className="text-right">Actions</Th></tr>
-              </thead>
-              <tbody>
-                {rows.map((t) => (
-                  <tr key={t.id} className="border-b border-line/70 last:border-0">
-                    <Td>
-                      <span className="font-medium">{t.name}</span>
-                      {t.description && <span className="block text-[11px] text-ink-3">{t.description}</span>}
-                    </Td>
-                    <Td className="capitalize">{t.category.replace(/_/g, " ")}</Td>
-                    <Td>{t.brandName ?? "—"}</Td>
-                    <Td>{t.blockCount}</Td>
-                    <Td>{t.usedByCampaigns} campaign{t.usedByCampaigns === 1 ? "" : "s"}</Td>
-                    <Td className="text-[12px] text-ink-3">
-                      {new Date(t.updatedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
-                      {t.updatedBy ? ` · ${t.updatedBy.split("@")[0]}` : ""}
-                    </Td>
-                    <Td className="text-right">
-                      <span className="inline-flex gap-2 text-[12px] font-medium">
-                        <button onClick={() => duplicate(t.id)} className="text-brand hover:underline">Duplicate</button>
-                        <button
-                          onClick={() => {
-                            const name = window.prompt("Rename template", t.name);
-                            if (name && name !== t.name) patch(t.id, { name }, "Renamed.");
-                          }}
-                          className="text-brand hover:underline"
-                        >
-                          Rename
-                        </button>
-                        {t.archived ? (
-                          <button onClick={() => patch(t.id, { archived: false }, "Restored.")} className="text-emerald-700 hover:underline">Restore</button>
-                        ) : (
-                          <button onClick={() => patch(t.id, { archived: true }, "Archived. Campaigns already using it are unaffected.")} className="text-ink-3 hover:underline">Archive</button>
-                        )}
-                      </span>
-                    </Td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-3">
+            {rows.map((t) => (
+              <div key={t.id} className="group overflow-hidden rounded-2xl border border-line bg-surface shadow-[0_1px_2px_rgba(11,11,11,0.04)] transition hover:shadow-md">
+                <Thumb id={t.id} />
+                <div className="p-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-[14px] font-semibold">{t.name}</p>
+                      <p className="mt-0.5 text-[11px] capitalize text-ink-3">
+                        {t.category.replace(/_/g, " ")}{t.brandName ? ` · ${t.brandName}` : ""} · {t.blockCount} blocks
+                      </p>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-[#f0efec] px-2 py-0.5 text-[10px] font-semibold text-ink-3">
+                      {t.usedByCampaigns} use{t.usedByCampaigns === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                  {t.description && <p className="mt-1.5 line-clamp-2 text-[12px] leading-relaxed text-ink-2">{t.description}</p>}
+                  <div className="mt-3 flex flex-wrap gap-2 text-[12px] font-medium">
+                    <button onClick={() => duplicate(t.id)} className="text-brand hover:underline">Duplicate</button>
+                    <button
+                      onClick={() => { const name = window.prompt("Rename template", t.name); if (name && name !== t.name) patch(t.id, { name }, "Renamed."); }}
+                      className="text-brand hover:underline"
+                    >
+                      Rename
+                    </button>
+                    {t.archived
+                      ? <button onClick={() => patch(t.id, { archived: false }, "Restored.")} className="text-emerald-700 hover:underline">Restore</button>
+                      : <button onClick={() => patch(t.id, { archived: true }, "Archived. Campaigns already using it are unaffected.")} className="text-ink-3 hover:underline">Archive</button>}
+                  </div>
+                  <p className="mt-2 text-[10px] text-ink-3">
+                    Updated {new Date(t.updatedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                    {t.updatedBy ? ` by ${t.updatedBy.split("@")[0]}` : ""}
+                  </p>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </Card>

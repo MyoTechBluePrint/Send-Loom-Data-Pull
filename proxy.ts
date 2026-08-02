@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 const SESSION_COOKIE = "sendloom_session";
 // /api/t = email open/click tracking, fetched by mail clients with no session.
 const OPEN_PREFIXES = [
-  "/login", "/signup", "/pricing",
+  "/login", "/signup", "/pricing", "/home",
   "/api/auth", "/api/health", "/api/v1", "/api/t", "/t/", "/r/",
   "/api/billing/webhook", "/api/billing/plans",
 ];
@@ -40,8 +40,11 @@ export default async function proxy(request: NextRequest) {
   if (pathname.startsWith("/api/")) {
     return NextResponse.json({ ok: false, error: "Not signed in" }, { status: 401 });
   }
+  // A logged-out visitor to the root gets the marketing homepage; deep links
+  // still go to sign-in with a return path.
+  if (pathname === "/") return NextResponse.redirect(new URL("/home", request.url));
   const login = new URL("/login", request.url);
-  if (pathname !== "/") login.searchParams.set("next", pathname);
+  login.searchParams.set("next", pathname);
   return NextResponse.redirect(login);
 }
 
