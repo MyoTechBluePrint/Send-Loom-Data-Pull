@@ -21,6 +21,16 @@ const Body = z.object({
   collectName: z.boolean().optional(),
   triggerKind: z.enum(["time_on_page", "exit_intent", "scroll"]).optional(),
   triggerSeconds: z.number().int().min(1).max(120).optional(),
+  // Image presentation. The URL points at a hosted asset (brand asset or
+  // product image); base64 payloads are rejected by the URL check.
+  imageLayout: z.enum(["none", "hero", "left", "right", "background"]).optional(),
+  imageUrl: z.string().url().max(500).nullable().optional(),
+  imageAlt: z.string().max(200).nullable().optional(),
+  imageLinkUrl: z.string().url().max(500).nullable().optional(),
+  imageOverlay: z.boolean().optional(),
+  // Coupon issued on completion (unique per contact, idempotent).
+  promotionId: z.string().nullable().optional(),
+  brandId: z.string().nullable().optional(),
 });
 
 async function ownedForm(id: string) {

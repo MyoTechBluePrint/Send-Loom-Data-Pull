@@ -22,6 +22,7 @@ export async function GET(req: NextRequest) {
       status: "live",
       type: { in: ["popup", "exit_intent", "floating_bar"] },
     },
+    include: { steps: { orderBy: { order: "asc" } } },
     orderBy: { createdAt: "desc" },
     take: 3,
   });
@@ -52,6 +53,21 @@ export async function GET(req: NextRequest) {
             ? { kind: "scroll" }
             : { kind: "time_on_page", seconds: f.triggerSeconds || 8 },
         oncePerVisitor: true,
+        // Image presentation. The tracker stacks split layouts on mobile.
+        image: f.imageLayout !== "none" && f.imageUrl
+          ? { layout: f.imageLayout, url: f.imageUrl, alt: f.imageAlt ?? "", linkUrl: f.imageLinkUrl ?? null, overlay: f.imageOverlay }
+          : null,
+        // Multi-step: display config only; answers post to
+        // /api/t/forms/<id>/submit with the store publicId.
+        steps: f.steps.map((s) => {
+          let fields: unknown[] = [];
+          try { fields = JSON.parse(s.fields) as unknown[]; } catch { fields = []; }
+          // tagMap/propertyKey are server-side wiring; the browser only needs
+          // display fields.
+          const display = (fields as Record<string, unknown>[]).map(({ tagMap: _t, propertyKey: _p, ...rest }) => rest);
+          return { index: s.order, title: s.title, fields: display };
+        }),
+        submitUrl: `/api/t/forms/${f.id}/submit`,
       };
     }),
   }, { headers });

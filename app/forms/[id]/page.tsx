@@ -7,6 +7,8 @@ import { db } from "@/lib/server/db";
 import { demoWorkspaceId } from "@/lib/server/views";
 import { num } from "@/lib/data";
 import { FormEditor } from "@/components/form-editor";
+import { FormImageEditor } from "@/components/form-image-editor";
+import { FormStepsEditor } from "@/components/form-steps-editor";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +23,16 @@ export default async function FormDetailPage({ params }: { params: Promise<{ id:
     select: { name: true, publicId: true },
     orderBy: { name: "asc" },
   });
+
+  // Product images for the popup image picker.
+  const productImages = (
+    await db.product.findMany({
+      where: { store: { workspaceId }, imageUrl: { not: null } },
+      select: { title: true, imageUrl: true },
+      take: 30,
+      orderBy: { updatedAt: "desc" },
+    })
+  ).map((p) => ({ title: p.title, imageUrl: p.imageUrl as string }));
 
   // Recent signups: popup_submitted events that name this form.
   const events = await db.event.findMany({
@@ -96,6 +108,22 @@ export default async function FormDetailPage({ params }: { params: Promise<{ id:
           triggerSeconds: form.triggerSeconds,
         }}
       />
+
+      <FormImageEditor
+        formId={form.id}
+        initial={{
+          imageLayout: form.imageLayout,
+          imageUrl: form.imageUrl,
+          imageAlt: form.imageAlt,
+          imageLinkUrl: form.imageLinkUrl,
+          imageOverlay: form.imageOverlay,
+        }}
+        productImages={productImages}
+      />
+
+      <div className="mt-4">
+        <FormStepsEditor formId={form.id} />
+      </div>
 
       <Card className="mt-4">
         <CardHeader title="Recent signups" subtitle="Each one is a consented contact with the popup tick in its ledger" />

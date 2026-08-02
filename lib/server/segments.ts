@@ -50,6 +50,20 @@ function matches(rule: Rule, ctx: Ctx): boolean {
       return (c.country ?? "").toLowerCase().includes(v);
     case "Tag":
       return c.tags.some((t) => t.tag.name.toLowerCase().includes(v));
+    case "Property": {
+      // Contact properties set by forms, surveys and polls: value is
+      // "key=value" (equals) or "key" (exists). This is how an answer stored
+      // as a property feeds a dynamic audience.
+      try {
+        const custom = c.customFields ? (JSON.parse(c.customFields) as Record<string, unknown>) : {};
+        const [key, expected] = rule.value.split("=").map((s) => s.trim());
+        if (!key) return false;
+        const actual = String(custom[key] ?? "").toLowerCase();
+        return expected === undefined ? actual !== "" : actual === expected.toLowerCase();
+      } catch {
+        return false;
+      }
+    }
     case "Source":
       return c.sources.some((s) => s.source.toLowerCase().includes(v) || s.sourceType.toLowerCase().includes(v));
     case "Import batch":
