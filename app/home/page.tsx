@@ -1,141 +1,318 @@
-// The public marketing homepage. Deliberately self-contained: everything is
-// on this one page so it can be art-directed freely without touching the app
-// shell. Signed-in users never land here; the proxy sends them to "/".
+// The iOS-style conversion landing page. One purpose: start the free trial.
+// Almost no navigation, one subscription choice, Apple-calm motion.
+//
+// HONESTY MARKERS: the stats, testimonials and company logos below are
+// PLACEHOLDER marketing content supplied by the design comp. Replace with
+// real numbers and real customers before this page carries paid traffic.
 
 import Link from "next/link";
+import { Reveal } from "@/components/reveal";
 
 export const metadata = {
-  title: "SendLoom · Email marketing that pays for itself",
-  description: "Campaigns, automations, popups and revenue attribution for WooCommerce stores. Start free for three days, no card required.",
+  title: "SendLoom · Marketing that feels effortless",
+  description: "Email, automation, forms and commerce in one beautiful platform. Start your 3-day free trial. No card required.",
 };
 
+const ink = "#1d1d1f";
+const blue = "#3478f6";
+
 const FEATURES = [
-  { icon: "✉", title: "Campaigns that earn", body: "A block editor that renders exactly what lands in the inbox, with products, coupons and polls built in. No guesswork previews." },
-  { icon: "⌁", title: "Automations", body: "Welcome journeys, recovery flows and follow-ups that react to what customers actually do on your store." },
-  { icon: "▤", title: "Popups & multi-step forms", body: "Image-led popups and branching questions that tag, segment and reward, without a line of code." },
-  { icon: "∿", title: "Revenue attribution", body: "Every send, click and coupon traced to orders. You see what your email earns, not just what it sends." },
-  { icon: "◆", title: "Multi-brand", body: "Run every brand from one workspace: separate identities, senders, products and coupons that never bleed." },
-  { icon: "◉", title: "Honest tracking", body: "Storefront-only tracking that rejects admin noise, respects consent and never invents a customer." },
+  { icon: "✉", t: "Email Campaigns", d: "Beautiful emails that get results." },
+  { icon: "⚡", t: "Automation", d: "Powerful workflows made simple." },
+  { icon: "▤", t: "Forms & Popups", d: "Grow your audience everywhere." },
+  { icon: "◎", t: "Segmentation", d: "Smarter targeting. Better outcomes." },
+  { icon: "▥", t: "Analytics", d: "Understand what really matters." },
+  { icon: "▦", t: "Commerce", d: "Sell more with built-in ecommerce tools." },
+  { icon: "✦", t: "AI Assistant", d: "Create, write and optimise with AI." },
 ];
 
-const STEPS = [
-  { k: "Today", t: "Create your account and start immediately. No payment details required." },
-  { k: "Day 3", t: "Choose your plan and verify your payment method for £0." },
-  { k: "Day 7", t: "Your subscription begins, unless you cancelled. Every date shown up front." },
+const STATS = [
+  { n: "250M+", l: "Emails delivered" },
+  { n: "35K+", l: "Campaigns launched" },
+  { n: "20K+", l: "Happy businesses" },
+  { n: "99.9%", l: "Uptime guarantee" },
 ];
+
+const QUOTES = [
+  { q: "SendLoom has completely changed how we run our email and marketing. Powerful, beautiful and so easy to use.", n: "Sophie Mitchell", r: "Founder, Glow Skincare", c: "#e9d5ff" },
+  { q: "The automation and segmentation features are next level. Our results have never been better.", n: "James Carter", r: "CMO, Drift & Co.", c: "#bfdbfe" },
+  { q: "Finally, a platform that brings everything together. We love SendLoom.", n: "Olivia Bennett", r: "Marketing Director, Studio B", c: "#bbf7d0" },
+];
+
+const LOGOS = ["GLOW", "DRIFT & CO.", "ICONIC", "STUDIO B", "NORTHBOUND", "SÖLACE"];
+
+function PayButtons({ compact = false }: { compact?: boolean }) {
+  // The trial needs no card, so every payment affordance routes into signup;
+  // real Apple Pay arrives at checkout via Stripe on day three.
+  return (
+    <div className={compact ? "w-full max-w-xs" : "w-full"}>
+      <Link href="/signup" className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-black text-[15px] font-semibold text-white transition active:scale-[0.98]">
+         Pay
+      </Link>
+      <Link href="/signup" className="mt-2.5 flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-black/10 bg-white text-[14px] font-semibold transition hover:border-black/25 active:scale-[0.98]" style={{ color: ink }}>
+        <span className="font-bold" style={{ color: "#4285F4" }}>G</span> Pay · Google Pay
+      </Link>
+      {!compact && (
+        <>
+          <p className="my-3 text-center text-[11px] uppercase tracking-widest text-black/30">or</p>
+          <Link href="/signup" className="flex h-12 w-full items-center justify-center rounded-xl border border-black/10 bg-white text-[14px] font-semibold transition hover:border-black/25" style={{ color: ink }}>
+            ▭ Enter Card Details
+          </Link>
+        </>
+      )}
+    </div>
+  );
+}
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen bg-[#faf9f7] text-[#2c2b28]">
-      {/* Nav */}
-      <header className="sticky top-0 z-20 border-b border-black/5 bg-[#faf9f7]/80 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-3.5">
-          <Link href="/home" className="flex items-center gap-2.5">
-            <img src="/logo.png" alt="" className="h-9 w-9 rounded-xl bg-white object-contain p-0.5 ring-1 ring-black/5" />
-            <span className="text-[15px] font-semibold tracking-tight">SendLoom</span>
-          </Link>
-          <nav className="flex items-center gap-5">
-            <Link href="/pricing" className="text-[13px] font-medium text-[#52514e] hover:text-[#14121f] max-sm:hidden">Pricing</Link>
-            <Link href="/login" className="text-[13px] font-medium text-[#52514e] hover:text-[#14121f]">Sign in</Link>
-            <Link
-              href="/signup"
-              className="rounded-lg bg-gradient-to-b from-[#7c3aed] to-[#5b21b6] px-4 py-2 text-[13px] font-semibold text-white shadow-sm transition hover:from-[#6d28d9] hover:to-[#4c1d95]"
-            >
-              Start free trial
-            </Link>
-          </nav>
-        </div>
+    <div className="min-h-screen bg-white antialiased" style={{ color: ink }}>
+      {/* Near-invisible nav */}
+      <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
+        <span className="flex items-center gap-2">
+          <img src="/logo.png" alt="" className="h-8 w-8 rounded-lg object-contain" />
+          <span className="text-[16px] font-bold tracking-tight">sendloom</span>
+        </span>
+        <Link href="/login" className="text-[13px] font-medium text-black/60 hover:text-black">Sign in</Link>
       </header>
 
-      {/* Hero */}
-      <section className="relative overflow-hidden">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-x-0 -top-40 mx-auto h-[480px] max-w-4xl rounded-full opacity-20 blur-3xl"
-          style={{ background: "radial-gradient(closest-side, #8b5cf6, transparent)" }}
-        />
-        <div className="relative mx-auto max-w-3xl px-5 pb-16 pt-20 text-center sm:pt-28">
-          <p className="mx-auto inline-block rounded-full border border-[#6d28d9]/20 bg-[#f3eefc] px-3 py-1 text-[11px] font-bold uppercase tracking-widest text-[#6d28d9]">
-            Growth Intelligence OS
-          </p>
-          <h1 className="mt-5 text-4xl font-semibold leading-[1.1] tracking-tight sm:text-5xl">
-            Email marketing that
-            <span className="bg-gradient-to-r from-[#7c3aed] to-[#5b21b6] bg-clip-text text-transparent"> pays for itself</span>
-          </h1>
-          <p className="mx-auto mt-5 max-w-xl text-[15px] leading-relaxed text-[#52514e]">
-            Campaigns, automations, popups and revenue attribution, purpose-built for WooCommerce stores.
-            See exactly what every email earns.
-          </p>
-          <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <Link
-              href="/signup"
-              className="rounded-xl bg-gradient-to-b from-[#7c3aed] to-[#5b21b6] px-7 py-3.5 text-[15px] font-semibold text-white shadow-lg shadow-[#6d28d9]/25 transition hover:from-[#6d28d9] hover:to-[#4c1d95]"
-            >
-              Start free for three days
-            </Link>
-            <Link href="/pricing" className="px-4 py-3 text-[14px] font-medium text-[#52514e] underline-offset-4 hover:text-[#14121f] hover:underline">
-              View pricing →
-            </Link>
-          </div>
-          <p className="mt-4 text-[12px] text-[#898781]">No payment details required to begin. Cancel before day seven and you pay nothing.</p>
+      {/* Hero + subscription card */}
+      <section className="mx-auto grid max-w-6xl items-start gap-12 px-6 pb-20 pt-10 lg:grid-cols-[1.1fr_0.9fr] lg:gap-16">
+        <div className="pt-6">
+          <Reveal>
+            <h1 className="text-5xl font-bold leading-[1.04] tracking-tight sm:text-6xl">
+              Marketing that<br />feels{" "}
+              <span className="bg-gradient-to-r from-[#3478f6] to-[#7c8cf8] bg-clip-text text-transparent">effortless.</span>
+            </h1>
+          </Reveal>
+          <Reveal delay={100}>
+            <p className="mt-6 max-w-md text-[16px] leading-relaxed text-black/60">
+              SendLoom brings email, automation, forms, and commerce together in one beautiful platform.
+              Everything you need. Nothing you don&apos;t.
+            </p>
+          </Reveal>
+          <Reveal delay={180}>
+            <div className="mt-8 flex flex-wrap items-center gap-4">
+              <Link
+                href="/signup"
+                className="flex h-12 items-center gap-2 rounded-xl px-6 text-[15px] font-semibold text-white shadow-lg shadow-[#3478f6]/25 transition hover:brightness-105 active:scale-[0.98]"
+                style={{ background: blue }}
+              >
+                Start Free Trial <span aria-hidden>→</span>
+              </Link>
+              <button className="flex items-center gap-2 text-[14px] font-semibold text-black/70 hover:text-black">
+                <span className="grid h-9 w-9 place-items-center rounded-full border border-black/10 shadow-sm">▶</span>
+                Watch 30 Second Demo
+              </button>
+            </div>
+          </Reveal>
+          <Reveal delay={260}>
+            <div className="mt-8 flex items-center gap-3">
+              <span className="flex -space-x-2">
+                {["#fde68a", "#fca5a5", "#a7f3d0", "#bfdbfe"].map((c, i) => (
+                  <span key={i} className="h-8 w-8 rounded-full border-2 border-white" style={{ background: c }} />
+                ))}
+              </span>
+              <span>
+                <span className="block text-[13px] tracking-tight text-[#f5a623]">★★★★★</span>
+                <span className="text-[12px] text-black/50">Trusted by thousands of businesses</span>
+              </span>
+            </div>
+          </Reveal>
         </div>
+
+        {/* The centrepiece: one subscription, Apple One treatment */}
+        <Reveal delay={150}>
+          <div className="rounded-[28px] border border-black/[0.06] bg-white p-7 shadow-[0_24px_60px_-12px_rgba(29,29,31,0.18)]">
+            <p className="mx-auto w-fit rounded-full bg-[#eaf1fe] px-3 py-1 text-[11px] font-bold uppercase tracking-widest" style={{ color: blue }}>
+              3 Day Free Trial
+            </p>
+            <h2 className="mt-3 text-center text-2xl font-bold tracking-tight">Start your free trial</h2>
+            <p className="mt-1 text-center text-[13px] text-black/50">No commitment. Cancel anytime.</p>
+
+            <ul className="mt-5 space-y-2.5">
+              {["Full access to all features", "3 days completely free", "No card required for trial"].map((f) => (
+                <li key={f} className="flex items-center gap-2.5 text-[14px]">
+                  <span className="grid h-5 w-5 place-items-center rounded-full bg-[#e8f7ee] text-[11px] text-[#1f9d55]">✓</span>
+                  {f}
+                </li>
+              ))}
+            </ul>
+
+            <div className="my-5 border-t border-black/[0.06] pt-5 text-center">
+              <p className="text-[14px] text-black/60">
+                Then just <span className="text-[22px] font-bold" style={{ color: ink }}>£29</span> / month
+              </p>
+              <p className="mt-0.5 text-[12px] text-black/45">One simple plan. Everything included.</p>
+            </div>
+
+            <PayButtons />
+
+            <p className="mt-4 flex items-center justify-center gap-1.5 text-[11px] text-black/45">
+              🔒 Secure payments powered by Stripe
+            </p>
+            <p className="mt-0.5 text-center text-[11px] text-black/35">Your data is always protected.</p>
+          </div>
+        </Reveal>
+      </section>
+
+      {/* Device showcase: CSS devices, no screenshots */}
+      <section className="overflow-hidden bg-gradient-to-b from-white via-[#f4f7fe] to-white pb-20">
+        <Reveal>
+          <div className="relative mx-auto max-w-4xl px-6">
+            {/* MacBook */}
+            <div className="mx-auto w-full max-w-2xl">
+              <div className="rounded-t-2xl border border-black/10 bg-[#0e0e10] p-2.5 shadow-2xl">
+                <div className="overflow-hidden rounded-lg bg-white">
+                  <div className="flex">
+                    <div className="w-1/5 space-y-2 border-r border-black/5 bg-[#fafafa] p-3">
+                      <p className="text-[9px] font-bold">sendloom</p>
+                      {["Overview", "Campaigns", "Automations", "Contacts", "Forms", "Products", "Analytics"].map((n, i) => (
+                        <p key={n} className={`rounded px-1.5 py-0.5 text-[7px] ${i === 0 ? "bg-[#eaf1fe] font-semibold" : "text-black/40"}`} style={i === 0 ? { color: blue } : {}}>{n}</p>
+                      ))}
+                    </div>
+                    <div className="flex-1 p-3">
+                      <p className="text-[9px] font-bold">Good morning, Alex 👋</p>
+                      <div className="mt-2 grid grid-cols-3 gap-1.5">
+                        {[["Revenue", "£48,285", "+24%"], ["Total Emails", "152,540", "+18%"], ["Open Rate", "42.6%", "+5%"]].map(([l, v, d]) => (
+                          <div key={l} className="rounded-lg border border-black/5 p-1.5">
+                            <p className="text-[6px] text-black/40">{l}</p>
+                            <p className="text-[9px] font-bold">{v}</p>
+                            <p className="text-[6px] text-[#1f9d55]">{d}</p>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-1.5 rounded-lg border border-black/5 p-1.5">
+                        <p className="text-[6px] text-black/40">Revenue Over Time</p>
+                        <svg viewBox="0 0 200 40" className="mt-1 w-full">
+                          <path d="M0,35 C30,32 45,20 70,22 S120,10 150,12 190,4 200,6" fill="none" stroke={blue} strokeWidth="1.5" />
+                          <path d="M0,35 C30,32 45,20 70,22 S120,10 150,12 190,4 200,6 L200,40 L0,40 Z" fill={blue} opacity="0.08" />
+                        </svg>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="mx-auto h-2.5 w-[110%] -translate-x-[4.5%] rounded-b-xl bg-gradient-to-b from-[#d7d7db] to-[#b9b9bf]" />
+            </div>
+            {/* iPhone */}
+            <div className="absolute -bottom-4 right-8 hidden w-40 sm:block">
+              <div className="rounded-[26px] border border-black/10 bg-[#0e0e10] p-1.5 shadow-2xl">
+                <div className="overflow-hidden rounded-[20px] bg-white p-2">
+                  <div className="mx-auto mb-1.5 h-1 w-10 rounded-full bg-black/80" />
+                  <p className="text-[7px] font-bold">Revenue</p>
+                  <p className="text-[11px] font-bold">£48,285 <span className="text-[6px] font-semibold text-[#1f9d55]">+24%</span></p>
+                  <svg viewBox="0 0 100 30" className="mt-1 w-full">
+                    <path d="M0,26 C20,24 30,14 50,16 S80,6 100,8" fill="none" stroke={blue} strokeWidth="1.5" />
+                  </svg>
+                  <div className="mt-1.5 rounded-md border border-black/5 p-1">
+                    <p className="text-[6px] text-black/40">Top Campaign</p>
+                    <p className="text-[7px] font-semibold">Summer Collection</p>
+                    <p className="text-[6px] text-[#1f9d55]">52.3% open</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Reveal>
       </section>
 
       {/* Features */}
-      <section className="mx-auto max-w-6xl px-5 py-14">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {FEATURES.map((f) => (
-            <div key={f.title} className="rounded-2xl border border-black/5 bg-white p-6 shadow-[0_1px_2px_rgba(11,11,11,0.04)] transition hover:shadow-md">
-              <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-b from-[#f3eefc] to-[#ede6fb] text-lg text-[#6d28d9]">{f.icon}</span>
-              <h3 className="mt-4 text-[15px] font-semibold">{f.title}</h3>
-              <p className="mt-1.5 text-[13px] leading-relaxed text-[#52514e]">{f.body}</p>
+      <section className="mx-auto max-w-6xl px-6 pb-16">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+          {FEATURES.map((f, i) => (
+            <Reveal key={f.t} delay={i * 60}>
+              <div className="h-full rounded-2xl border border-black/[0.06] bg-white p-4 text-center shadow-[0_1px_3px_rgba(29,29,31,0.05)] transition hover:-translate-y-0.5 hover:shadow-md">
+                <span className="mx-auto grid h-9 w-9 place-items-center rounded-xl bg-[#eaf1fe] text-[15px]" style={{ color: blue }}>{f.icon}</span>
+                <p className="mt-2.5 text-[12px] font-bold leading-tight">{f.t}</p>
+                <p className="mt-1 text-[10px] leading-snug text-black/45">{f.d}</p>
+              </div>
+            </Reveal>
+          ))}
+        </div>
+      </section>
+
+      {/* Stats — PLACEHOLDER numbers, replace before paid traffic */}
+      <section className="border-y border-black/[0.05] bg-[#fafafa] py-10" data-placeholder="marketing-stats">
+        <div className="mx-auto grid max-w-4xl grid-cols-2 gap-6 px-6 sm:grid-cols-4">
+          {STATS.map((s, i) => (
+            <Reveal key={s.l} delay={i * 80}>
+              <div className="text-center">
+                <p className="text-2xl font-bold tracking-tight">{s.n}</p>
+                <p className="mt-0.5 text-[12px] text-black/45">{s.l}</p>
+              </div>
+            </Reveal>
+          ))}
+        </div>
+      </section>
+
+      {/* Testimonials — PLACEHOLDER quotes, replace with real customers */}
+      <section className="mx-auto max-w-6xl px-6 py-16" data-placeholder="testimonials">
+        <Reveal>
+          <h2 className="text-center text-[15px] font-semibold text-black/60">Loved by marketers and business owners</h2>
+        </Reveal>
+        <div className="mt-8 grid gap-4 md:grid-cols-3">
+          {QUOTES.map((t, i) => (
+            <Reveal key={t.n} delay={i * 100}>
+              <figure className="h-full rounded-2xl border border-black/[0.06] bg-white p-6 shadow-[0_1px_3px_rgba(29,29,31,0.05)]">
+                <span className="grid h-10 w-10 place-items-center rounded-full text-[13px] font-bold text-black/60" style={{ background: t.c }}>
+                  {t.n.split(" ").map((w) => w[0]).join("")}
+                </span>
+                <blockquote className="mt-4 text-[14px] leading-relaxed text-black/75">&ldquo;{t.q}&rdquo;</blockquote>
+                <figcaption className="mt-4">
+                  <p className="text-[13px] font-bold">{t.n}</p>
+                  <p className="text-[12px] text-black/45">{t.r}</p>
+                </figcaption>
+              </figure>
+            </Reveal>
+          ))}
+        </div>
+        <Reveal delay={150}>
+          <p className="mt-12 text-center text-[12px] font-medium uppercase tracking-widest text-black/35">Trusted by thousands of amazing companies</p>
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-x-10 gap-y-4 opacity-50" data-placeholder="logos">
+            {LOGOS.map((l) => (
+              <span key={l} className="text-[15px] font-bold tracking-widest text-black/60" style={{ fontFamily: l === "GLOW" ? "Georgia, serif" : undefined }}>{l}</span>
+            ))}
+          </div>
+        </Reveal>
+      </section>
+
+      {/* Trust */}
+      <section className="mx-auto max-w-4xl px-6 pb-16">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {[["🔒", "Secure payments"], ["", "Apple Pay ready"], ["🛡", "GDPR compliant"], ["⚡", "Fast global delivery"]].map(([i, l]) => (
+            <div key={l} className="rounded-2xl border border-black/[0.06] bg-white p-4 text-center">
+              <p className="text-[16px]">{i}</p>
+              <p className="mt-1 text-[12px] font-semibold text-black/60">{l}</p>
             </div>
           ))}
         </div>
       </section>
 
-      {/* Trial timeline */}
-      <section className="border-y border-black/5 bg-[#14121f] py-16 text-white">
-        <div className="mx-auto max-w-4xl px-5">
-          <h2 className="text-center text-2xl font-semibold tracking-tight">Seven days, no surprises</h2>
-          <p className="mx-auto mt-2 max-w-md text-center text-[13px] text-white/60">
-            Exact dates and amounts at every step. No vague wording, ever.
-          </p>
-          <div className="mt-10 grid gap-6 sm:grid-cols-3">
-            {STEPS.map((s, i) => (
-              <div key={s.k} className="relative rounded-2xl border border-white/10 bg-white/[0.04] p-5">
-                <span className="grid h-7 w-7 place-items-center rounded-full bg-gradient-to-b from-[#8b5cf6] to-[#6d28d9] text-[12px] font-bold">{i + 1}</span>
-                <p className="mt-3 text-[11px] font-bold uppercase tracking-widest text-white/45">{s.k}</p>
-                <p className="mt-1.5 text-[13px] leading-relaxed text-white/85">{s.t}</p>
+      {/* Final CTA */}
+      <section className="px-6 pb-16">
+        <Reveal>
+          <div className="mx-auto flex max-w-5xl flex-col items-center gap-8 rounded-[32px] bg-gradient-to-br from-[#eef3fe] to-[#f7f4fe] px-8 py-14 sm:flex-row sm:justify-between sm:px-14">
+            <div className="flex items-center gap-5">
+              <span className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl text-3xl font-black text-white shadow-lg shadow-[#3478f6]/30" style={{ background: blue }}>S</span>
+              <div>
+                <h2 className="text-3xl font-bold leading-tight tracking-tight">Ready to send<br />better marketing?</h2>
+                <p className="mt-2 text-[13px] text-black/50">Start your 3 day free trial. No commitment.</p>
               </div>
-            ))}
+            </div>
+            <PayButtons compact />
           </div>
-        </div>
+        </Reveal>
       </section>
 
-      {/* Closing CTA */}
-      <section className="mx-auto max-w-3xl px-5 py-20 text-center">
-        <h2 className="text-3xl font-semibold tracking-tight">Ready when your store is</h2>
-        <p className="mx-auto mt-3 max-w-lg text-[14px] leading-relaxed text-[#52514e]">
-          Connect your website, import your contacts and send your first campaign inside your free trial.
-          Everything you build is yours to keep.
-        </p>
-        <Link
-          href="/signup"
-          className="mt-7 inline-block rounded-xl bg-gradient-to-b from-[#7c3aed] to-[#5b21b6] px-8 py-3.5 text-[15px] font-semibold text-white shadow-lg shadow-[#6d28d9]/25 transition hover:from-[#6d28d9] hover:to-[#4c1d95]"
-        >
-          Start my free trial
-        </Link>
-      </section>
-
-      {/* Footer */}
-      <footer className="border-t border-black/5 bg-white">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-5 py-8 sm:flex-row">
-          <p className="text-[12px] text-[#898781]">© {new Date().getFullYear()} SendLoom. All rights reserved.</p>
-          <nav className="flex gap-5 text-[12px] text-[#898781]">
-            <Link href="/pricing" className="hover:text-[#14121f]">Pricing</Link>
-            <Link href="/login" className="hover:text-[#14121f]">Sign in</Link>
-            <Link href="/signup" className="hover:text-[#14121f]">Start free trial</Link>
+      {/* Minimal footer */}
+      <footer className="border-t border-black/[0.05]">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-2 px-6 py-6 text-[11px] text-black/40 sm:flex-row">
+          <p>© {new Date().getFullYear()} SendLoom. All rights reserved.</p>
+          <nav className="flex gap-6">
+            <Link href="/home" className="hover:text-black/70">Privacy Policy</Link>
+            <Link href="/home" className="hover:text-black/70">Terms of Service</Link>
+            <Link href="/home" className="hover:text-black/70">Contact</Link>
           </nav>
         </div>
       </footer>
