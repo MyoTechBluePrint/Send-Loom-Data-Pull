@@ -51,11 +51,17 @@ export async function deliverToContact(
       html = campaign.content ?? `<p>${campaign.name}</p>`;
     }
 
+    // Brand sender identity, where the brand defines one.
+    const brand = campaign.brandId
+      ? await db.brand.findUnique({ where: { id: campaign.brandId }, select: { senderName: true, senderEmail: true, replyToEmail: true } })
+      : null;
     await provider.send({
       to: contact.email,
       subject: campaign.subject ?? campaign.name,
       html,
       campaignSendId: send.id,
+      from: brand?.senderEmail ? `${brand.senderName ?? "SendLoom"} <${brand.senderEmail}>` : undefined,
+      replyTo: brand?.replyToEmail ?? undefined,
     });
     await db.campaignSend.update({ where: { id: send.id }, data: { status: "sent" } });
     await db.timelineItem.create({
@@ -73,6 +79,10 @@ export type OutboundEmail = {
   subject: string;
   html: string;
   campaignSendId: string;
+  /** Brand sender identity, e.g. "MyoTech <hello@myotech.store>". Providers
+   *  that cannot override the from address ignore it. */
+  from?: string;
+  replyTo?: string;
 };
 
 export type SendResult = { providerId: string; status: "sent" | "failed"; detail?: string };
@@ -109,7 +119,13 @@ class ResendProvider implements EmailProvider {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from: process.env.RESEND_FROM, to: msg.to, subject: msg.subject, html: msg.html }),
+      body: JSON.stringify({
+        from: msg.from ?? process.env.RESEND_FROM,
+        to: msg.to,
+        subject: msg.subject,
+        html: msg.html,
+        ...(msg.replyTo ? { reply_to: msg.replyTo } : {}),
+      }),
       signal: AbortSignal.timeout(10_000),
     });
     const d = (await res.json().catch(() => ({}))) as { id?: string; message?: string };
