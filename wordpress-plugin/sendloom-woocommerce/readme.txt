@@ -6,7 +6,7 @@ Tested up to: 7.0
 Requires PHP: 8.0
 WC requires at least: 9.0
 WC tested up to: 10.9
-Stable tag: 4.4.0
+Stable tag: 4.5.0
 License: GPL-2.0+
 
 Connects WooCommerce to Sendloom for tracking, popups, abandoned cart/checkout recovery and store data sync.
@@ -37,6 +37,9 @@ Compatibility note: structure and syntax validated (PHP 7/8 parse, no secrets in
 No coding needed. Never paste one store's key into another store's plugin.
 
 == Changelog ==
+
+= 4.5.0 =
+* Coupon consumer: pulls Sendloom-generated per-customer codes hourly and creates them as WooCommerce coupons with expiry, usage limits, spend limits, individual-use and email restrictions. Confirms each result back to Sendloom. Idempotent throughout.
 
 = 4.4.0 =
 * Guided self-test button: authentication, IDs, storefront domain, tracking and test event checked with pass/fail results

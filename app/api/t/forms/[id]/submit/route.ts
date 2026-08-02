@@ -98,11 +98,13 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       });
       const optedOut = latest?.status === "withdrawn" || latest?.status === "suppressed";
       if (!optedOut && latest?.status !== "granted") {
+        // The evidence records the exact wording shown AND a version stamp,
+        // so a future wording change is distinguishable in the ledger.
         await db.consentRecord.create({
           data: {
             contactId, channel: "email", status: "granted",
             lawfulBasis: "Consent (form opt-in)",
-            evidence: `Form "${form.name}" consent checkbox · ${form.consentLabel ?? "opt-in"}`,
+            evidence: `Form "${form.name}" consent checkbox · wording v1 · "${form.consentLabel ?? "Email me offers and updates"}"`,
             actor: `form:${form.id}`,
           },
         });

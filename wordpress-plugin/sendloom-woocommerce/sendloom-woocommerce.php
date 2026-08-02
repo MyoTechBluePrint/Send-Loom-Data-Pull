@@ -3,7 +3,7 @@
  * Plugin Name: Sendloom for WooCommerce
  * Plugin URI: https://sendloom.onrender.com
  * Description: Connects this WooCommerce store to Sendloom — behaviour tracking, abandoned cart & checkout recovery, popups, and customer/order/product sync.
- * Version: 4.4.0
+ * Version: 4.5.0
  * Author: Sendloom
  * Requires at least: 6.4
  * Requires PHP: 8.0
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('SENDLOOM_VERSION', '4.4.0');
+define('SENDLOOM_VERSION', '4.5.0');
 define('SENDLOOM_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('SENDLOOM_PLUGIN_URL', plugin_dir_url(__FILE__));
 
@@ -27,6 +27,7 @@ require_once SENDLOOM_PLUGIN_DIR . 'includes/class-sendloom-events.php';
 require_once SENDLOOM_PLUGIN_DIR . 'includes/class-sendloom-sync.php';
 require_once SENDLOOM_PLUGIN_DIR . 'includes/class-sendloom-admin.php';
 require_once SENDLOOM_PLUGIN_DIR . 'includes/class-sendloom-tracker.php';
+require_once SENDLOOM_PLUGIN_DIR . 'includes/class-sendloom-coupons.php';
 
 class Sendloom_Plugin {
 
@@ -36,6 +37,7 @@ class Sendloom_Plugin {
         if (Sendloom_Api::is_connected()) {
             Sendloom_Events::init();
             Sendloom_Tracker::init();
+            Sendloom_Coupons::init();
         }
 
         add_action('sendloom_run_full_sync', ['Sendloom_Sync', 'run_full_sync']);
@@ -68,3 +70,6 @@ add_action('before_woocommerce_init', function () {
 });
 
 add_action('plugins_loaded', ['Sendloom_Plugin', 'init']);
+
+// Tidy up the coupon cron when the plugin is switched off.
+register_deactivation_hook(__FILE__, ['Sendloom_Coupons', 'deactivate']);

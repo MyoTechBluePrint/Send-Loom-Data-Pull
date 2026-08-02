@@ -20,17 +20,27 @@ export async function GET() {
 
   const rows = await Promise.all(
     promotions.map(async (p) => {
-      const [redeemed, pending, pushed] = await Promise.all([
+      const [redeemed, pending, pushed, redeemedRows] = await Promise.all([
         db.couponCode.count({ where: { promotionId: p.id, redeemedAt: { not: null } } }),
         db.couponCode.count({ where: { promotionId: p.id, pushState: "pending" } }),
         db.couponCode.count({ where: { promotionId: p.id, pushState: "pushed" } }),
+        db.couponCode.findMany({ where: { promotionId: p.id, redeemedAt: { not: null }, orderRef: { not: null } }, select: { orderRef: true } }),
       ]);
+      // Direct redemption revenue: the totals of the orders that carried this
+      // promotion's codes. Direct only — no assisted/inferred inflation.
+      const orderRefs = redeemedRows.map((r) => r.orderRef as string);
+      const orders = orderRefs.length
+        ? await db.order.findMany({ where: { OR: [{ number: { in: orderRefs } }, { externalId: { in: orderRefs } }] }, select: { total: true } })
+        : [];
+      const revenue = orders.reduce((s, o) => s + o.total, 0);
       return {
         id: p.id, name: p.name, mode: p.mode, sharedCode: p.sharedCode, prefix: p.prefix,
         label: promotionLabel(p), kind: p.kind, amount: p.amount, currency: p.currency,
         expiryDays: p.expiryDays, minSpend: p.minSpend, usageLimit: p.usageLimit,
         archived: p.archived, storeId: p.storeId,
         issued: p._count.codes, redeemed, pendingPush: pending, pushed,
+        revenue,
+        revenueLabel: revenue > 0 ? new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format(revenue) : null,
       };
     })
   );

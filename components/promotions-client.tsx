@@ -12,6 +12,7 @@ type Row = {
   expiryDays: number | null; minSpend: number | null; usageLimit: number | null;
   archived: boolean; storeId: string | null;
   issued: number; redeemed: number; pendingPush: number; pushed: number;
+  revenueLabel: string | null;
 };
 
 export function PromotionsClient({ stores }: { stores: { id: string; name: string }[] }) {
@@ -113,7 +114,7 @@ export function PromotionsClient({ stores }: { stores: { id: string; name: strin
         <div className="overflow-x-auto">
           <table className="w-full text-left text-[13px]">
             <thead className="border-b border-line">
-              <tr><Th>Promotion</Th><Th>Code</Th><Th>Discount</Th><Th>Issued</Th><Th>At store</Th><Th>Redeemed</Th><Th>ID for blocks</Th></tr>
+              <tr><Th>Promotion</Th><Th>Code</Th><Th>Discount</Th><Th>Issued</Th><Th>At store</Th><Th>Redeemed</Th><Th>Revenue</Th><Th>ID for blocks</Th></tr>
             </thead>
             <tbody>
               {rows.map((p) => (
@@ -128,6 +129,7 @@ export function PromotionsClient({ stores }: { stores: { id: string; name: strin
                       : String(p.pushed)}
                   </Td>
                   <Td>{p.redeemed}</Td>
+                  <Td>{p.revenueLabel ?? "—"}</Td>
                   <Td><code className="rounded bg-[#f0efec] px-1.5 py-0.5 font-mono text-[11px]">{p.id}</code></Td>
                 </tr>
               ))}

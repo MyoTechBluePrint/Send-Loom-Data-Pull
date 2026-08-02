@@ -26,6 +26,84 @@ const FIELD_KINDS = [
   { v: "number_scale", l: "Number scale" },
 ] as const;
 
+type SimpleRule = { if: { field: string; op: string; value: string }; then: { action: string; step?: number; tag?: string; key?: string; value?: string; message?: string }[] };
+
+/** No-code branching: structured rows over the shared rule format. */
+function RuleRows({ rules, fields, stepCount, onChange }: {
+  rules: string; fields: Field[]; stepCount: number; onChange: (json: string) => void;
+}) {
+  let parsed: SimpleRule[] = [];
+  try { parsed = JSON.parse(rules) as SimpleRule[]; } catch { parsed = []; }
+  if (!Array.isArray(parsed)) parsed = [];
+
+  const save = (next: SimpleRule[]) => onChange(JSON.stringify(next));
+  const input = "rounded-lg border border-line bg-surface px-2 py-1.5 text-[12px] outline-none focus:border-brand";
+
+  const patchRule = (i: number, r: SimpleRule) => save(parsed.map((x, n) => (n === i ? r : x)));
+  const action = (r: SimpleRule) => r.then[0] ?? { action: "add_tag" };
+  const setAction = (i: number, a: SimpleRule["then"][0]) => patchRule(i, { ...parsed[i], then: [a] });
+
+  return (
+    <div className="mt-2 rounded-lg border border-line bg-surface p-2.5">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">Branching & actions when this step completes</p>
+      {parsed.map((r, i) => {
+        const a = action(r);
+        return (
+          <div key={i} className="mt-2 flex flex-wrap items-center gap-1.5 text-[12px]">
+            <span className="font-semibold text-ink-3">If</span>
+            <select className={input} value={r.if.field} onChange={(e) => patchRule(i, { ...r, if: { ...r.if, field: e.target.value } })}>
+              {fields.map((f) => <option key={f.key} value={f.key}>{f.label || f.key}</option>)}
+            </select>
+            <select className={input} value={r.if.op} onChange={(e) => patchRule(i, { ...r, if: { ...r.if, op: e.target.value } })}>
+              <option value="equals">is</option>
+              <option value="not_equals">is not</option>
+              <option value="contains">contains</option>
+              <option value="gt">is more than</option>
+              <option value="lt">is less than</option>
+            </select>
+            <input className={`${input} w-32`} value={r.if.value} onChange={(e) => patchRule(i, { ...r, if: { ...r.if, value: e.target.value } })} placeholder="answer" />
+            <span className="font-semibold text-ink-3">then</span>
+            <select className={input} value={a.action} onChange={(e) => setAction(i, { action: e.target.value })}>
+              <option value="add_tag">add tag</option>
+              <option value="remove_tag">remove tag</option>
+              <option value="set_property">set property</option>
+              <option value="go_to_step">go to step</option>
+              <option value="skip_step">skip step</option>
+              <option value="show_success">show message</option>
+              <option value="generate_coupon">issue coupon</option>
+            </select>
+            {(a.action === "add_tag" || a.action === "remove_tag") && (
+              <input className={`${input} w-36`} value={a.tag ?? ""} onChange={(e) => setAction(i, { ...a, tag: e.target.value })} placeholder="tag name" />
+            )}
+            {a.action === "set_property" && (<>
+              <input className={`${input} w-28`} value={a.key ?? ""} onChange={(e) => setAction(i, { ...a, key: e.target.value })} placeholder="property" />
+              <input className={`${input} w-28`} value={a.value ?? ""} onChange={(e) => setAction(i, { ...a, value: e.target.value })} placeholder="value" />
+            </>)}
+            {(a.action === "go_to_step" || a.action === "skip_step") && (
+              <select className={input} value={String(a.step ?? 0)} onChange={(e) => setAction(i, { ...a, step: Number(e.target.value) })}>
+                {Array.from({ length: stepCount }, (_, n) => <option key={n} value={n}>Step {n + 1}</option>)}
+              </select>
+            )}
+            {a.action === "show_success" && (
+              <input className={`${input} w-44`} value={a.message ?? ""} onChange={(e) => setAction(i, { ...a, message: e.target.value })} placeholder="message" />
+            )}
+            {a.action === "generate_coupon" && (
+              <input className={`${input} w-44`} value={(a as { promotionId?: string }).promotionId ?? ""} onChange={(e) => setAction(i, { ...a, promotionId: e.target.value } as never)} placeholder="promotion id" />
+            )}
+            <button onClick={() => save(parsed.filter((_, n) => n !== i))} className="text-red-600 hover:underline">Remove</button>
+          </div>
+        );
+      })}
+      <button
+        onClick={() => save([...parsed, { if: { field: fields[0]?.key ?? "email", op: "equals", value: "" }, then: [{ action: "add_tag", tag: "" }] }])}
+        className="mt-2 rounded-lg border border-line px-2.5 py-1 text-[12px] font-semibold text-ink-2 hover:border-brand hover:text-brand"
+      >
+        + Add rule
+      </button>
+    </div>
+  );
+}
+
 export function FormStepsEditor({ formId }: { formId: string }) {
   const [steps, setSteps] = useState<Step[] | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -167,15 +245,12 @@ export function FormStepsEditor({ formId }: { formId: string }) {
               + Add question
             </button>
 
-            <details className="mt-2">
-              <summary className="cursor-pointer text-[12px] font-semibold text-ink-3 hover:text-brand">Branching & skip logic (advanced)</summary>
-              <p className="mt-1 text-[11px] text-ink-3">
-                Shared rule format, evaluated when this step completes. Example:{" "}
-                <code className="font-mono">[{"{"}&quot;if&quot;:{"{"}&quot;field&quot;:&quot;interest&quot;,&quot;op&quot;:&quot;equals&quot;,&quot;value&quot;:&quot;Recovery&quot;{"}"},&quot;then&quot;:[{"{"}&quot;action&quot;:&quot;go_to_step&quot;,&quot;step&quot;:2{"}"}]{"}"}]</code>
-              </p>
-              <textarea rows={3} className={`${input} font-mono text-[11px]`} value={s.rules}
-                onChange={(e) => patchStep(si, { rules: e.target.value })} />
-            </details>
+            <RuleRows
+              rules={s.rules}
+              fields={s.fields}
+              stepCount={steps.length}
+              onChange={(rules) => patchStep(si, { rules })}
+            />
           </div>
         ))}
 

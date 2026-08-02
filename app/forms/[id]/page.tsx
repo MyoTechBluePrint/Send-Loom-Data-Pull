@@ -10,6 +10,52 @@ import { FormEditor } from "@/components/form-editor";
 import { FormImageEditor } from "@/components/form-image-editor";
 import { FormStepsEditor } from "@/components/form-steps-editor";
 
+// Step funnel from real submissions: where people start, drop and finish.
+async function FormFunnel({ formId, workspaceId }: { formId: string; workspaceId: string }) {
+  void workspaceId;
+  const [subs, steps] = await Promise.all([
+    db.formSubmission.findMany({ where: { formId }, select: { lastStep: true, completed: true } }),
+    db.formStep.count({ where: { formId } }),
+  ]);
+  if (subs.length === 0) return null;
+
+  const total = subs.length;
+  const completed = subs.filter((s) => s.completed).length;
+  const stepCount = Math.max(steps, 1);
+  const reached = Array.from({ length: stepCount }, (_, i) => subs.filter((s) => s.lastStep >= i || s.completed).length);
+
+  return (
+    <Card className="mt-4">
+      <CardHeader
+        title="Step funnel"
+        subtitle={`${total} started · ${completed} completed (${Math.round((completed / total) * 100)}%) · drop-off per step from real submissions`}
+      />
+      <div className="space-y-2 px-5 py-4">
+        {reached.map((n, i) => (
+          <div key={i}>
+            <div className="flex items-baseline justify-between text-[12px]">
+              <span className="text-ink-2">Step {i + 1}</span>
+              <span className="font-medium">{n} reached · {Math.round((n / total) * 100)}%</span>
+            </div>
+            <div className="mt-1 h-2 rounded-full bg-[#f0efec]">
+              <div className="h-full rounded-full bg-gradient-to-r from-[#8b5cf6] to-[#6d28d9]" style={{ width: `${Math.max(2, Math.round((n / total) * 100))}%` }} />
+            </div>
+          </div>
+        ))}
+        <div>
+          <div className="flex items-baseline justify-between text-[12px]">
+            <span className="text-ink-2">Completed</span>
+            <span className="font-medium">{completed} · {Math.round((completed / total) * 100)}%</span>
+          </div>
+          <div className="mt-1 h-2 rounded-full bg-[#f0efec]">
+            <div className="h-full rounded-full bg-emerald-500" style={{ width: `${Math.max(2, Math.round((completed / total) * 100))}%` }} />
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 export const dynamic = "force-dynamic";
 
 export default async function FormDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -124,6 +170,8 @@ export default async function FormDetailPage({ params }: { params: Promise<{ id:
       <div className="mt-4">
         <FormStepsEditor formId={form.id} />
       </div>
+
+      <FormFunnel formId={form.id} workspaceId={workspaceId} />
 
       <Card className="mt-4">
         <CardHeader title="Recent signups" subtitle="Each one is a consented contact with the popup tick in its ledger" />
