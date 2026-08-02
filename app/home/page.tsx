@@ -248,12 +248,8 @@ export default function HomePage() {
       </section>
 
       {/* Stats — PLACEHOLDER numbers, replace before paid traffic */}
-      <section className="relative overflow-hidden py-20" data-placeholder="marketing-stats">
-        {/* Lifestyle photo as the stage; deep blue-black overlay keeps the
-            numerals readable and on-brand */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/lifestyle.jpg" alt="" aria-hidden className="absolute inset-0 h-full w-full object-cover object-[center_35%]" />
-        <div aria-hidden className="absolute inset-0 bg-gradient-to-r from-[#0a0a14]/85 via-[#101322]/75 to-[#0a0a14]/85" />
+      <section className="relative overflow-hidden bg-gradient-to-b from-[#1a1a1d] to-[#0a0a0c] py-14" data-placeholder="marketing-stats">
+        <div aria-hidden className="pointer-events-none absolute inset-0 opacity-50" style={{ backgroundImage: "radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px)", backgroundSize: "22px 22px" }} />
         <div className="mx-auto grid max-w-4xl grid-cols-2 gap-8 px-6 sm:grid-cols-4">
           {STATS.map((s, i) => (
             <Reveal key={s.l} delay={i * 80}>
@@ -313,8 +309,11 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Final CTA: full-bleed two-tone blue band */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-[#5b93f8] via-[#3478f6] to-[#1d4ed8]">
+      {/* Final CTA: full-bleed band — lifestyle photo under a two-tone blue wash */}
+      <section className="relative overflow-hidden bg-[#3478f6]">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/lifestyle.jpg" alt="" aria-hidden className="absolute inset-0 h-full w-full object-cover object-[center_30%]" />
+        <div aria-hidden className="absolute inset-0 bg-gradient-to-br from-[#5b93f8]/90 via-[#3478f6]/82 to-[#1d4ed8]/90" />
         {/* Texture across the whole band, not just the content column */}
         {/* Faint geometric: two-tone hexagonal lattice with an embossed offset —
             a dark copy sits below-right, a light copy above-left, so the
@@ -340,7 +339,7 @@ export default function HomePage() {
         <div aria-hidden className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full opacity-30 blur-3xl" style={{ background: "radial-gradient(closest-side, #ffffff, transparent 70%)" }} />
         <div aria-hidden className="pointer-events-none absolute -bottom-32 -left-16 h-64 w-64 rounded-full opacity-20 blur-3xl" style={{ background: "radial-gradient(closest-side, #1e3a8a, transparent 70%)" }} />
         <Reveal>
-          <div className="relative mx-auto flex max-w-5xl flex-col items-center gap-8 px-8 py-20 text-white sm:flex-row sm:justify-between sm:px-14">
+          <div className="relative mx-auto flex max-w-5xl flex-col items-center gap-8 px-8 py-24 text-white sm:flex-row sm:justify-between sm:px-14 lg:py-32">
             <div className="flex items-center gap-5">
               <span className="block h-28 w-28 shrink-0 overflow-hidden rounded-[22px] shadow-xl shadow-[#1d4ed8]/40">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
