@@ -77,25 +77,28 @@ const QUOTES = [
 
 const LOGOS = ["GLOW", "DRIFT & CO.", "ICONIC", "STUDIO B", "NORTHBOUND", "SÖLACE"];
 
-function PayButtons({ compact = false, onDark = false }: { compact?: boolean; onDark?: boolean }) {
+function PayButtons({ compact = false, onDark = false, large = false }: { compact?: boolean; onDark?: boolean; large?: boolean }) {
+  const h = large ? "h-14 text-[18px]" : "h-12 text-[16px]";
+  const h2 = large ? "h-14 text-[17px]" : "h-12 text-[15px]";
+  const mark = large ? "h-[22px] w-[22px]" : "h-[18px] w-[18px]";
   // The trial needs no card, so every payment affordance routes into signup;
   // real Apple Pay arrives at checkout via Stripe on day three.
   // On dark surfaces Apple Pay flips to Apple's white variant, so it never
   // sits black-on-black.
   return (
-    <div className={compact ? "w-full max-w-xs" : "w-full"}>
+    <div className={compact ? (large ? "w-full max-w-sm" : "w-full max-w-xs") : "w-full"}>
       <Link
         href="/signup"
-        className={`flex h-12 w-full items-center justify-center gap-1.5 rounded-xl text-[16px] font-semibold shadow-md transition active:scale-[0.98] ${
+        className={`flex ${h} w-full items-center justify-center gap-1.5 rounded-xl font-semibold shadow-md transition active:scale-[0.98] ${
           onDark
             ? "bg-gradient-to-b from-white to-[#e8e8ec] text-black shadow-black/40"
             : "bg-gradient-to-b from-[#2c2c2e] to-black text-white shadow-black/25"
         }`}
       >
-        <AppleLogo /> Pay
+        <AppleLogo className={mark} /> Pay
       </Link>
-      <Link href="/signup" className="mt-2.5 flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-black/10 bg-white text-[15px] font-semibold transition hover:border-black/25 active:scale-[0.98]" style={{ color: ink }}>
-        <GoogleG /> Pay
+      <Link href="/signup" className={`mt-2.5 flex ${h2} w-full items-center justify-center gap-2 rounded-xl border border-black/10 bg-white font-semibold transition hover:border-black/25 active:scale-[0.98]`} style={{ color: ink }}>
+        <GoogleG className={mark} /> Pay
       </Link>
       {!compact && (
         <>
@@ -114,9 +117,9 @@ export default function HomePage() {
     <div className="min-h-screen bg-white antialiased" style={{ color: ink }}>
       {/* Near-invisible nav */}
       <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
-        <span className="flex items-center gap-2">
-          <img src="/logo.png" alt="" className="h-8 w-8 rounded-lg object-contain" />
-          <span className="text-[16px] font-bold tracking-tight">sendloom</span>
+        <span className="flex items-center gap-2.5">
+          <img src="/logo.png" alt="" className="h-11 w-11 rounded-xl object-contain" />
+          <span className="text-[22px] font-bold tracking-tight">sendloom</span>
         </span>
         <Link href="/login" className="text-[13px] font-medium text-black/60 hover:text-black">Sign in</Link>
       </header>
@@ -335,17 +338,17 @@ export default function HomePage() {
         <Reveal>
           <div className="relative mx-auto flex max-w-5xl flex-col items-center gap-8 px-8 py-20 text-white sm:flex-row sm:justify-between sm:px-14">
             <div className="flex items-center gap-5">
-              <span className="block h-16 w-16 shrink-0 overflow-hidden rounded-2xl shadow-lg shadow-[#1d4ed8]/40">
+              <span className="block h-28 w-28 shrink-0 overflow-hidden rounded-[22px] shadow-xl shadow-[#1d4ed8]/40">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src="/logo.png" alt="SendLoom" className="h-full w-full object-cover" />
               </span>
               <div>
-                <h2 className="text-3xl font-bold leading-tight tracking-tight">Ready to send<br />better marketing?</h2>
-                <p className="mt-2 text-[13px] text-white/70">Start your 3 day free trial. No commitment.</p>
+                <h2 className="text-4xl font-bold leading-tight tracking-tight sm:text-5xl">Ready to send<br />better marketing?</h2>
+                <p className="mt-3 text-[16px] text-white/70">Start your 3 day free trial. No commitment.</p>
               </div>
             </div>
             <div className="relative">
-              <PayButtons compact onDark />
+              <PayButtons compact onDark large />
               <Link href="/signup" className="mt-3 block text-center text-[12px] font-medium text-white/50 underline-offset-4 hover:text-white hover:underline">
                 Enter Card Details
               </Link>
