@@ -212,69 +212,26 @@ export default function HomePage() {
         </Reveal>
       </section>
 
-      {/* Device showcase: CSS devices, no screenshots */}
-      <section className="overflow-hidden bg-gradient-to-b from-white via-[#eef3fe] to-white pb-24 pt-8">
-        <div className="mx-auto mb-10 max-w-xl px-6 text-center">
+      {/* Device showcase */}
+      <section className="overflow-hidden bg-gradient-to-b from-white via-[#eef3fe] to-white pb-20 pt-8">
+        <div className="mx-auto mb-6 max-w-xl px-6 text-center">
           <h2 className="text-3xl font-bold tracking-tight">One platform. Every device.</h2>
           <p className="mt-2 text-[14px] text-black/50">Campaigns, automations and revenue, live wherever you are.</p>
         </div>
-        <div>
-          <div className="relative mx-auto max-w-5xl px-6">
-            {/* MacBook */}
-            <div className="mx-auto w-full max-w-3xl">
-              <div className="rounded-t-2xl border border-black/10 bg-[#0e0e10] p-2.5 shadow-2xl">
-                <div className="overflow-hidden rounded-lg bg-white">
-                  <div className="flex">
-                    <div className="w-1/5 space-y-2 border-r border-black/5 bg-[#fafafa] p-3">
-                      <p className="text-[9px] font-bold">sendloom</p>
-                      {["Overview", "Campaigns", "Automations", "Contacts", "Forms", "Products", "Analytics"].map((n, i) => (
-                        <p key={n} className={`rounded px-1.5 py-0.5 text-[7px] ${i === 0 ? "bg-[#eaf1fe] font-semibold" : "text-black/40"}`} style={i === 0 ? { color: blue } : {}}>{n}</p>
-                      ))}
-                    </div>
-                    <div className="flex-1 p-3">
-                      <p className="text-[9px] font-bold">Good morning, Alex 👋</p>
-                      <div className="mt-2 grid grid-cols-3 gap-1.5">
-                        {[["Revenue", "£48,285", "+24%"], ["Total Emails", "152,540", "+18%"], ["Open Rate", "42.6%", "+5%"]].map(([l, v, d]) => (
-                          <div key={l} className="rounded-lg border border-black/5 p-1.5">
-                            <p className="text-[6px] text-black/40">{l}</p>
-                            <p className="text-[9px] font-bold">{v}</p>
-                            <p className="text-[6px] text-[#1f9d55]">{d}</p>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="mt-1.5 rounded-lg border border-black/5 p-1.5">
-                        <p className="text-[6px] text-black/40">Revenue Over Time</p>
-                        <svg viewBox="0 0 200 40" className="mt-1 w-full">
-                          <path d="M0,35 C30,32 45,20 70,22 S120,10 150,12 190,4 200,6" fill="none" stroke={blue} strokeWidth="1.5" />
-                          <path d="M0,35 C30,32 45,20 70,22 S120,10 150,12 190,4 200,6 L200,40 L0,40 Z" fill={blue} opacity="0.08" />
-                        </svg>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="mx-auto h-2.5 w-[110%] -translate-x-[4.5%] rounded-b-xl bg-gradient-to-b from-[#d7d7db] to-[#b9b9bf]" />
-            </div>
-            {/* iPhone */}
-            <div className="absolute -bottom-6 right-4 hidden w-52 rotate-2 sm:block">
-              <div className="rounded-[26px] border border-black/10 bg-[#0e0e10] p-1.5 shadow-2xl">
-                <div className="overflow-hidden rounded-[20px] bg-white p-2">
-                  <div className="mx-auto mb-1.5 h-1 w-10 rounded-full bg-black/80" />
-                  <p className="text-[7px] font-bold">Revenue</p>
-                  <p className="text-[11px] font-bold">£48,285 <span className="text-[6px] font-semibold text-[#1f9d55]">+24%</span></p>
-                  <svg viewBox="0 0 100 30" className="mt-1 w-full">
-                    <path d="M0,26 C20,24 30,14 50,16 S80,6 100,8" fill="none" stroke={blue} strokeWidth="1.5" />
-                  </svg>
-                  <div className="mt-1.5 rounded-md border border-black/5 p-1">
-                    <p className="text-[6px] text-black/40">Top Campaign</p>
-                    <p className="text-[7px] font-semibold">Summer Collection</p>
-                    <p className="text-[6px] text-[#1f9d55]">52.3% open</p>
-                  </div>
-                </div>
-              </div>
-            </div>
+        <Reveal>
+          <div className="relative mx-auto max-w-4xl px-6">
+            {/* Soft stage the devices float on */}
+            <div aria-hidden className="pointer-events-none absolute inset-x-12 bottom-2 h-24 rounded-full bg-[#3478f6]/15 blur-3xl" />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/devices.png"
+              alt="SendLoom dashboard on a MacBook and iPhone"
+              width={1024}
+              height={560}
+              className="relative mx-auto w-full max-w-3xl translate-x-[4%] drop-shadow-[0_28px_45px_rgba(29,29,31,0.18)]"
+            />
           </div>
-        </div>
+        </Reveal>
       </section>
 
       {/* Features */}
