@@ -40,6 +40,7 @@ const nav: { section?: string; items: { href: string; label: string; icon: strin
     section: "Growth",
     items: [
       { href: "/campaigns", label: "Campaigns", icon: "✉" },
+      { href: "/templates", label: "Templates", icon: "▦" },
       { href: "/automations", label: "Automations", icon: "⌁" },
       { href: "/demand", label: "Demand Radar", icon: "☄" },
       { href: "/tasks", label: "Sales Tasks", icon: "☑" },

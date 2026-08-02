@@ -4,6 +4,7 @@ import { Shell, GhostButton } from "@/components/shell";
 import { Card, CardHeader, Stat, Badge, HBarChart, Th, Td } from "@/components/ui";
 import { gbp, num } from "@/lib/data";
 import { db } from "@/lib/server/db";
+import { CampaignEmailPanel } from "@/components/campaign-email-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +38,12 @@ export default async function CampaignReport({ params }: { params: Promise<{ id:
         <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase ${c.isDemo ? "bg-zinc-100 text-zinc-500" : "bg-emerald-50 text-emerald-700"}`}>
           {c.isDemo ? "Seeded demo data" : "Real sends"}
         </span>
+      </div>
+
+      {/* The email design attached to this campaign, and every way to work
+          with it. Hidden for legacy demo rows, which have no real content. */}
+      <div className="mt-3">
+        <CampaignEmailPanel campaignId={c.id} />
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-4 xl:grid-cols-4">

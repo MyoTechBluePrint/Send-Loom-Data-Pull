@@ -8,6 +8,65 @@ import { evaluateSegmentMembers } from "./segments";
 import { guard } from "./billing/guard";
 import { trackFunnel } from "./billing/analytics-events";
 import { recordUsage } from "./entitlements";
+import { parseBlocks, validateBlocks, type EmailBlock } from "./email-blocks";
+import { renderForRecipient, renderPreview, resolveFeeds } from "./email-render";
+
+/**
+ * Deliver one campaign email to one contact. Shared by the immediate loop and
+ * the smart-send batch runner. Idempotent per (campaign, contact): the unique
+ * constraint on CampaignSend means a retried batch can never deliver twice.
+ * Returns "sent" | "failed" | "duplicate".
+ */
+export async function deliverToContact(
+  campaign: { id: string; workspaceId: string; name: string; subject: string | null; content: string | null; brandId: string | null },
+  resolvedBlocks: EmailBlock[] | null,
+  contact: { id: string; email: string },
+  provider: EmailProvider
+): Promise<"sent" | "failed" | "duplicate"> {
+  let send;
+  try {
+    send = await db.campaignSend.create({
+      data: { campaignId: campaign.id, contactId: contact.id, status: "queued" },
+    });
+  } catch {
+    // Unique violation: this contact already has a send record for this
+    // campaign. That is the duplicate guard doing its job.
+    return "duplicate";
+  }
+
+  try {
+    let html: string;
+    if (resolvedBlocks?.length) {
+      const full = await db.contact.findUnique({ where: { id: contact.id }, select: { firstName: true, lastName: true } });
+      const rendered = await renderForRecipient({
+        workspaceId: campaign.workspaceId,
+        campaignId: campaign.id,
+        sendId: send.id,
+        contact: { id: contact.id, email: contact.email, firstName: full?.firstName, lastName: full?.lastName },
+        blocks: resolvedBlocks,
+        brandId: campaign.brandId,
+      });
+      html = rendered.html;
+    } else {
+      html = campaign.content ?? `<p>${campaign.name}</p>`;
+    }
+
+    await provider.send({
+      to: contact.email,
+      subject: campaign.subject ?? campaign.name,
+      html,
+      campaignSendId: send.id,
+    });
+    await db.campaignSend.update({ where: { id: send.id }, data: { status: "sent" } });
+    await db.timelineItem.create({
+      data: { contactId: contact.id, type: "email_sent", title: "Campaign email sent", detail: `${campaign.name} · via ${provider.name}` },
+    });
+    return "sent";
+  } catch {
+    await db.campaignSend.update({ where: { id: send.id }, data: { status: "failed" } });
+    return "failed";
+  }
+}
 
 export type OutboundEmail = {
   to: string;
@@ -141,32 +200,37 @@ export async function sendCampaign(campaignId: string, actor: string) {
     };
   }
 
+  // Block-based content: refuse to send anything failing a hard validation
+  // (no footer/unsubscribe, broken links), resolve dynamic feeds ONCE so the
+  // whole campaign shows the same products, and snapshot the rendered result
+  // onto the campaign so history is immune to later edits.
+  const blocks = parseBlocks(campaign.content);
+  let resolvedBlocks: EmailBlock[] | null = null;
+  if (blocks.length) {
+    const errors = validateBlocks(blocks).filter((i) => i.level === "error");
+    if (errors.length) {
+      return { ok: false as const, error: `The email cannot be sent yet: ${errors[0].message}` };
+    }
+    resolvedBlocks = await resolveFeeds(blocks, campaign.workspaceId, null);
+    const snapshot = await renderPreview({ workspaceId: campaign.workspaceId, blocks: resolvedBlocks, brandId: campaign.brandId });
+    await db.campaign.update({
+      where: { id: campaignId },
+      data: { renderedHtml: snapshot.html, renderedText: snapshot.textBody, content: JSON.stringify(resolvedBlocks) },
+    });
+  }
+
   await db.campaign.update({ where: { id: campaignId }, data: { status: "sending", audienceSnapshot: eligible.length } });
 
   const provider = activeProvider();
   let sent = 0, failed = 0;
 
   for (const contact of eligible) {
-    const send = await db.campaignSend.create({
-      data: { campaignId, contactId: contact.id, status: "queued" },
-    });
-    try {
-      await provider.send({
-        to: contact.email,
-        subject: campaign.subject ?? campaign.name,
-        html: campaign.content ?? `<p>${campaign.name}</p>`,
-        campaignSendId: send.id,
-      });
-      await db.campaignSend.update({ where: { id: send.id }, data: { status: "sent" } });
-      await db.timelineItem.create({
-        data: { contactId: contact.id, type: "email_sent", title: "Campaign email sent", detail: `${campaign.name} · via ${provider.name}` },
-      });
-      sent++;
-    } catch (e) {
-      await db.campaignSend.update({ where: { id: send.id }, data: { status: "failed" } });
+    const result = await deliverToContact(campaign, resolvedBlocks, contact, provider);
+    if (result === "sent") sent++;
+    else if (result === "failed") {
       failed++;
       if (failed === 1) {
-        await audit(campaign.workspaceId, "system", "campaign.send_error", e instanceof Error ? e.message : "send failed");
+        await audit(campaign.workspaceId, "system", "campaign.send_error", "send failed (see send records)");
       }
     }
   }

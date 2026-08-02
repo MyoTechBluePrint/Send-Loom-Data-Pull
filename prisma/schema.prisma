@@ -246,10 +246,14 @@ model Tag {
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
   name        String
+  description String?
+  color       String?  // internal recognition only
+  archived    Boolean  @default(false)
   createdAt   DateTime @default(now())
 
   contacts ContactTag[]
 
+  // The id is the permanent identifier; the name is a label and can change.
   @@unique([workspaceId, name])
 }
 
@@ -383,6 +387,16 @@ model Campaign {
   audienceRef String?
   audienceSnapshot Int  @default(0) // contact count at send/schedule time
   content     String? // JSON blocks from the builder
+  // Rendered snapshot taken at send time. What actually went out, immune to
+  // later template, product or global-element edits.
+  renderedHtml String?
+  renderedText String?
+  templateId  String?
+  template    EmailTemplate? @relation(fields: [templateId], references: [id])
+  brandId     String?
+  // Unsaved-changes marker for the editor: content edited after the template
+  // was applied or last saved back.
+  contentDirty Boolean @default(false)
   scheduledAt DateTime?
   sentAt      DateTime?
   isDemo      Boolean  @default(false) // seeded performance data, not real sends
@@ -390,6 +404,17 @@ model Campaign {
   clickRate   Float    @default(0)
   revenue     Float    @default(0)
   createdAt   DateTime @default(now())
+
+  // Smart sending. mode=immediate keeps the original behaviour.
+  sendMode         String  @default("immediate") // immediate | gradual
+  sendDurationMins Int?    // spread window for gradual mode
+  sendBatchSize    Int     @default(100)
+  sendWindowStart  Int?    // hour 0-23, local to workspace
+  sendWindowEnd    Int?
+  sendState        String? // running | paused | cancelled | complete
+  sendPausedAt     DateTime?
+  sendPauseReason  String?
+  nextBatchAt      DateTime?
 
   sends CampaignSend[]
 }
@@ -400,11 +425,15 @@ model CampaignSend {
   campaign   Campaign @relation(fields: [campaignId], references: [id])
   contactId  String
   contact    Contact  @relation(fields: [contactId], references: [id])
-  status     String   @default("queued") // queued | sent | delivered | bounced | complained
+  status     String   @default("queued") // queued | sent | delivered | bounced | complained | failed | suppressed | cancelled
   openedAt   DateTime?
   clickedAt  DateTime?
   createdAt  DateTime @default(now())
 
+  // One send record per contact per campaign, enforced by the database. This
+  // is the duplicate-delivery guard: a retried batch job upserts against this
+  // and can never queue the same recipient twice.
+  @@unique([campaignId, contactId])
   @@index([campaignId, status])
 }
 
@@ -458,8 +487,92 @@ model EmailTemplate {
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
   name        String
-  content     String // JSON blocks
+  content     String // JSON blocks (see lib/server/email-blocks.ts)
+  description String?
+  category    String  @default("newsletter") // welcome | product_launch | abandoned_basket | discount | newsletter | educational | re_engagement | post_purchase | review_request | survey | vip | seasonal
+  brandId     String?
+  brand       Brand?  @relation(fields: [brandId], references: [id])
+  archived    Boolean @default(false)
+  updatedBy   String?
   createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  campaigns Campaign[]
+}
+
+// A brand kit: the identity a campaign, template or form is dressed in.
+// One workspace can run several (MyoTech, Novatec, ...). Everything here is
+// a default the campaign level may override, never a straitjacket.
+model Brand {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  websiteUrl  String?
+  storeId     String? // default connected store for products and coupons
+  logoUrl     String?
+  darkLogoUrl String?
+  iconUrl     String?
+  primaryColor    String @default("#6d28d9")
+  secondaryColor  String @default("#14121f")
+  accentColor     String @default("#8b5cf6")
+  backgroundColor String @default("#faf9f7")
+  textColor       String @default("#2c2b28")
+  headingFont String @default("Helvetica, Arial, sans-serif")
+  bodyFont    String @default("Helvetica, Arial, sans-serif")
+  buttonRadius Int   @default(8)
+  socialLinks  String? // JSON [{label,url}]
+  menuLinks    String? // JSON [{label,url}]
+  contactDetails String?
+  mailingAddress String?
+  legalLinks   String? // JSON [{label,url}]
+  senderName   String?
+  senderEmail  String?
+  replyToEmail String?
+  currency     String @default("GBP")
+  locale       String @default("en-GB")
+  footerText   String?
+  unsubscribeText String @default("You are receiving this because you subscribed. Unsubscribe at any time.")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  templates EmailTemplate[]
+  elements  GlobalElement[]
+
+  @@unique([workspaceId, name])
+}
+
+// A reusable block shared across templates. Templates reference it by id
+// (linked) or hold a detached copy. Published updates are versioned so a bad
+// edit can be rolled back; sent campaigns are unaffected because sending
+// snapshots rendered content onto the campaign.
+model GlobalElement {
+  id          String  @id @default(cuid())
+  workspaceId String
+  brandId     String?
+  brand       Brand?  @relation(fields: [brandId], references: [id])
+  name        String
+  content     String // JSON: one block definition
+  version     Int     @default(1)
+  archived    Boolean @default(false)
+  updatedBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  versions GlobalElementVersion[]
+
+  @@unique([workspaceId, name])
+}
+
+model GlobalElementVersion {
+  id        String   @id @default(cuid())
+  elementId String
+  element   GlobalElement @relation(fields: [elementId], references: [id])
+  version   Int
+  content   String
+  savedBy   String?
+  createdAt DateTime @default(now())
+
+  @@unique([elementId, version])
 }
 
 model Form {
@@ -486,6 +599,144 @@ model Form {
   triggerKind    String   @default("time_on_page") // time_on_page | exit_intent | scroll
   triggerSeconds Int      @default(8)
   updatedAt      DateTime @default(now()) @updatedAt
+
+  // Image presentation. The image itself lives at a URL (brand asset or
+  // product image), never as base64 inside this row.
+  imageLayout  String  @default("none") // none | hero | left | right | background
+  imageUrl     String?
+  imageAlt     String?
+  imageLinkUrl String?
+  imageOverlay Boolean @default(true) // contrast overlay for background layout
+
+  brandId String?
+
+  // Multi-step: ordered steps with fields and rules. A form with no steps
+  // behaves exactly as before (single email capture), so nothing existing
+  // changes behaviour.
+  steps       FormStep[]
+  submissions FormSubmission[]
+
+  // Coupon issued on completion, when configured. Replaces the static
+  // offerCode for stores that support generated codes.
+  promotionId String?
+}
+
+// One step of a multi-step form. Fields and rules are JSON because their
+// shape is owned by the shared condition engine (lib/server/conditions.ts),
+// not by the database.
+model FormStep {
+  id      String @id @default(cuid())
+  formId  String
+  form    Form   @relation(fields: [formId], references: [id])
+  order   Int
+  title   String?
+  // JSON array of fields: {key, kind: email|text|choice|multi_choice|rating|
+  //   nps|dropdown|yes_no|number_scale, label, options?, required?, tagMap?,
+  //   propertyKey?}
+  fields  String @default("[]")
+  // JSON array of shared-engine rules evaluated on step completion:
+  //   {if: {field, op, value}, then: {action, ...}}
+  rules   String @default("[]")
+
+  @@unique([formId, order])
+}
+
+// Every completed (or abandoned-at-step) submission, with the original
+// questions and answers preserved verbatim.
+model FormSubmission {
+  id        String   @id @default(cuid())
+  formId    String
+  form      Form     @relation(fields: [formId], references: [id])
+  contactId String?
+  email     String?
+  // JSON: [{stepId, key, question, answer}]
+  answers   String   @default("[]")
+  completed Boolean  @default(false)
+  lastStep  Int      @default(0)
+  couponCodeId String?
+  createdAt DateTime @default(now())
+
+  @@index([formId, createdAt])
+}
+
+// A platform-neutral promotion. The editor and forms speak to this; the
+// store adapter turns it into a WooCommerce coupon or a Shopify discount.
+model Promotion {
+  id          String  @id @default(cuid())
+  workspaceId String
+  storeId     String?
+  name        String
+  mode        String  @default("shared") // shared | unique
+  sharedCode  String? // for mode=shared
+  prefix      String  @default("LOOM") // for mode=unique: PREFIX-XXX-XXXXX
+  kind        String  @default("percent") // percent | fixed | free_shipping
+  amount      Float   @default(10)
+  currency    String  @default("GBP")
+  expiryDays  Int?    // per-code lifetime from generation
+  minSpend    Float?
+  maxSpend    Float?
+  usageLimit  Int?    @default(1)
+  perCustomer Int?    @default(1)
+  individualUse Boolean @default(true)
+  emailRestricted Boolean @default(true)
+  includeProductIds String? // JSON of internal product ids
+  excludeProductIds String?
+  includeCategories String?
+  excludeCategories String?
+  archived    Boolean @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  codes CouponCode[]
+}
+
+// A generated per-customer code. Unique on (promotionId, contactId): asking
+// again returns the same code, which is what makes generation idempotent
+// across renders, retries and refreshes.
+model CouponCode {
+  id          String    @id @default(cuid())
+  promotionId String
+  promotion   Promotion @relation(fields: [promotionId], references: [id])
+  contactId   String?
+  email       String?
+  code        String    @unique
+  source      String? // campaign:<id> | form:<id> | manual
+  expiresAt   DateTime?
+  // Adapter push state: the code exists here first, then at the store.
+  pushState   String    @default("pending") // pending | pushed | failed | not_required
+  externalId  String?
+  pushedAt    DateTime?
+  redeemedAt  DateTime?
+  orderRef    String?
+  createdAt   DateTime  @default(now())
+
+  @@unique([promotionId, contactId])
+}
+
+// An email poll: one question whose answers arrive as signed clicks from the
+// email. Answers apply tags/properties through the shared condition engine.
+model Poll {
+  id          String @id @default(cuid())
+  workspaceId String
+  question    String
+  // JSON: [{key, label, tag?, propertyKey?, propertyValue?}]
+  options     String @default("[]")
+  createdAt   DateTime @default(now())
+
+  answers PollAnswer[]
+}
+
+model PollAnswer {
+  id        String @id @default(cuid())
+  pollId    String
+  poll      Poll   @relation(fields: [pollId], references: [id])
+  contactId String?
+  sendId    String? // campaign send that carried the poll
+  optionKey String
+  createdAt DateTime @default(now())
+
+  // One answer per contact per poll; a changed mind updates, never duplicates.
+  @@unique([pollId, contactId])
 }
 
 model LeadScore {
