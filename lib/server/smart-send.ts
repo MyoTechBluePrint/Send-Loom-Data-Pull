@@ -100,7 +100,7 @@ export async function startSmartSend(campaignId: string, actor: string, opts: {
     }
   }
 
-  const batchSize = Math.max(10, Math.min(opts.batchSize ?? 100, 1000));
+  const batchSize = Math.max(1, Math.min(opts.batchSize ?? 100, 1000));
   const durationMins = opts.mode === "gradual" ? Math.max(15, Math.min(opts.durationMins ?? 60, 7 * 1440)) : 0;
 
   await db.campaign.update({
