@@ -172,6 +172,21 @@ export default function HomePage() {
               </span>
             </div>
           </Reveal>
+
+          {/* Devices live in the hero: the product is the proof */}
+          <Reveal delay={340}>
+            <div className="relative mt-10">
+              <div aria-hidden className="pointer-events-none absolute inset-x-10 bottom-0 h-20 rounded-full bg-[#3478f6]/15 blur-3xl" />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/devices.png"
+                alt="SendLoom dashboard on a MacBook and iPhone"
+                width={1024}
+                height={560}
+                className="relative w-full max-w-xl drop-shadow-[0_24px_40px_rgba(29,29,31,0.18)]"
+              />
+            </div>
+          </Reveal>
         </div>
 
         {/* The centrepiece: one subscription, Apple One treatment */}
@@ -212,30 +227,8 @@ export default function HomePage() {
         </Reveal>
       </section>
 
-      {/* Device showcase */}
-      <section className="overflow-hidden bg-gradient-to-b from-white via-[#eef3fe] to-white pb-20 pt-8">
-        <div className="mx-auto mb-6 max-w-xl px-6 text-center">
-          <h2 className="text-3xl font-bold tracking-tight">One platform. Every device.</h2>
-          <p className="mt-2 text-[14px] text-black/50">Campaigns, automations and revenue, live wherever you are.</p>
-        </div>
-        <Reveal>
-          <div className="relative mx-auto max-w-4xl px-6">
-            {/* Soft stage the devices float on */}
-            <div aria-hidden className="pointer-events-none absolute inset-x-12 bottom-2 h-24 rounded-full bg-[#3478f6]/15 blur-3xl" />
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/devices.png"
-              alt="SendLoom dashboard on a MacBook and iPhone"
-              width={1024}
-              height={560}
-              className="relative mx-auto w-full max-w-3xl translate-x-[4%] drop-shadow-[0_28px_45px_rgba(29,29,31,0.18)]"
-            />
-          </div>
-        </Reveal>
-      </section>
-
       {/* Features */}
-      <section className="mx-auto max-w-6xl px-6 pb-16">
+      <section className="mx-auto max-w-6xl px-6 pb-16 pt-6">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
           {FEATURES.map((f, i) => (
             <Reveal key={f.t} delay={i * 60}>
