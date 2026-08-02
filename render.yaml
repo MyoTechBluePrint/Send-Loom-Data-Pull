@@ -8,7 +8,10 @@ services:
     runtime: node
     plan: starter # disks are not available on the free plan
     buildCommand: npm ci && npm run build
-    startCommand: npx prisma migrate deploy && npx tsx scripts/seed-if-empty.ts && npm start
+    # seed-plans is idempotent: it upserts the plan catalogue and grandfathers
+    # any workspace that predates billing as complimentary, so it is safe (and
+    # necessary) on every boot.
+    startCommand: npx prisma migrate deploy && npx tsx scripts/seed-if-empty.ts && npx tsx scripts/seed-plans.ts && npm start
     healthCheckPath: /api/v1/health
     envVars:
       - key: DATABASE_URL
