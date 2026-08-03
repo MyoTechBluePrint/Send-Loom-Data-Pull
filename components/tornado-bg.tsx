@@ -90,11 +90,11 @@ const BRANDS: Record<string, ReactNode> = {
   ),
 };
 
-/** [cy, rx, ry, durationSec, brand keys] — one orbit lane per funnel level. */
+/** [cy, rx, ry, durationSec, brand keys] — orbits sized to the slender funnel. */
 const LANES: [number, number, number, number, string[]][] = [
-  [120, 305, 74, 28, ["gmail", "whatsapp", "instagram", "google", "facebook"]],
-  [280, 208, 54, 21, ["telegram", "googleAds", "woo", "shopify"]],
-  [420, 118, 33, 15, ["sms", "whatsapp", "google"]],
+  [74, 195, 44, 24, ["gmail", "whatsapp", "instagram", "google", "facebook"]],
+  [240, 118, 30, 17, ["telegram", "googleAds", "woo", "shopify"]],
+  [400, 58, 17, 12, ["sms", "google"]],
 ];
 
 function orbitFrames(name: string, rx: number, ry: number): string {
@@ -105,117 +105,93 @@ function orbitFrames(name: string, rx: number, ry: number): string {
   return `@keyframes ${name} { ${steps.join(" ")} }`;
 }
 
-/** Ribbon coils: swaying spine, tapering widths. */
-const COILS = Array.from({ length: 9 }, (_, i) => {
-  const t = i / 8;
-  return {
-    cx: 340 + Math.sin(i * 0.9) * 24 - i * 10,
-    cy: 108 + i * 50,
-    rx: 300 - i * 31,
-    ry: 72 - i * 7.4,
-    w: 30 - i * 2.6,
-    o: 0.85 - t * 0.25,
-  };
-});
+/** Wrap-line levels down the cone: concave taper, so rx falls away fast. */
+const WRAPS = [
+  { cy: 165, rx: 148, ry: 30 },
+  { cy: 255, rx: 106, ry: 23 },
+  { cy: 345, rx: 70, ry: 17 },
+  { cy: 435, rx: 40, ry: 11 },
+];
 
 export function TornadoBg() {
   return (
-    <div aria-hidden className="pointer-events-none absolute inset-0 overflow-visible">
+    <div aria-hidden className="pointer-events-none absolute inset-0 hidden overflow-visible lg:block">
       <style>{`
         ${LANES.map(([, rx, ry], i) => orbitFrames(`sl-lane-${i}`, rx, ry)).join("\n")}
-        @keyframes sl-swirl { to { stroke-dashoffset: -320; } }
-        @keyframes sl-sway { 0%,100% { transform: rotate(-1.2deg); } 50% { transform: rotate(1.2deg); } }
-        @media (prefers-reduced-motion: reduce) { .sl-orbiter, .sl-contour, .sl-body { animation: none !important; } }
+        @keyframes sl-sway { 0%,100% { transform: rotate(-1.6deg); } 50% { transform: rotate(1.6deg); } }
+        @media (prefers-reduced-motion: reduce) { .sl-orbiter, .sl-body { animation: none !important; } }
       `}</style>
 
-      <div className="absolute left-[4%] top-[-20px] h-[640px] w-[680px] max-w-full">
-        <svg viewBox="0 0 680 640" className="sl-body h-full w-full" style={{ animationName: "sl-sway", animationDuration: "9s", animationTimingFunction: "ease-in-out", animationIterationCount: "infinite", transformOrigin: "50% 20%" }} fill="none">
+      {/* Sits in the whitespace between the copy and the card, never on text */}
+      <div className="absolute left-[31%] top-[-6px] h-[600px] w-[460px]">
+        <svg
+          viewBox="0 0 460 620"
+          className="sl-body h-full w-full"
+          style={{ animationName: "sl-sway", animationDuration: "10s", animationTimingFunction: "ease-in-out", animationIterationCount: "infinite", transformOrigin: "50% 12%" }}
+          fill="none"
+        >
           <defs>
-            <linearGradient id="slRib" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stopColor="#8fb4fa" />
-              <stop offset="45%" stopColor="#5b93f8" />
-              <stop offset="100%" stopColor="#2c63d9" />
-            </linearGradient>
-            <linearGradient id="slRib2" x1="1" y1="0" x2="0" y2="0">
-              <stop offset="0%" stopColor="#b7cefc" />
-              <stop offset="55%" stopColor="#6d9bf8" />
-              <stop offset="100%" stopColor="#3478f6" />
-            </linearGradient>
             <linearGradient id="slCone" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#a8c4fb" stopOpacity="0.75" />
-              <stop offset="45%" stopColor="#7ba7f9" stopOpacity="0.7" />
-              <stop offset="100%" stopColor="#4a80ee" stopOpacity="0.8" />
+              <stop offset="0%" stopColor="#b7cefc" stopOpacity="0.85" />
+              <stop offset="50%" stopColor="#8fb4fa" stopOpacity="0.75" />
+              <stop offset="100%" stopColor="#5b93f8" stopOpacity="0.85" />
             </linearGradient>
-            <radialGradient id="slGlow" cx="0.5" cy="0.38" r="0.62">
-              <stop offset="0%" stopColor="#3478f6" stopOpacity="0.16" />
+            <radialGradient id="slGlow" cx="0.5" cy="0.35" r="0.65">
+              <stop offset="0%" stopColor="#3478f6" stopOpacity="0.12" />
               <stop offset="100%" stopColor="#3478f6" stopOpacity="0" />
             </radialGradient>
           </defs>
 
-          <ellipse cx="340" cy="280" rx="330" ry="255" fill="url(#slGlow)" />
-          <ellipse cx="268" cy="588" rx="120" ry="15" fill="#1d4ed8" opacity="0.12" />
+          <ellipse cx="230" cy="240" rx="230" ry="240" fill="url(#slGlow)" />
 
-          {/* One continuous funnel silhouette: wavy tapering cone with a
-              rounded spout, plus wrap lines that make it spin. */}
-          {(() => {
-            const L = COILS.map((c) => [c.cx - c.rx * 0.98, c.cy] as const);
-            const R = COILS.map((c) => [c.cx + c.rx * 0.98, c.cy] as const);
-            const tip = [COILS[8].cx, COILS[8].cy + 26] as const;
-            const top = COILS[0];
+          {/* Body: concave sides sweeping to a thin spout — the tornado shape */}
+          <path
+            d="M 30 72
+               C 95 200, 165 330, 200 540
+               Q 205 556, 212 556
+               Q 219 556, 222 540
+               C 250 330, 368 200, 430 72
+               C 430 26, 30 26, 30 72 Z"
+            fill="url(#slCone)"
+            stroke="#3478f6"
+            strokeOpacity="0.4"
+            strokeWidth="2"
+          />
 
-            let d = `M ${L[0][0]} ${L[0][1]}`;
-            for (let i = 1; i < L.length; i++) {
-              const mx = (L[i - 1][0] + L[i][0]) / 2 - 24;
-              const my = (L[i - 1][1] + L[i][1]) / 2;
-              d += ` Q ${mx} ${my} ${L[i][0]} ${L[i][1]}`;
-            }
-            d += ` Q ${tip[0] - 20} ${tip[1]} ${tip[0]} ${tip[1]}`;
-            d += ` Q ${tip[0] + 20} ${tip[1]} ${R[8][0]} ${R[8][1]}`;
-            for (let i = 7; i >= 0; i--) {
-              const mx = (R[i + 1][0] + R[i][0]) / 2 + 24;
-              const my = (R[i + 1][1] + R[i][1]) / 2;
-              d += ` Q ${mx} ${my} ${R[i][0]} ${R[i][1]}`;
-            }
-            d += ` C ${R[0][0]} ${top.cy - top.ry * 1.7} ${L[0][0]} ${top.cy - top.ry * 1.7} ${L[0][0]} ${L[0][1]} Z`;
+          {/* Open mouth with interior depth */}
+          <ellipse cx="230" cy="72" rx="200" ry="42" fill="#2c63d9" opacity="0.3" />
+          <ellipse cx="230" cy="76" rx="164" ry="30" fill="#1d4ed8" opacity="0.18" />
+          <ellipse cx="230" cy="72" rx="200" ry="42" fill="none" stroke="#3478f6" strokeOpacity="0.55" strokeWidth="2.4" />
 
-            return (
-              <g>
-                {/* Body */}
-                <path d={d} fill="url(#slCone)" stroke="#3478f6" strokeOpacity="0.35" strokeWidth="2" />
-                {/* Mouth: open top with interior shading */}
-                <ellipse cx={top.cx} cy={top.cy} rx={top.rx * 0.98} ry={top.ry} fill="#2c63d9" opacity="0.28" />
-                <ellipse cx={top.cx} cy={top.cy} rx={top.rx * 0.98} ry={top.ry} fill="none" stroke="#3478f6" strokeOpacity="0.5" strokeWidth="2.4" />
-                <ellipse cx={top.cx} cy={top.cy + 4} rx={top.rx * 0.8} ry={top.ry * 0.7} fill="#1d4ed8" opacity="0.16" />
-                {/* Wrap lines: the spin */}
-                {COILS.slice(1).map((c, i) => (
-                  <path
-                    key={`w${i}`}
-                    d={`M ${c.cx - c.rx * 0.96} ${c.cy} Q ${c.cx} ${c.cy + c.ry * 1.5} ${c.cx + c.rx * 0.96} ${c.cy}`}
-                    fill="none"
-                    stroke="#1d4ed8"
-                    strokeOpacity={0.3 - i * 0.02}
-                    strokeWidth={2.4 - i * 0.15}
-                    strokeLinecap="round"
-                  />
-                ))}
-                {/* Left-side sheen */}
-                <path
-                  d={`M ${L[0][0] + 40} ${L[0][1] + 14} Q ${COILS[3].cx - COILS[3].rx * 0.72} ${COILS[3].cy} ${COILS[6].cx - COILS[6].rx * 0.6} ${COILS[6].cy} `}
-                  fill="none" stroke="#ffffff" strokeOpacity="0.6" strokeWidth="7" strokeLinecap="round"
-                />
-              </g>
-            );
-          })()}
+          {/* Wrap lines: front arcs only, tighter as it narrows */}
+          {WRAPS.map((w, i) => (
+            <path
+              key={i}
+              d={`M ${230 - w.rx - (i % 2 ? 6 : -3)} ${w.cy} Q ${228 - i * 3} ${w.cy + w.ry * 1.9} ${230 + w.rx - (i % 2 ? -4 : 6)} ${w.cy}`}
+              stroke="#1d4ed8"
+              strokeOpacity={0.28 - i * 0.03}
+              strokeWidth={2.2 - i * 0.2}
+              strokeLinecap="round"
+            />
+          ))}
 
-          {/* Debris flecks near the base */}
-          {[[214, 528, 5], [420, 505, 4], [180, 470, 3.4], [452, 452, 3]].map(([x, y, r], i) => (
-            <circle key={`f${i}`} cx={x} cy={y} r={r} fill="#5b93f8" opacity={0.5 - i * 0.08} />
+          {/* Sheen down the left flank */}
+          <path
+            d="M 70 96 C 120 210, 170 330, 202 500"
+            stroke="#ffffff" strokeOpacity="0.55" strokeWidth="6" strokeLinecap="round"
+          />
+
+          {/* Dust at touch-down */}
+          <ellipse cx="213" cy="566" rx="64" ry="10" fill="#5b93f8" opacity="0.25" />
+          <ellipse cx="213" cy="572" rx="110" ry="8" fill="#1d4ed8" opacity="0.1" />
+          {[[150, 548, 4], [286, 540, 3.4], [122, 520, 2.6], [305, 508, 2.4]].map(([x, y, r], i) => (
+            <circle key={i} cx={x} cy={y} r={r} fill="#5b93f8" opacity={0.4 - i * 0.06} />
           ))}
         </svg>
 
-        {/* Real brand chips riding the lanes */}
+        {/* Brand chips riding the funnel */}
         {LANES.map(([cy, , , duration, icons], li) => (
-          <div key={li} className="absolute" style={{ left: 340 - li * 10, top: cy }}>
+          <div key={li} className="absolute" style={{ left: 224 - li * 6, top: cy }}>
             {icons.map((key, i) => (
               <span
                 key={`${key}${i}`}
@@ -231,9 +207,9 @@ export function TornadoBg() {
               >
                 <svg
                   viewBox="0 0 24 24"
-                  width={li === 0 ? 34 : li === 1 ? 29 : 24}
-                  height={li === 0 ? 34 : li === 1 ? 29 : 24}
-                  style={{ opacity: 0.95 - li * 0.06, marginLeft: -14, marginTop: -14 }}
+                  width={li === 0 ? 30 : li === 1 ? 25 : 20}
+                  height={li === 0 ? 30 : li === 1 ? 25 : 20}
+                  style={{ opacity: 0.95 - li * 0.05, marginLeft: -13, marginTop: -13 }}
                 >
                   {BRANDS[key]}
                 </svg>
