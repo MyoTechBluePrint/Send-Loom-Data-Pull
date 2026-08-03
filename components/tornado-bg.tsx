@@ -58,25 +58,78 @@ export function TornadoBg() {
 
       {/* Anchored behind the headline block */}
       <div className="absolute left-[4%] top-[-20px] h-[640px] w-[680px] max-w-full">
-        {/* The funnel itself */}
+        {/* The funnel itself: solid cartoon-3D bands, dashes as motion streaks */}
         <svg viewBox="0 0 680 640" className="h-full w-full" fill="none">
+          <defs>
+            <linearGradient id="slBandA" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#dbe7fd" />
+              <stop offset="55%" stopColor="#a8c4fb" />
+              <stop offset="100%" stopColor="#6d9bf8" />
+            </linearGradient>
+            <linearGradient id="slBandB" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#c3d7fc" />
+              <stop offset="60%" stopColor="#8fb4fa" />
+              <stop offset="100%" stopColor="#5b93f8" />
+            </linearGradient>
+            <radialGradient id="slGlow" cx="0.5" cy="0.4" r="0.6">
+              <stop offset="0%" stopColor="#3478f6" stopOpacity="0.18" />
+              <stop offset="100%" stopColor="#3478f6" stopOpacity="0" />
+            </radialGradient>
+          </defs>
+
+          {/* Ambient glow behind the twister */}
+          <ellipse cx="340" cy="280" rx="330" ry="250" fill="url(#slGlow)" />
+
+          {/* Ground shadow */}
+          <ellipse cx="332" cy="580" rx="120" ry="16" fill="#1d4ed8" opacity="0.10" />
+
+          {/* Body: bottom band first so upper bands overlap like a stacked twister */}
+          {[...CONTOURS].reverse().map((c, ri) => {
+            const i = CONTOURS.length - 1 - ri;
+            return (
+              <g key={i}>
+                <ellipse
+                  cx={340 + (i % 2 === 0 ? 8 : -10)}
+                  cy={c.cy}
+                  rx={c.rx}
+                  ry={c.ry}
+                  fill={i % 2 === 0 ? "url(#slBandA)" : "url(#slBandB)"}
+                  fillOpacity={0.5 + i * 0.045}
+                  stroke="#3478f6"
+                  strokeOpacity="0.28"
+                  strokeWidth="1.4"
+                />
+                {/* Cartoon highlight arc on each band's upper-left rim */}
+                <path
+                  d={`M ${340 + (i % 2 === 0 ? 8 : -10) - c.rx * 0.75} ${c.cy - c.ry * 0.35} Q ${340 + (i % 2 === 0 ? 8 : -10) - c.rx * 0.15} ${c.cy - c.ry * 1.25} ${340 + (i % 2 === 0 ? 8 : -10) + c.rx * 0.55} ${c.cy - c.ry * 0.7}`}
+                  stroke="#ffffff"
+                  strokeOpacity="0.55"
+                  strokeWidth={i < 3 ? 3 : 2}
+                  strokeLinecap="round"
+                />
+              </g>
+            );
+          })}
+
+          {/* Motion streaks: the dashes now ride ON the body */}
           {CONTOURS.map((c, i) => (
             <ellipse
-              key={i}
+              key={`d${i}`}
               className="sl-contour"
-              cx={340 + (i % 2 === 0 ? 6 : -8)}
+              cx={340 + (i % 2 === 0 ? 8 : -10)}
               cy={c.cy}
-              rx={c.rx}
-              ry={c.ry}
-              stroke="#3478f6"
-              strokeOpacity={c.o}
-              strokeWidth={i < 2 ? 2.2 : 1.7}
-              strokeDasharray={`${26 - i * 2} ${14 + i * 2}`}
+              rx={c.rx * 1.06}
+              ry={c.ry * 1.15}
+              stroke="#1d4ed8"
+              strokeOpacity={0.22}
+              strokeWidth="1.6"
+              strokeDasharray={`${26 - i * 2} ${18 + i * 2}`}
               style={{ animation: `sl-swirl ${18 + i * 4}s linear infinite` }}
             />
           ))}
+
           {/* Ground wisp */}
-          <path d="M310 560 q30 22 66 8 q-40 26 -80 12 q20 4 14 -20z" fill="#3478f6" opacity="0.14" />
+          <path d="M300 565 q34 24 74 9 q-44 28 -88 13 q22 5 14 -22z" fill="#5b93f8" opacity="0.45" />
         </svg>
 
         {/* Icons riding the funnel lanes */}
