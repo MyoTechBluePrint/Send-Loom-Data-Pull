@@ -129,7 +129,7 @@ export function TornadoBg() {
       `}</style>
 
       <div className="absolute left-[4%] top-[-20px] h-[640px] w-[680px] max-w-full">
-        <svg viewBox="0 0 680 640" className="sl-body h-full w-full" style={{ animation: "sl-sway 9s ease-in-out infinite", transformOrigin: "50% 20%" }} fill="none">
+        <svg viewBox="0 0 680 640" className="sl-body h-full w-full" style={{ animationName: "sl-sway", animationDuration: "9s", animationTimingFunction: "ease-in-out", animationIterationCount: "infinite", transformOrigin: "50% 20%" }} fill="none">
           <defs>
             <linearGradient id="slRib" x1="0" y1="0" x2="1" y2="0">
               <stop offset="0%" stopColor="#8fb4fa" />
@@ -185,7 +185,7 @@ export function TornadoBg() {
               cx={c.cx} cy={c.cy} rx={c.rx * 1.12} ry={c.ry * 1.2}
               stroke="#1d4ed8" strokeOpacity="0.18" strokeWidth="1.6"
               strokeDasharray={`${24 - i * 3} ${18 + i * 3}`}
-              style={{ animation: `sl-swirl ${16 + i * 5}s linear infinite` }}
+              style={{ animationName: "sl-swirl", animationDuration: `${16 + i * 5}s`, animationTimingFunction: "linear", animationIterationCount: "infinite" }}
             />
           ))}
 
