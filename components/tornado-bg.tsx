@@ -107,10 +107,10 @@ function orbitFrames(name: string, rx: number, ry: number): string {
 
 /** Wrap-line levels down the cone: concave taper, so rx falls away fast. */
 const WRAPS = [
-  { cy: 165, rx: 148, ry: 30 },
-  { cy: 255, rx: 106, ry: 23 },
-  { cy: 345, rx: 70, ry: 17 },
-  { cy: 435, rx: 40, ry: 11 },
+  { cy: 165, cx: 228, rx: 146, ry: 30 },
+  { cy: 255, cx: 214, rx: 102, ry: 23 },
+  { cy: 345, cx: 192, rx: 62, ry: 16 },
+  { cy: 435, cx: 156, rx: 32, ry: 10 },
 ];
 
 export function TornadoBg() {
@@ -147,10 +147,12 @@ export function TornadoBg() {
           {/* Body: concave sides sweeping to a thin spout — the tornado shape */}
           <path
             d="M 30 72
-               C 95 200, 165 330, 200 540
-               Q 205 556, 212 556
-               Q 219 556, 222 540
-               C 250 330, 368 200, 430 72
+               C 90 190, 160 290, 168 370
+               C 172 430, 128 480, 120 535
+               Q 116 552, 126 554
+               Q 140 556, 146 540
+               C 160 490, 196 445, 205 380
+               C 226 295, 372 195, 430 72
                C 430 26, 30 26, 30 72 Z"
             fill="url(#slCone)"
             stroke="#3478f6"
@@ -167,7 +169,7 @@ export function TornadoBg() {
           {WRAPS.map((w, i) => (
             <path
               key={i}
-              d={`M ${230 - w.rx - (i % 2 ? 6 : -3)} ${w.cy} Q ${228 - i * 3} ${w.cy + w.ry * 1.9} ${230 + w.rx - (i % 2 ? -4 : 6)} ${w.cy}`}
+              d={`M ${w.cx - w.rx - (i % 2 ? 6 : -3)} ${w.cy} Q ${w.cx - i * 2} ${w.cy + w.ry * 1.9} ${w.cx + w.rx - (i % 2 ? -4 : 6)} ${w.cy}`}
               stroke="#1d4ed8"
               strokeOpacity={0.28 - i * 0.03}
               strokeWidth={2.2 - i * 0.2}
@@ -177,21 +179,21 @@ export function TornadoBg() {
 
           {/* Sheen down the left flank */}
           <path
-            d="M 70 96 C 120 210, 170 330, 202 500"
+            d="M 70 96 C 116 208, 158 300, 163 368 C 167 428, 130 468, 126 516"
             stroke="#ffffff" strokeOpacity="0.55" strokeWidth="6" strokeLinecap="round"
           />
 
           {/* Dust at touch-down */}
-          <ellipse cx="213" cy="566" rx="64" ry="10" fill="#5b93f8" opacity="0.25" />
-          <ellipse cx="213" cy="572" rx="110" ry="8" fill="#1d4ed8" opacity="0.1" />
-          {[[150, 548, 4], [286, 540, 3.4], [122, 520, 2.6], [305, 508, 2.4]].map(([x, y, r], i) => (
+          <ellipse cx="128" cy="564" rx="60" ry="10" fill="#5b93f8" opacity="0.25" />
+          <ellipse cx="132" cy="570" rx="104" ry="8" fill="#1d4ed8" opacity="0.1" />
+          {[[72, 546, 4], [196, 540, 3.4], [58, 518, 2.6], [214, 508, 2.4]].map(([x, y, r], i) => (
             <circle key={i} cx={x} cy={y} r={r} fill="#5b93f8" opacity={0.4 - i * 0.06} />
           ))}
         </svg>
 
         {/* Brand chips riding the funnel */}
         {LANES.map(([cy, , , duration, icons], li) => (
-          <div key={li} className="absolute" style={{ left: 224 - li * 6, top: cy }}>
+          <div key={li} className="absolute" style={{ left: [226, 212, 160][li], top: cy }}>
             {icons.map((key, i) => (
               <span
                 key={`${key}${i}`}
