@@ -206,17 +206,20 @@ export function Shell({ children, title, subtitle, actions }: { children: ReactN
   );
 }
 
-export function PrimaryButton({ children }: { children: ReactNode }) {
+// Both buttons pass through native button props, so a Create button can
+// actually create. A button that renders but does nothing is a bug factory:
+// that exact gap shipped decorative "New automation" / "New segment" buttons.
+export function PrimaryButton({ children, ...rest }: { children: ReactNode } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
-    <button className="rounded-lg bg-[#6d28d9] px-3.5 py-2 text-[13px] font-semibold text-white shadow-sm transition-colors hover:bg-[#5b21b6]">
+    <button {...rest} className="rounded-lg bg-[#6d28d9] px-3.5 py-2 text-[13px] font-semibold text-white shadow-sm transition-colors hover:bg-[#5b21b6]">
       {children}
     </button>
   );
 }
 
-export function GhostButton({ children }: { children: ReactNode }) {
+export function GhostButton({ children, ...rest }: { children: ReactNode } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
-    <button className="rounded-lg border border-line bg-surface px-3.5 py-2 text-[13px] font-semibold text-ink-2 transition-colors hover:bg-[#f0efec]">
+    <button {...rest} className="rounded-lg border border-line bg-surface px-3.5 py-2 text-[13px] font-semibold text-ink-2 transition-colors hover:bg-[#f0efec]">
       {children}
     </button>
   );

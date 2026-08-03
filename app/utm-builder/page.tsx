@@ -13,7 +13,7 @@ type Saved = { name: string; url: string };
 
 const STORE_ROOTS: Record<string, string> = {
   MyoTech: "https://myotech.store/",
-  Novatec: "https://novateclabs.co.uk/",
+  Novatec: "https://novate.bio/",
 };
 
 export default function UtmBuilderPage() {

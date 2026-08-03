@@ -95,7 +95,7 @@ export async function seedGrowth(workspaceId: string) {
 export async function seedStores(workspaceId: string) {
   const defs = [
     { name: "MyoTech", url: "myotech.store" },
-    { name: "Novatec", url: "novateclabs.co.uk" },
+    { name: "Novatec", url: "novate.bio" },
   ];
   const { randomBytes } = await import("node:crypto");
   for (const d of defs) {

@@ -22,7 +22,7 @@ export async function main() {
   const { randomBytes } = await import("node:crypto");
   for (const d of [
     { name: "MyoTech", url: "myotech.store", backend: "api.myotech.store" },
-    { name: "Novatec", url: "novateclabs.co.uk", backend: null },
+    { name: "Novatec", url: "novate.bio", backend: null },
   ]) {
     await db.store.create({
       data: {

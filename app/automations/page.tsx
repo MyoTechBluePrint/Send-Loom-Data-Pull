@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { Shell, PrimaryButton } from "@/components/shell";
+import { Shell } from "@/components/shell";
+import { AutomationCreate } from "@/components/automation-create";
 import { Card, Badge } from "@/components/ui";
 import { gbp, num } from "@/lib/data";
 import { getAutomationsView } from "@/lib/server/views";
@@ -14,7 +15,7 @@ export default async function AutomationsPage() {
     <Shell
       title="Automations"
       subtitle={templatesOnly ? "Recipe templates · ready to configure once MyoTech/Novatec tracking is connected" : "Always-on workflows triggered by store and email behaviour"}
-      actions={<PrimaryButton>New automation</PrimaryButton>}
+      actions={<AutomationCreate />}
     >
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {automations.map((a) => (

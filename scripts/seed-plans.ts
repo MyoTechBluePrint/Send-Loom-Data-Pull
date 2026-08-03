@@ -178,6 +178,19 @@ async function main() {
     granted++;
   }
 
+  // ── Data correction: Novatec's real storefront is novate.bio ─────────────
+  // The placeholder domain (novateclabs.co.uk) was invented before the real
+  // one existed and reached seeded store rows. Idempotent: only rows still
+  // carrying the placeholder are touched; MyoTech is never matched.
+  const wrongNovatec = await db.store.findMany({ where: { url: { contains: "novateclabs" } } });
+  for (const st of wrongNovatec) {
+    await db.store.update({
+      where: { id: st.id },
+      data: { url: "novate.bio", domains: "novate.bio" },
+    });
+    console.log(`  Corrected store "${st.name}" domain -> novate.bio`);
+  }
+
   console.log(`\nExisting workspaces protected: ${granted} granted complimentary, ${already} already had a subscription, ${backfilled} marked grandfathered.`);
   console.log("New signups will start a 7-day trial; nobody currently using SendLoom is affected.");
   await db.$disconnect();
