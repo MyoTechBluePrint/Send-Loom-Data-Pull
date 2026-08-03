@@ -150,28 +150,21 @@ export function TornadoBg() {
           <ellipse cx="340" cy="280" rx="330" ry="255" fill="url(#slGlow)" />
           <ellipse cx="268" cy="588" rx="120" ry="15" fill="#1d4ed8" opacity="0.12" />
 
-          {/* The coil: thick open arcs with round caps, alternating direction */}
-          {COILS.map((c, i) => {
-            const sweepLeft = i % 2 === 0;
-            const x1 = c.cx - c.rx * (sweepLeft ? 0.96 : 0.88);
-            const x2 = c.cx + c.rx * (sweepLeft ? 0.88 : 0.96);
-            const bulge = c.ry * 2.05;
+          {/* Solid stacked bands: reads as a twister, not scattered arcs */}
+          {[...COILS].reverse().map((c, ri) => {
+            const i = COILS.length - 1 - ri;
             return (
               <g key={i}>
-                <path
-                  d={`M ${x1} ${c.cy} Q ${c.cx} ${c.cy + (sweepLeft ? bulge : -bulge)} ${x2} ${c.cy}`}
-                  stroke={sweepLeft ? "url(#slRib)" : "url(#slRib2)"}
-                  strokeOpacity={c.o}
-                  strokeWidth={c.w}
-                  strokeLinecap="round"
+                <ellipse
+                  cx={c.cx} cy={c.cy} rx={c.rx} ry={c.ry}
+                  fill={i % 2 === 0 ? "url(#slRib)" : "url(#slRib2)"}
+                  fillOpacity={0.42 + i * 0.05}
+                  stroke="#3478f6" strokeOpacity="0.3" strokeWidth="1.4"
                 />
-                {/* Rim light along the top of each coil */}
                 <path
-                  d={`M ${x1 + 14} ${c.cy - c.w * 0.28} Q ${c.cx} ${c.cy + (sweepLeft ? bulge : -bulge) - c.w * 0.3} ${x2 - 18} ${c.cy - c.w * 0.28}`}
-                  stroke="#ffffff"
-                  strokeOpacity={0.4}
-                  strokeWidth={Math.max(2, c.w * 0.16)}
-                  strokeLinecap="round"
+                  d={`M ${c.cx - c.rx * 0.72} ${c.cy - c.ry * 0.4} Q ${c.cx - c.rx * 0.1} ${c.cy - c.ry * 1.3} ${c.cx + c.rx * 0.55} ${c.cy - c.ry * 0.72}`}
+                  stroke="#ffffff" strokeOpacity="0.5"
+                  strokeWidth={i < 3 ? 3 : 2} strokeLinecap="round"
                 />
               </g>
             );
