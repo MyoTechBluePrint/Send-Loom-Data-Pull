@@ -118,7 +118,7 @@ export default function HomePage() {
     <div className="min-h-screen bg-white antialiased" style={{ color: ink }}>
       {/* Near-invisible nav */}
       {/* ── Midnight hero: dark Apple-store-at-night atmosphere ─────────── */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-[#0A1830] via-[#060D1D] to-[#04060D] text-white">
+      <div className="relative overflow-hidden bg-gradient-to-br from-[#102C58] via-[#081226] to-[#03050B] text-white">
         <style>{`
           @keyframes sl-shimmer { 0%, 82% { background-position: 0 0, -220% 0; } 100% { background-position: 0 0, 220% 0; } }
           @keyframes sl-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
@@ -130,7 +130,7 @@ export default function HomePage() {
 
         {/* Lacquer atmosphere: layered glows, gloss streak, vignette */}
         <div aria-hidden className="pointer-events-none absolute inset-0">
-          <div className="sl-ambient absolute -left-40 -top-64 h-[720px] w-[900px] rounded-full opacity-60 blur-3xl" style={{ background: "radial-gradient(closest-side, #0C2348, transparent 72%)", animationName: "sl-ambient", animationDuration: "18s", animationTimingFunction: "ease-in-out", animationIterationCount: "infinite" }} />
+          <div className="sl-ambient absolute -left-40 -top-64 h-[720px] w-[900px] rounded-full opacity-60 blur-3xl" style={{ background: "radial-gradient(closest-side, #14356B, transparent 72%)", animationName: "sl-ambient", animationDuration: "18s", animationTimingFunction: "ease-in-out", animationIterationCount: "infinite" }} />
           <div className="absolute -bottom-80 left-1/4 h-[640px] w-[820px] rounded-full opacity-45 blur-3xl" style={{ background: "radial-gradient(closest-side, #08152E, transparent 70%)" }} />
           <div className="absolute -top-24 right-[6%] h-[560px] w-[560px] rounded-full opacity-30 blur-3xl" style={{ background: "radial-gradient(closest-side, rgba(255,247,236,0.5), transparent 70%)" }} />
           <div className="absolute inset-0 opacity-[0.05]" style={{ background: "linear-gradient(115deg, transparent 42%, #9db8e8 49%, transparent 55%)" }} />
@@ -158,7 +158,10 @@ export default function HomePage() {
             <img src="/logo.png" alt="" className="h-10 w-10 rounded-xl object-cover" />
             <span className="text-[20px] font-bold tracking-tight">sendloom</span>
           </span>
-          <Link href="/login" className="flex items-center gap-1.5 rounded-full border border-white/15 bg-white/[0.04] px-4 py-2 text-[13px] font-semibold text-white/85 transition hover:border-white/30 hover:text-white">
+          <Link
+            href="/login"
+            className="flex items-center gap-2 rounded-full bg-gradient-to-b from-white to-[#dfe6f2] px-5 py-2.5 text-[14px] font-bold text-[#0A1830] shadow-[0_2px_10px_rgba(255,255,255,0.15),0_8px_24px_-8px_rgba(0,0,0,0.6)] transition hover:from-[#f2f6ff] hover:to-[#cfd9ea] active:scale-[0.98]"
+          >
             Sign in <span aria-hidden>→</span>
           </Link>
         </header>
