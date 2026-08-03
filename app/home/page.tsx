@@ -118,11 +118,13 @@ export default function HomePage() {
     <div className="min-h-screen bg-white antialiased" style={{ color: ink }}>
       {/* Near-invisible nav */}
       {/* ── Midnight hero: dark Apple-store-at-night atmosphere ─────────── */}
-      <div className="relative overflow-hidden bg-[#04060D] text-white">
+      <div className="relative overflow-hidden bg-gradient-to-br from-[#0A1830] via-[#060D1D] to-[#04060D] text-white">
         <style>{`
           @keyframes sl-shimmer { 0%, 82% { background-position: 0 0, -220% 0; } 100% { background-position: 0 0, 220% 0; } }
           @keyframes sl-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
           @keyframes sl-ambient { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(30px, -18px); } }
+          @keyframes sl-strike { 0%, 78% { opacity: 0.10; } 84% { opacity: 0.4; } 88% { opacity: 0.16; } 92% { opacity: 0.32; } 100% { opacity: 0.10; } }
+          @keyframes sl-beam { 0%, 100% { transform: rotate(24deg) translateY(-2%); opacity: 0.14; } 50% { transform: rotate(24deg) translateY(2%); opacity: 0.24; } }
           @media (prefers-reduced-motion: reduce) { .sl-shimmer-layer, .sl-float, .sl-ambient { animation: none !important; } }
         `}</style>
 
@@ -132,6 +134,21 @@ export default function HomePage() {
           <div className="absolute -bottom-80 left-1/4 h-[640px] w-[820px] rounded-full opacity-45 blur-3xl" style={{ background: "radial-gradient(closest-side, #08152E, transparent 70%)" }} />
           <div className="absolute -top-24 right-[6%] h-[560px] w-[560px] rounded-full opacity-30 blur-3xl" style={{ background: "radial-gradient(closest-side, rgba(255,247,236,0.5), transparent 70%)" }} />
           <div className="absolute inset-0 opacity-[0.05]" style={{ background: "linear-gradient(115deg, transparent 42%, #9db8e8 49%, transparent 55%)" }} />
+          {/* Diagonal light beam on the left: soft white-blue shaft */}
+          <div
+            className="absolute -left-24 -top-40 h-[130%] w-[280px] blur-2xl"
+            style={{
+              background: "linear-gradient(180deg, rgba(255,255,255,0.5), rgba(157,196,255,0.35) 45%, transparent 85%)",
+              transformOrigin: "top left",
+              animationName: "sl-beam", animationDuration: "14s", animationTimingFunction: "ease-in-out", animationIterationCount: "infinite",
+            }}
+          />
+          {/* The strike itself: a jagged bolt that flashes softly */}
+          <svg viewBox="0 0 400 900" className="absolute -top-10 left-[2%] h-[115%] w-[360px]" fill="none" style={{ animationName: "sl-strike", animationDuration: "11s", animationTimingFunction: "ease-in-out", animationIterationCount: "infinite" }}>
+            <path d="M150 -20 L196 210 L154 236 L232 470 L196 492 L292 760" stroke="#dbe9ff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" style={{ filter: "drop-shadow(0 0 14px rgba(157,196,255,0.9)) drop-shadow(0 0 40px rgba(91,147,248,0.5))" }} />
+            <path d="M150 -20 L196 210 L154 236 L232 470 L196 492 L292 760" stroke="#ffffff" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" opacity="0.9" />
+            <path d="M196 210 L246 196 M232 470 L278 452" stroke="#9dc4ff" strokeWidth="2" strokeLinecap="round" opacity="0.6" />
+          </svg>
           <div className="absolute inset-0" style={{ boxShadow: "inset 0 0 180px 60px rgba(2,3,8,0.85)" }} />
         </div>
 
