@@ -141,6 +141,11 @@ export function TornadoBg() {
               <stop offset="55%" stopColor="#6d9bf8" />
               <stop offset="100%" stopColor="#3478f6" />
             </linearGradient>
+            <linearGradient id="slCone" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#a8c4fb" stopOpacity="0.75" />
+              <stop offset="45%" stopColor="#7ba7f9" stopOpacity="0.7" />
+              <stop offset="100%" stopColor="#4a80ee" stopOpacity="0.8" />
+            </linearGradient>
             <radialGradient id="slGlow" cx="0.5" cy="0.38" r="0.62">
               <stop offset="0%" stopColor="#3478f6" stopOpacity="0.16" />
               <stop offset="100%" stopColor="#3478f6" stopOpacity="0" />
@@ -150,37 +155,57 @@ export function TornadoBg() {
           <ellipse cx="340" cy="280" rx="330" ry="255" fill="url(#slGlow)" />
           <ellipse cx="268" cy="588" rx="120" ry="15" fill="#1d4ed8" opacity="0.12" />
 
-          {/* Solid stacked bands: reads as a twister, not scattered arcs */}
-          {[...COILS].reverse().map((c, ri) => {
-            const i = COILS.length - 1 - ri;
+          {/* One continuous funnel silhouette: wavy tapering cone with a
+              rounded spout, plus wrap lines that make it spin. */}
+          {(() => {
+            const L = COILS.map((c) => [c.cx - c.rx * 0.98, c.cy] as const);
+            const R = COILS.map((c) => [c.cx + c.rx * 0.98, c.cy] as const);
+            const tip = [COILS[8].cx, COILS[8].cy + 26] as const;
+            const top = COILS[0];
+
+            let d = `M ${L[0][0]} ${L[0][1]}`;
+            for (let i = 1; i < L.length; i++) {
+              const mx = (L[i - 1][0] + L[i][0]) / 2 - 24;
+              const my = (L[i - 1][1] + L[i][1]) / 2;
+              d += ` Q ${mx} ${my} ${L[i][0]} ${L[i][1]}`;
+            }
+            d += ` Q ${tip[0] - 20} ${tip[1]} ${tip[0]} ${tip[1]}`;
+            d += ` Q ${tip[0] + 20} ${tip[1]} ${R[8][0]} ${R[8][1]}`;
+            for (let i = 7; i >= 0; i--) {
+              const mx = (R[i + 1][0] + R[i][0]) / 2 + 24;
+              const my = (R[i + 1][1] + R[i][1]) / 2;
+              d += ` Q ${mx} ${my} ${R[i][0]} ${R[i][1]}`;
+            }
+            d += ` C ${R[0][0]} ${top.cy - top.ry * 1.7} ${L[0][0]} ${top.cy - top.ry * 1.7} ${L[0][0]} ${L[0][1]} Z`;
+
             return (
-              <g key={i}>
-                <ellipse
-                  cx={c.cx} cy={c.cy} rx={c.rx} ry={c.ry}
-                  fill={i % 2 === 0 ? "url(#slRib)" : "url(#slRib2)"}
-                  fillOpacity={0.42 + i * 0.05}
-                  stroke="#3478f6" strokeOpacity="0.3" strokeWidth="1.4"
-                />
+              <g>
+                {/* Body */}
+                <path d={d} fill="url(#slCone)" stroke="#3478f6" strokeOpacity="0.35" strokeWidth="2" />
+                {/* Mouth: open top with interior shading */}
+                <ellipse cx={top.cx} cy={top.cy} rx={top.rx * 0.98} ry={top.ry} fill="#2c63d9" opacity="0.28" />
+                <ellipse cx={top.cx} cy={top.cy} rx={top.rx * 0.98} ry={top.ry} fill="none" stroke="#3478f6" strokeOpacity="0.5" strokeWidth="2.4" />
+                <ellipse cx={top.cx} cy={top.cy + 4} rx={top.rx * 0.8} ry={top.ry * 0.7} fill="#1d4ed8" opacity="0.16" />
+                {/* Wrap lines: the spin */}
+                {COILS.slice(1).map((c, i) => (
+                  <path
+                    key={`w${i}`}
+                    d={`M ${c.cx - c.rx * 0.96} ${c.cy} Q ${c.cx} ${c.cy + c.ry * 1.5} ${c.cx + c.rx * 0.96} ${c.cy}`}
+                    fill="none"
+                    stroke="#1d4ed8"
+                    strokeOpacity={0.3 - i * 0.02}
+                    strokeWidth={2.4 - i * 0.15}
+                    strokeLinecap="round"
+                  />
+                ))}
+                {/* Left-side sheen */}
                 <path
-                  d={`M ${c.cx - c.rx * 0.72} ${c.cy - c.ry * 0.4} Q ${c.cx - c.rx * 0.1} ${c.cy - c.ry * 1.3} ${c.cx + c.rx * 0.55} ${c.cy - c.ry * 0.72}`}
-                  stroke="#ffffff" strokeOpacity="0.5"
-                  strokeWidth={i < 3 ? 3 : 2} strokeLinecap="round"
+                  d={`M ${L[0][0] + 40} ${L[0][1] + 14} Q ${COILS[3].cx - COILS[3].rx * 0.72} ${COILS[3].cy} ${COILS[6].cx - COILS[6].rx * 0.6} ${COILS[6].cy} `}
+                  fill="none" stroke="#ffffff" strokeOpacity="0.6" strokeWidth="7" strokeLinecap="round"
                 />
               </g>
             );
-          })}
-
-          {/* Motion streaks */}
-          {COILS.filter((_, i) => i % 2 === 0).map((c, i) => (
-            <ellipse
-              key={`d${i}`}
-              className="sl-contour"
-              cx={c.cx} cy={c.cy} rx={c.rx * 1.12} ry={c.ry * 1.2}
-              stroke="#1d4ed8" strokeOpacity="0.18" strokeWidth="1.6"
-              strokeDasharray={`${24 - i * 3} ${18 + i * 3}`}
-              style={{ animationName: "sl-swirl", animationDuration: `${16 + i * 5}s`, animationTimingFunction: "linear", animationIterationCount: "infinite" }}
-            />
-          ))}
+          })()}
 
           {/* Debris flecks near the base */}
           {[[214, 528, 5], [420, 505, 4], [180, 470, 3.4], [452, 452, 3]].map(([x, y, r], i) => (
