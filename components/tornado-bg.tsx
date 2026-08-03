@@ -150,16 +150,16 @@ export function TornadoBg() {
     <div aria-hidden className="pointer-events-none absolute inset-0 hidden overflow-visible lg:block">
       <style>{`
         ${LANES.map(([, rx, ry], i) => orbitFrames(`sl-lane-${i}`, rx, ry)).join("\n")}
-        @keyframes sl-sway { 0%,100% { transform: rotate(-1.6deg); } 50% { transform: rotate(1.6deg); } }
+        @keyframes sl-sway { 0%,100% { transform: rotate(-4.2deg) translateX(-14px); } 50% { transform: rotate(4.2deg) translateX(14px); } }
         @media (prefers-reduced-motion: reduce) { .sl-orbiter, .sl-body { animation: none !important; } }
       `}</style>
 
       {/* Sits in the whitespace between the copy and the card, never on text */}
-      <div className="absolute left-[27%] top-[-30px] h-[740px] w-[570px]">
+      <div className="absolute left-[23%] top-[-70px] h-[880px] w-[680px]">
         <svg
           viewBox="0 0 460 620"
           className="sl-body h-full w-full opacity-[0.52]"
-          style={{ animationName: "sl-sway", animationDuration: "10s", animationTimingFunction: "ease-in-out", animationIterationCount: "infinite", transformOrigin: "50% 12%" }}
+          style={{ animationName: "sl-sway", animationDuration: "12s", animationTimingFunction: "ease-in-out", animationIterationCount: "infinite", transformOrigin: "50% 12%" }}
           fill="none"
         >
           <defs>
