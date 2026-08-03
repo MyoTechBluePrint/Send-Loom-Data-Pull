@@ -7,7 +7,6 @@
 
 import Link from "next/link";
 import { Reveal } from "@/components/reveal";
-import { TornadoBg } from "@/components/tornado-bg";
 
 export const metadata = {
   title: "SendLoom · Marketing that feels effortless",
@@ -51,6 +50,7 @@ const PATHS = {
   check: "M5 12.5 10 17l9-10",
   play: "M8 5.5v13l11-6.5-11-6.5z",
   star: "M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9 2.9-6z",
+  sms: "M4 4h16a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H9l-5 4V5a1 1 0 0 1 1-1zm4 6.5h.01M12 10.5h.01M16 10.5h.01",
 };
 
 const FEATURES = [
@@ -117,121 +117,199 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-white antialiased" style={{ color: ink }}>
       {/* Near-invisible nav */}
-      <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
-        <span className="flex items-center gap-2.5">
-          <img src="/logo.png" alt="" className="h-11 w-11 rounded-xl object-contain" />
-          <span className="text-[22px] font-bold tracking-tight">sendloom</span>
-        </span>
-        <Link href="/login" className="text-[13px] font-medium text-black/60 hover:text-black">Sign in</Link>
-      </header>
+      {/* ── Midnight hero: dark Apple-store-at-night atmosphere ─────────── */}
+      <div className="relative overflow-hidden bg-[#04060D] text-white">
+        <style>{`
+          @keyframes sl-shimmer { 0%, 82% { background-position: 0 0, -220% 0; } 100% { background-position: 0 0, 220% 0; } }
+          @keyframes sl-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
+          @keyframes sl-ambient { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(30px, -18px); } }
+          @media (prefers-reduced-motion: reduce) { .sl-shimmer-layer, .sl-float, .sl-ambient { animation: none !important; } }
+        `}</style>
 
-      {/* Hero + subscription card */}
-      <section className="relative mx-auto grid max-w-6xl items-start gap-12 px-6 pb-20 pt-10 lg:grid-cols-[1.1fr_0.9fr] lg:gap-16">
-        {/* Every channel SendLoom pulls from, spinning in a faint funnel */}
-        <TornadoBg />
-        {/* Ambient atmosphere: two soft washes, Apple-quiet */}
-        <div aria-hidden className="pointer-events-none absolute -top-32 right-0 h-[560px] w-[560px] rounded-full opacity-[0.14] blur-3xl" style={{ background: "radial-gradient(closest-side, #3478f6, transparent 70%)" }} />
-        <div aria-hidden className="pointer-events-none absolute -left-40 top-64 h-[420px] w-[420px] rounded-full opacity-[0.08] blur-3xl" style={{ background: "radial-gradient(closest-side, #a78bfa, transparent 70%)" }} />
-        <div className="pt-6">
-          <Reveal>
-            <h1 className="text-6xl font-bold leading-[1.02] tracking-[-0.02em] sm:text-7xl">
-              Marketing that<br />feels{" "}
-              <span className="bg-gradient-to-b from-[#5b93f8] to-[#2c63d9] bg-clip-text text-transparent">effortless.</span>
-            </h1>
-          </Reveal>
-          <Reveal delay={100}>
-            <p className="mt-6 max-w-md text-[16px] leading-relaxed text-black/60">
-              SendLoom brings email, automation, forms, and commerce together in one beautiful platform.
-              Everything you need. Nothing you don&apos;t.
-            </p>
-          </Reveal>
-          <Reveal delay={180}>
-            <div className="mt-8 flex flex-wrap items-center gap-4">
-              <Link
-                href="/signup"
-                className="flex h-12 items-center gap-2 rounded-xl bg-gradient-to-b from-[#5b93f8] to-[#2c63d9] px-6 text-[15px] font-semibold text-white shadow-lg shadow-[#3478f6]/30 transition hover:from-[#4a86f7] hover:to-[#2458c8] active:scale-[0.98]"
-              >
-                Start Free Trial <span aria-hidden>→</span>
-              </Link>
-              <button className="flex items-center gap-2 text-[14px] font-semibold text-black/70 hover:text-black">
-                <span className="grid h-9 w-9 place-items-center rounded-full border border-black/10 bg-white shadow-sm">
-                  <Icon d={PATHS.play} className="ml-0.5 h-3.5 w-3.5" stroke={blue} />
-                </span>
-                Watch 30 Second Demo
-              </button>
-            </div>
-          </Reveal>
-          <Reveal delay={260}>
-            <div className="mt-8 flex items-center gap-3">
-              <span className="flex -space-x-2">
-                {["#fde68a", "#fca5a5", "#a7f3d0", "#bfdbfe"].map((c, i) => (
-                  <span key={i} className="h-8 w-8 rounded-full border-2 border-white" style={{ background: c }} />
-                ))}
-              </span>
-              <span>
-                <span className="flex gap-0.5">
-                  {[0, 1, 2, 3, 4].map((i) => (
-                    <svg key={i} viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="#f5a623" aria-hidden><path d={PATHS.star} /></svg>
-                  ))}
-                </span>
-                <span className="text-[12px] text-black/50">Trusted by thousands of businesses</span>
-              </span>
-            </div>
-          </Reveal>
-
-          {/* Devices live in the hero: the product is the proof */}
-          <Reveal delay={340}>
-            <div className="relative mt-10">
-              <div aria-hidden className="pointer-events-none absolute inset-x-10 bottom-0 h-20 rounded-full bg-[#3478f6]/15 blur-3xl" />
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/devices.png"
-                alt="SendLoom dashboard on a MacBook and iPhone"
-                width={1024}
-                height={560}
-                className="relative w-full max-w-none drop-shadow-[0_32px_56px_rgba(29,29,31,0.22)] lg:w-[135%]"
-              />
-            </div>
-          </Reveal>
+        {/* Lacquer atmosphere: layered glows, gloss streak, vignette */}
+        <div aria-hidden className="pointer-events-none absolute inset-0">
+          <div className="sl-ambient absolute -left-40 -top-64 h-[720px] w-[900px] rounded-full opacity-60 blur-3xl" style={{ background: "radial-gradient(closest-side, #0C2348, transparent 72%)", animationName: "sl-ambient", animationDuration: "18s", animationTimingFunction: "ease-in-out", animationIterationCount: "infinite" }} />
+          <div className="absolute -bottom-80 left-1/4 h-[640px] w-[820px] rounded-full opacity-45 blur-3xl" style={{ background: "radial-gradient(closest-side, #08152E, transparent 70%)" }} />
+          <div className="absolute -top-24 right-[6%] h-[560px] w-[560px] rounded-full opacity-30 blur-3xl" style={{ background: "radial-gradient(closest-side, rgba(255,247,236,0.5), transparent 70%)" }} />
+          <div className="absolute inset-0 opacity-[0.05]" style={{ background: "linear-gradient(115deg, transparent 42%, #9db8e8 49%, transparent 55%)" }} />
+          <div className="absolute inset-0" style={{ boxShadow: "inset 0 0 180px 60px rgba(2,3,8,0.85)" }} />
         </div>
 
-        {/* The centrepiece: one subscription, Apple One treatment */}
-        <Reveal delay={150}>
-          <div className="relative rounded-[28px] border border-black/[0.06] bg-white/95 p-7 shadow-[0_2px_6px_rgba(29,29,31,0.05),0_28px_80px_-16px_rgba(52,120,246,0.35)] ring-1 ring-white backdrop-blur">
-            <div aria-hidden className="pointer-events-none absolute inset-x-8 -bottom-6 h-12 rounded-full bg-[#3478f6]/20 blur-2xl" />
-            <p className="mx-auto w-fit rounded-full bg-[#eaf1fe] px-3 py-1 text-[11px] font-bold uppercase tracking-widest" style={{ color: blue }}>
-              3 Day Free Trial
-            </p>
-            <h2 className="mt-3 text-center text-2xl font-bold tracking-tight">Start your free trial</h2>
-            <p className="mt-1 text-center text-[13px] text-black/50">No commitment. Cancel anytime.</p>
+        {/* Nav */}
+        <header className="relative mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
+          <span className="flex items-center gap-2.5">
+            <img src="/logo.png" alt="" className="h-10 w-10 rounded-xl object-cover" />
+            <span className="text-[20px] font-bold tracking-tight">sendloom</span>
+          </span>
+          <Link href="/login" className="flex items-center gap-1.5 rounded-full border border-white/15 bg-white/[0.04] px-4 py-2 text-[13px] font-semibold text-white/85 transition hover:border-white/30 hover:text-white">
+            Sign in <span aria-hidden>→</span>
+          </Link>
+        </header>
 
-            <ul className="mt-5 space-y-2.5">
-              {["Full access to all features", "3 days completely free", "No card required for trial"].map((f) => (
-                <li key={f} className="flex items-center gap-2.5 text-[14px]">
-                  <span className="grid h-5 w-5 place-items-center rounded-full bg-[#e8f7ee]">
-                    <Icon d={PATHS.check} className="h-3 w-3" stroke="#1f9d55" />
-                  </span>
-                  {f}
-                </li>
-              ))}
-            </ul>
-
-            <div className="my-5 border-t border-black/[0.06] pt-5 text-center">
-              <p className="text-[14px] text-black/60">
-                Then just <span className="text-[22px] font-bold" style={{ color: ink }}>£29</span> / month
+        <section className="relative mx-auto grid max-w-6xl items-start gap-12 px-6 pb-16 pt-8 lg:grid-cols-[1.08fr_0.92fr] lg:gap-16">
+          <div>
+            <Reveal>
+              <p className="inline-flex items-center gap-2 rounded-full border border-white/[0.12] bg-white/[0.04] px-3.5 py-1.5 text-[12px] font-medium text-[#8fb4fa]">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#5b93f8]" />
+                All-in-one marketing automation platform
               </p>
-              <p className="mt-0.5 text-[12px] text-black/45">One simple plan. Everything included.</p>
-            </div>
+            </Reveal>
 
-            <PayButtons />
+            <Reveal delay={90}>
+              <h1 className="relative mt-6 text-6xl font-bold leading-[1.03] tracking-[-0.02em] sm:text-7xl">
+                {/* Polished enamel: pale gradient body with a slow shimmer pass */}
+                <span
+                  className="sl-shimmer-layer bg-clip-text text-transparent"
+                  style={{
+                    backgroundImage:
+                      "linear-gradient(100deg, transparent 44%, rgba(255,255,255,0.5) 50%, transparent 56%), linear-gradient(180deg, #ffffff 20%, #c7d2e4 60%, #8e9cb8 100%)",
+                    backgroundSize: "240% 100%, 100% 100%",
+                    backgroundPosition: "-220% 0, 0 0",
+                    animationName: "sl-shimmer",
+                    animationDuration: "10s",
+                    animationTimingFunction: "linear",
+                    animationIterationCount: "infinite",
+                    WebkitBackgroundClip: "text",
+                  }}
+                >
+                  Marketing that
+                  <br />
+                  feels{" "}
+                </span>
+                <span
+                  className="bg-gradient-to-b from-[#7cb0ff] to-[#2f6ae0] bg-clip-text text-transparent"
+                  style={{ filter: "drop-shadow(0 0 22px rgba(63,118,236,0.45))" }}
+                >
+                  effortless.
+                </span>
+              </h1>
+            </Reveal>
 
-            <p className="mt-4 flex items-center justify-center gap-1.5 text-[11px] text-black/45">
-              <Icon d={PATHS.lock} className="h-3 w-3" stroke={blue} /> Secure payments powered by Stripe
-            </p>
-            <p className="mt-0.5 text-center text-[11px] text-black/35">Your data is always protected.</p>
+            <Reveal delay={170}>
+              <p className="mt-6 max-w-md text-[16px] leading-relaxed text-white/60">
+                SendLoom brings email, automation, forms, and commerce together in one beautiful platform.
+                Everything you need. Nothing you don&apos;t.
+              </p>
+            </Reveal>
+
+            <Reveal delay={240}>
+              <div className="mt-8 flex flex-wrap items-center gap-4">
+                <Link
+                  href="/signup"
+                  className="flex h-12 items-center gap-2 rounded-xl bg-gradient-to-b from-[#5b93f8] to-[#2c63d9] px-6 text-[15px] font-semibold text-white shadow-lg shadow-[#2c63d9]/40 transition hover:from-[#4a86f7] hover:to-[#2458c8] active:scale-[0.98]"
+                >
+                  Start your free trial <span aria-hidden>→</span>
+                </Link>
+                <button className="flex items-center gap-2.5 text-[14px] font-semibold text-white/80 transition hover:text-white">
+                  <span className="grid h-10 w-10 place-items-center rounded-full border border-white/15 bg-white/[0.05]">
+                    <Icon d={PATHS.play} className="ml-0.5 h-3.5 w-3.5" stroke="#ffffff" />
+                  </span>
+                  Watch 30 second demo
+                </button>
+              </div>
+            </Reveal>
+
+            <Reveal delay={310}>
+              <div className="mt-8 flex items-center gap-4">
+                <span className="flex items-center -space-x-2">
+                  {["#fde68a", "#fca5a5", "#a7f3d0", "#bfdbfe", "#e9d5ff", "#fbcfe8"].map((c, i) => (
+                    <span key={i} className="h-8 w-8 rounded-full border-2 border-[#0a1120]" style={{ background: c }} />
+                  ))}
+                  <span className="grid h-8 w-8 place-items-center rounded-full border-2 border-[#0a1120] bg-white/10 text-[10px] font-bold text-white/80">+2k</span>
+                </span>
+                <span>
+                  <span className="flex gap-0.5">
+                    {[0, 1, 2, 3, 4].map((i) => (
+                      <svg key={i} viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="#f5a623" aria-hidden><path d={PATHS.star} /></svg>
+                    ))}
+                  </span>
+                  <span className="text-[12px] text-white/50">Trusted by thousands of businesses</span>
+                </span>
+              </div>
+            </Reveal>
+
+            {/* Devices: white UI glowing against the dark, understated */}
+            <Reveal delay={400}>
+              <div className="relative mt-10">
+                <div aria-hidden className="pointer-events-none absolute inset-x-8 bottom-0 h-24 rounded-full bg-[#3f76ec]/25 blur-3xl" />
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/devices.png"
+                  alt="SendLoom dashboard on a MacBook and iPhone"
+                  width={1024}
+                  height={560}
+                  className="relative w-full max-w-none drop-shadow-[0_36px_60px_rgba(0,0,0,0.55)] lg:w-[118%]"
+                />
+              </div>
+            </Reveal>
           </div>
-        </Reveal>
-      </section>
+
+          {/* The centrepiece: bright card in a warm showroom bloom */}
+          <Reveal delay={150}>
+            <div className="relative lg:mt-4">
+              <div aria-hidden className="pointer-events-none absolute -inset-14 rounded-[48px] opacity-90 blur-3xl" style={{ background: "radial-gradient(closest-side, rgba(255,249,240,0.32), rgba(200,219,255,0.12) 60%, transparent 75%)" }} />
+              <div
+                className="sl-float relative rounded-[28px] bg-white p-7 text-[#1d1d1f] shadow-[0_2px_8px_rgba(0,0,0,0.35),0_48px_120px_-24px_rgba(0,0,0,0.7)]"
+                style={{ animationName: "sl-float", animationDuration: "9s", animationTimingFunction: "ease-in-out", animationIterationCount: "infinite" }}
+              >
+                <p className="mx-auto w-fit rounded-full bg-[#eaf1fe] px-3 py-1 text-[11px] font-bold uppercase tracking-widest text-[#2f6ae0]">
+                  3 Day Free Trial
+                </p>
+                <h2 className="mt-3 text-center text-2xl font-bold tracking-tight">Start your free trial</h2>
+                <p className="mt-1 text-center text-[13px] text-black/50">No commitment. Cancel anytime.</p>
+
+                <ul className="mt-5 space-y-2.5">
+                  {["Full access to all features", "3 days completely free", "No card required for trial"].map((f) => (
+                    <li key={f} className="flex items-center gap-2.5 text-[14px]">
+                      <span className="grid h-5 w-5 place-items-center rounded-full bg-[#e8f7ee]">
+                        <Icon d={PATHS.check} className="h-3 w-3" stroke="#1f9d55" />
+                      </span>
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+
+                <div className="my-5 border-t border-black/[0.06] pt-5 text-center">
+                  <p className="text-[14px] text-black/60">
+                    Then just <span className="text-[22px] font-bold text-[#1d1d1f]">£29</span> / month
+                  </p>
+                  <p className="mt-0.5 text-[12px] text-black/45">One simple plan. Everything included.</p>
+                </div>
+
+                <PayButtons />
+
+                <p className="mt-4 flex items-center justify-center gap-1.5 text-[11px] text-black/45">
+                  <Icon d={PATHS.lock} className="h-3 w-3" stroke="#2f6ae0" /> Secure payments powered by Stripe
+                </p>
+                <p className="mt-0.5 text-center text-[11px] text-black/35">Your data is always protected.</p>
+              </div>
+            </div>
+          </Reveal>
+        </section>
+
+        {/* Trust strip closing the hero */}
+        <div className="relative border-t border-white/[0.08]">
+          <div className="mx-auto grid max-w-6xl grid-cols-2 gap-x-6 gap-y-5 px-6 py-7 sm:grid-cols-3 lg:grid-cols-5">
+            {([
+              ["card", "No card required", "for your trial"],
+              ["lock", "Cancel anytime", "No hidden fees"],
+              ["shield", "GDPR compliant", "Your data is protected"],
+              ["bolt", "99.9% uptime", "Built for reliability"],
+              ["sms", "24/7 support", "We're here to help"],
+            ] as const).map(([icon, t, d2]) => (
+              <div key={t} className="flex items-center gap-3">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-white/[0.12] bg-white/[0.04]">
+                  <Icon d={PATHS[icon]} className="h-4 w-4" stroke="#8fb4fa" />
+                </span>
+                <span>
+                  <span className="block text-[13px] font-semibold text-white/85">{t}</span>
+                  <span className="text-[11px] text-white/45">{d2}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
 
       {/* Features */}
       <section className="mx-auto max-w-6xl px-6 pb-16 pt-6">
