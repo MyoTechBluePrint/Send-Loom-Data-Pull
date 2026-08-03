@@ -92,9 +92,9 @@ const BRANDS: Record<string, ReactNode> = {
 
 /** [cy, rx, ry, durationSec, brand keys] — orbits sized to the slender funnel. */
 const LANES: [number, number, number, number, string[]][] = [
-  [74, 195, 44, 24, ["gmail", "whatsapp", "instagram", "google", "facebook"]],
-  [240, 118, 30, 17, ["telegram", "googleAds", "woo", "shopify"]],
-  [400, 58, 17, 12, ["sms", "google"]],
+  [74, 208, 46, 24, ["gmail", "whatsapp", "instagram", "google", "facebook"]],
+  [250, 122, 30, 17, ["telegram", "googleAds", "woo", "shopify"]],
+  [410, 56, 16, 12, ["sms", "google"]],
 ];
 
 function orbitFrames(name: string, rx: number, ry: number): string {
@@ -105,13 +105,45 @@ function orbitFrames(name: string, rx: number, ry: number): string {
   return `@keyframes ${name} { ${steps.join(" ")} }`;
 }
 
-/** Wrap-line levels down the cone: concave taper, so rx falls away fast. */
-const WRAPS = [
-  { cy: 165, cx: 228, rx: 146, ry: 30 },
-  { cy: 255, cx: 214, rx: 102, ry: 23 },
-  { cy: 345, cx: 192, rx: 62, ry: 16 },
-  { cy: 435, cx: 156, rx: 32, ry: 10 },
-];
+/** Smooth funnel geometry: a continuously curving spine with a taper.
+ * Everything (edges, wraps, sheen, dust, orbit lanes) derives from these two
+ * functions, so the silhouette can never kink. */
+const TOP_Y = 72;
+const TIP_Y = 548;
+const spineX = (y: number) => {
+  const t = (y - TOP_Y) / (TIP_Y - TOP_Y);
+  return 230 - 100 * t * t; // gentle, accelerating lean to the left
+};
+const halfW = (y: number) => {
+  const t = (y - TOP_Y) / (TIP_Y - TOP_Y);
+  return 200 * Math.pow(1 - t, 1.4) + 7;
+};
+
+/** Catmull-Rom through points → smooth cubic path (no corners, ever). */
+function smooth(pts: [number, number][]): string {
+  let d = `M ${pts[0][0].toFixed(1)} ${pts[0][1].toFixed(1)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)];
+    const c1x = p1[0] + (p2[0] - p0[0]) / 6, c1y = p1[1] + (p2[1] - p0[1]) / 6;
+    const c2x = p2[0] - (p3[0] - p1[0]) / 6, c2y = p2[1] - (p3[1] - p1[1]) / 6;
+    d += ` C ${c1x.toFixed(1)} ${c1y.toFixed(1)} ${c2x.toFixed(1)} ${c2y.toFixed(1)} ${p2[0].toFixed(1)} ${p2[1].toFixed(1)}`;
+  }
+  return d;
+}
+
+const SAMPLE_YS = [72, 140, 210, 280, 350, 420, 480, 530, 548];
+const LEFT: [number, number][] = SAMPLE_YS.map((y) => [spineX(y) - halfW(y), y]);
+const RIGHT: [number, number][] = [...SAMPLE_YS].reverse().map((y) => [spineX(y) + halfW(y), y]);
+
+const BODY_PATH = (() => {
+  const down = smooth(LEFT);
+  const tip = `Q ${spineX(TIP_Y).toFixed(1)} ${(TIP_Y + 18).toFixed(1)} ${(spineX(TIP_Y) + halfW(TIP_Y)).toFixed(1)} ${TIP_Y}`;
+  const up = smooth(RIGHT).replace(/^M [\d.]+ [\d.]+/, "");
+  const mouth = `C ${RIGHT[RIGHT.length - 1][0].toFixed(1)} ${TOP_Y - 46} ${LEFT[0][0].toFixed(1)} ${TOP_Y - 46} ${LEFT[0][0].toFixed(1)} ${TOP_Y}`;
+  return `${down} ${tip}${up} ${mouth} Z`;
+})();
+
+const WRAP_YS = [150, 235, 320, 405, 475];
 
 export function TornadoBg() {
   return (
@@ -123,10 +155,10 @@ export function TornadoBg() {
       `}</style>
 
       {/* Sits in the whitespace between the copy and the card, never on text */}
-      <div className="absolute left-[31%] top-[-6px] h-[600px] w-[460px]">
+      <div className="absolute left-[27%] top-[-30px] h-[740px] w-[570px]">
         <svg
           viewBox="0 0 460 620"
-          className="sl-body h-full w-full"
+          className="sl-body h-full w-full opacity-[0.52]"
           style={{ animationName: "sl-sway", animationDuration: "10s", animationTimingFunction: "ease-in-out", animationIterationCount: "infinite", transformOrigin: "50% 12%" }}
           fill="none"
         >
@@ -146,14 +178,7 @@ export function TornadoBg() {
 
           {/* Body: concave sides sweeping to a thin spout — the tornado shape */}
           <path
-            d="M 30 72
-               C 90 190, 160 290, 168 370
-               C 172 430, 128 480, 120 535
-               Q 116 552, 126 554
-               Q 140 556, 146 540
-               C 160 490, 196 445, 205 380
-               C 226 295, 372 195, 430 72
-               C 430 26, 30 26, 30 72 Z"
+            d={BODY_PATH}
             fill="url(#slCone)"
             stroke="#3478f6"
             strokeOpacity="0.4"
@@ -161,39 +186,39 @@ export function TornadoBg() {
           />
 
           {/* Open mouth with interior depth */}
-          <ellipse cx="230" cy="72" rx="200" ry="42" fill="#2c63d9" opacity="0.3" />
-          <ellipse cx="230" cy="76" rx="164" ry="30" fill="#1d4ed8" opacity="0.18" />
-          <ellipse cx="230" cy="72" rx="200" ry="42" fill="none" stroke="#3478f6" strokeOpacity="0.55" strokeWidth="2.4" />
+          <ellipse cx={spineX(TOP_Y)} cy={TOP_Y} rx={halfW(TOP_Y)} ry="42" fill="#2c63d9" opacity="0.32" />
+          <ellipse cx={spineX(TOP_Y)} cy={TOP_Y + 4} rx={halfW(TOP_Y) * 0.8} ry="30" fill="#1d4ed8" opacity="0.18" />
+          <ellipse cx={spineX(TOP_Y)} cy={TOP_Y} rx={halfW(TOP_Y)} ry="42" fill="none" stroke="#3478f6" strokeOpacity="0.55" strokeWidth="2.4" />
 
           {/* Wrap lines: front arcs only, tighter as it narrows */}
-          {WRAPS.map((w, i) => (
+          {WRAP_YS.map((y, i) => (
             <path
               key={i}
-              d={`M ${w.cx - w.rx - (i % 2 ? 6 : -3)} ${w.cy} Q ${w.cx - i * 2} ${w.cy + w.ry * 1.9} ${w.cx + w.rx - (i % 2 ? -4 : 6)} ${w.cy}`}
+              d={`M ${spineX(y) - halfW(y) * 0.97} ${y} Q ${spineX(y)} ${y + halfW(y) * 0.34 + 14} ${spineX(y) + halfW(y) * 0.97} ${y}`}
               stroke="#1d4ed8"
-              strokeOpacity={0.28 - i * 0.03}
-              strokeWidth={2.2 - i * 0.2}
+              strokeOpacity={0.3 - i * 0.035}
+              strokeWidth={2.4 - i * 0.25}
               strokeLinecap="round"
             />
           ))}
 
           {/* Sheen down the left flank */}
           <path
-            d="M 70 96 C 116 208, 158 300, 163 368 C 167 428, 130 468, 126 516"
-            stroke="#ffffff" strokeOpacity="0.55" strokeWidth="6" strokeLinecap="round"
+            d={smooth([140, 240, 340, 440, 505].map((y) => [spineX(y) - halfW(y) * 0.55, y]) as [number, number][])}
+            fill="none" stroke="#ffffff" strokeOpacity="0.55" strokeWidth="6" strokeLinecap="round"
           />
 
           {/* Dust at touch-down */}
-          <ellipse cx="128" cy="564" rx="60" ry="10" fill="#5b93f8" opacity="0.25" />
-          <ellipse cx="132" cy="570" rx="104" ry="8" fill="#1d4ed8" opacity="0.1" />
-          {[[72, 546, 4], [196, 540, 3.4], [58, 518, 2.6], [214, 508, 2.4]].map(([x, y, r], i) => (
-            <circle key={i} cx={x} cy={y} r={r} fill="#5b93f8" opacity={0.4 - i * 0.06} />
+          <ellipse cx={spineX(TIP_Y)} cy={TIP_Y + 16} rx="46" ry="8" fill="#5b93f8" opacity="0.22" />
+          <ellipse cx={spineX(TIP_Y) + 6} cy={TIP_Y + 22} rx="82" ry="6" fill="#1d4ed8" opacity="0.08" />
+          {[[spineX(TIP_Y) - 52, 534, 3.2], [spineX(TIP_Y) + 54, 528, 2.8]].map(([x, y, r], i) => (
+            <circle key={i} cx={x} cy={y} r={r} fill="#5b93f8" opacity={0.3 - i * 0.08} />
           ))}
         </svg>
 
         {/* Brand chips riding the funnel */}
         {LANES.map(([cy, , , duration, icons], li) => (
-          <div key={li} className="absolute" style={{ left: [226, 212, 160][li], top: cy }}>
+          <div key={li} className="absolute" style={{ left: spineX(cy), top: cy }}>
             {icons.map((key, i) => (
               <span
                 key={`${key}${i}`}
