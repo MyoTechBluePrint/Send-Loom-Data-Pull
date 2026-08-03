@@ -7,6 +7,7 @@
 
 import Link from "next/link";
 import { Reveal } from "@/components/reveal";
+import { TornadoBg } from "@/components/tornado-bg";
 
 export const metadata = {
   title: "SendLoom · Marketing that feels effortless",
@@ -126,6 +127,8 @@ export default function HomePage() {
 
       {/* Hero + subscription card */}
       <section className="relative mx-auto grid max-w-6xl items-start gap-12 px-6 pb-20 pt-10 lg:grid-cols-[1.1fr_0.9fr] lg:gap-16">
+        {/* Every channel SendLoom pulls from, spinning in a faint funnel */}
+        <TornadoBg />
         {/* Ambient atmosphere: two soft washes, Apple-quiet */}
         <div aria-hidden className="pointer-events-none absolute -top-32 right-0 h-[560px] w-[560px] rounded-full opacity-[0.14] blur-3xl" style={{ background: "radial-gradient(closest-side, #3478f6, transparent 70%)" }} />
         <div aria-hidden className="pointer-events-none absolute -left-40 top-64 h-[420px] w-[420px] rounded-full opacity-[0.08] blur-3xl" style={{ background: "radial-gradient(closest-side, #a78bfa, transparent 70%)" }} />
