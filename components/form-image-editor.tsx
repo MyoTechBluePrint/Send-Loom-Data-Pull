@@ -74,6 +74,24 @@ export function FormImageEditor(props: {
                 <span className={small}>Image URL</span>
                 <input className={input} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" />
               </label>
+              <label className="mt-2 block">
+                <span className={small}>Or upload an image (PNG, JPEG, WebP · max 5MB)</span>
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  className="mt-1 block w-full text-[12px] text-ink-3 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-soft file:px-3 file:py-1.5 file:text-[12px] file:font-semibold file:text-brand"
+                  onChange={async (e) => {
+                    const f = e.target.files?.[0];
+                    if (!f) return;
+                    const fd = new FormData();
+                    fd.append("file", f);
+                    const r = await fetch("/api/assets", { method: "POST", body: fd });
+                    const j = await r.json();
+                    if (j.ok) { setUrl(location.origin + j.url); if (!alt) setAlt(f.name.replace(/\.[^.]*$/, "")); setNotice("Uploaded. Remember to save."); }
+                    else setNotice(j.error ?? "Upload failed.");
+                  }}
+                />
+              </label>
               {props.productImages.length > 0 && (
                 <label className="mt-2 block">
                   <span className={small}>Or pick a product image</span>

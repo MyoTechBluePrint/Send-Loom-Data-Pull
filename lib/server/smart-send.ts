@@ -191,7 +191,13 @@ export async function smartSendProgress(campaignId: string): Promise<SmartSendPr
 
 function inWindow(now: Date, start: number | null, end: number | null): boolean {
   if (start === null || end === null) return true;
-  const h = now.getHours();
+  // Hours are interpreted in the workspace's operating timezone, not the
+  // server's: Render runs UTC, and a "9am to 8pm" window meant London time.
+  const tz = process.env.SENDLOOM_TIMEZONE || "Europe/London";
+  const h = parseInt(
+    new Intl.DateTimeFormat("en-GB", { hour: "numeric", hour12: false, timeZone: tz }).format(now),
+    10
+  );
   // Window may wrap midnight (e.g. 20 -> 8).
   return start <= end ? h >= start && h < end : h >= start || h < end;
 }

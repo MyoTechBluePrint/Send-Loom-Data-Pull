@@ -43,3 +43,6 @@ next-env.d.ts
 prisma/dev.db
 prisma/dev.db-journal
 backups/
+
+# Uploaded assets (persist on the Render disk, never in git)
+data/uploads/
