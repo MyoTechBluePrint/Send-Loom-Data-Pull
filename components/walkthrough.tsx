@@ -2,7 +2,16 @@
 
 // First-login walkthrough. Shows once (localStorage flag); restartable from
 // the user menu or the handover page.
+//
+// HARD-LEARNED RULES, do not regress them:
+//   - It only auto-opens on the dashboard. A tour that ambushes you on the
+//     page you were trying to use is an obstacle, not a welcome.
+//   - The backdrop dismisses on click. This overlay silently swallowed every
+//     click in the app ("Create button doesn't work" bug reports) because a
+//     full-screen z-50 backdrop ate them; any stray click must CLOSE the
+//     tour, never vanish into it.
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 const STEPS = [
@@ -20,13 +29,15 @@ export const WALKTHROUGH_KEY = "sendloom_walkthrough_done";
 
 export function Walkthrough() {
   const [step, setStep] = useState<number | null>(null);
+  const pathname = usePathname();
 
   useEffect(() => {
-    if (!localStorage.getItem(WALKTHROUGH_KEY)) setStep(0);
+    // Auto-open on the dashboard only; explicit restarts work anywhere.
+    if (pathname === "/" && !localStorage.getItem(WALKTHROUGH_KEY)) setStep(0);
     const onRestart = () => setStep(0);
     window.addEventListener("sendloom:walkthrough", onRestart);
     return () => window.removeEventListener("sendloom:walkthrough", onRestart);
-  }, []);
+  }, [pathname]);
 
   if (step === null) return null;
   const finish = () => {
@@ -36,8 +47,8 @@ export function Walkthrough() {
   const s = STEPS[step];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={finish}>
+      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <p className="text-[11px] font-bold uppercase tracking-widest text-brand">Welcome to Sendloom · {step + 1} of {STEPS.length}</p>
           <button onClick={finish} className="text-xs font-semibold text-ink-3 hover:text-foreground">Skip</button>
