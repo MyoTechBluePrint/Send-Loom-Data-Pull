@@ -46,8 +46,13 @@ function matches(rule: Rule, ctx: Ctx): boolean {
       return c.ordersCount < n;
     case "Last order":
       return rule.operator.includes("more than") ? daysSince(c.lastOrderAt) > n : daysSince(c.lastOrderAt) <= n;
-    case "Country":
-      return (c.country ?? "").toLowerCase().includes(v);
+    case "Country": {
+      // The builder's multi-select stores a comma list ("Spain, France").
+      // Any listed country matches; single free-text keeps includes() behaviour.
+      const wanted = v.split(",").map((x) => x.trim()).filter(Boolean);
+      const country = (c.country ?? "").toLowerCase();
+      return wanted.some((w) => country === w || country.includes(w));
+    }
     case "Tag":
       return c.tags.some((t) => t.tag.name.toLowerCase().includes(v));
     case "Property": {
@@ -64,8 +69,30 @@ function matches(rule: Rule, ctx: Ctx): boolean {
         return false;
       }
     }
-    case "Source":
-      return c.sources.some((s) => s.source.toLowerCase().includes(v) || s.sourceType.toLowerCase().includes(v));
+    case "Source": {
+      // Friendly names from the builder dropdown map to how sources are
+      // actually recorded (sourceType or source text). "=x" means exact
+      // sourceType — plain "checkout" would also hit future abandoned events.
+      const SOURCE_ALIASES: Record<string, string[]> = {
+        "whatsapp": ["whatsapp"],
+        "email sign up": ["popup", "form", "signup", "subscribe", "embedded"],
+        "purchase": ["checkout_completed", "woocommerce", "purchase", "order", "=checkout"],
+        "abandoned checkout": ["checkout_abandoned", "cart_abandoned", "abandon", "recovery"],
+        "facebook lead": ["facebook"],
+        "instagram": ["instagram"],
+        "tiktok": ["tiktok"],
+        "csv import": ["import"],
+        "api / integration": ["api", "integration"],
+        "zapier": ["zapier"],
+        "manual": ["manual"],
+      };
+      const wanted = v.split(",").map((x) => x.trim()).filter(Boolean);
+      const hit = (s: (typeof c.sources)[number], tok: string) =>
+        tok.startsWith("=")
+          ? s.sourceType.toLowerCase() === tok.slice(1)
+          : s.source.toLowerCase().includes(tok) || s.sourceType.toLowerCase().includes(tok);
+      return wanted.some((w) => (SOURCE_ALIASES[w] ?? [w]).some((tok) => c.sources.some((s) => hit(s, tok))));
+    }
     case "Import batch":
       return c.sources.some((s) => s.importBatchId === rule.value);
     case "Lead score":

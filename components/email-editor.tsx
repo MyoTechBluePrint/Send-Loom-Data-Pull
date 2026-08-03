@@ -10,6 +10,12 @@ type Block = Record<string, unknown> & { id: string; type: string };
 type Issue = { level: "error" | "warning"; message: string; blockId?: string };
 type PickOption = { id: string; label: string };
 export type EditorResources = { products: PickOption[]; promotions: PickOption[]; elements: PickOption[]; polls: PickOption[] };
+type BrandKit = {
+  id: string; name: string; logoUrl: string | null; darkLogoUrl: string | null; iconUrl: string | null;
+  primaryColor: string | null; secondaryColor: string | null; accentColor: string | null;
+  headingFont: string | null; bodyFont: string | null;
+};
+type Asset = { name: string; url: string; bytes: number };
 
 const BLOCK_MENU: { type: string; label: string; make: () => Partial<Block> }[] = [
   { type: "heading", label: "Heading", make: () => ({ text: "Heading", level: 1 }) },
@@ -56,11 +62,19 @@ export function EmailEditor(props: {
   const [dirty, setDirty] = useState(false);
   const [testTo, setTestTo] = useState("");
   const [resources, setResources] = useState<EditorResources>({ products: [], promotions: [], elements: [], polls: [] });
+  const [brandKits, setBrandKits] = useState<BrandKit[]>([]);
+  const [assets, setAssets] = useState<Asset[]>([]);
   const dragFrom = useRef<string | null>(null);
+
+  const loadAssets = useCallback(() => {
+    fetch("/api/assets").then((r) => r.json()).then((j) => j.ok && setAssets(j.assets)).catch(() => {});
+  }, []);
 
   useEffect(() => {
     fetch("/api/editor/resources").then((r) => r.json()).then((j) => j.ok && setResources(j)).catch(() => {});
-  }, []);
+    fetch("/api/brands").then((r) => r.json()).then((j) => j.ok && setBrandKits(j.brands)).catch(() => {});
+    loadAssets();
+  }, [loadAssets]);
 
   // Undo/redo: a bounded history of block states.
   const history = useRef<Block[][]>([props.initialBlocks]);
@@ -88,13 +102,14 @@ export function EmailEditor(props: {
     }
   }, []);
 
-  // Server-rendered preview, debounced.
+  // Server-rendered preview, debounced. brandId rides along so switching
+  // brand restyles the preview immediately, not only after a save.
   useEffect(() => {
     const t = setTimeout(() => {
       fetch(props.previewUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "preview", content: JSON.stringify(blocks) }),
+        body: JSON.stringify({ action: "preview", content: JSON.stringify(blocks), brandId }),
       })
         .then((r) => r.json())
         .then((j) => {
@@ -106,7 +121,7 @@ export function EmailEditor(props: {
         .catch(() => {});
     }, 400);
     return () => clearTimeout(t);
-  }, [blocks, props.previewUrl]);
+  }, [blocks, brandId, props.previewUrl]);
 
   const move = (id: string, dir: -1 | 1) => {
     const i = blocks.findIndex((b) => b.id === id);
@@ -135,6 +150,21 @@ export function EmailEditor(props: {
   };
   const update = (id: string, patch: Record<string, unknown>) => {
     apply(blocks.map((b) => (b.id === id ? { ...b, ...patch } : b)));
+  };
+
+  // Insert an image block from the assets panel — clicked (before the footer)
+  // or dropped at a specific position in the block list.
+  const insertImage = (url: string, alt: string, at?: number) => {
+    const block = { id: newId(), type: "image", url, alt } as Block;
+    let next: Block[];
+    if (at === undefined) {
+      const fi = blocks.findIndex((b) => b.type === "footer");
+      next = fi >= 0 ? [...blocks.slice(0, fi), block, ...blocks.slice(fi)] : [...blocks, block];
+    } else {
+      next = [...blocks.slice(0, at), block, ...blocks.slice(at)];
+    }
+    apply(next);
+    setSelected(block.id);
   };
 
   const save = useCallback(async (silent = false) => {
@@ -215,9 +245,18 @@ export function EmailEditor(props: {
                   const from = dragFrom.current;
                   dragFrom.current = null;
                   if (!from || from === b.id) return;
-                  const i = blocks.findIndex((x) => x.id === from);
                   const j = blocks.findIndex((x) => x.id === b.id);
-                  if (i < 0 || j < 0) return;
+                  if (j < 0) return;
+                  // Dragged from the assets panel: insert an image block here.
+                  if (from.startsWith("asset:")) {
+                    try {
+                      const { url, alt } = JSON.parse(from.slice(6)) as { url: string; alt: string };
+                      insertImage(url, alt, j);
+                    } catch { /* malformed payload, ignore */ }
+                    return;
+                  }
+                  const i = blocks.findIndex((x) => x.id === from);
+                  if (i < 0) return;
                   const next = [...blocks];
                   const [moved] = next.splice(i, 1);
                   next.splice(j, 0, moved);
@@ -328,6 +367,152 @@ export function EmailEditor(props: {
             </div>
             {notice && <p className="mt-2 text-[12px] text-ink-2">{notice}</p>}
             {dirty && <p className="mt-1 text-[11px] font-medium text-amber-700">Unsaved changes</p>}
+          </div>
+        )}
+
+        {!props.readOnly && (
+          <BrandAssetsPanel
+            brand={brandKits.find((b) => b.id === brandId) ?? null}
+            assets={assets}
+            onInsert={(url, alt) => { insertImage(url, alt); setNotice("Image block added."); }}
+            onDragPayload={(payload) => { dragFrom.current = payload; }}
+            onUploaded={() => { loadAssets(); setNotice("Uploaded. Click or drag it into the email."); }}
+            onError={(m) => setNotice(m)}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The brand's visual kit + uploaded images, ready to click or drag straight
+ * into the email. Dragging sets the shared dragFrom ref with an "asset:"
+ * payload the block list knows how to drop.
+ */
+function BrandAssetsPanel(props: {
+  brand: BrandKit | null;
+  assets: Asset[];
+  onInsert: (url: string, alt: string) => void;
+  onDragPayload: (payload: string) => void;
+  onUploaded: () => void;
+  onError: (message: string) => void;
+}) {
+  const b = props.brand;
+  const kitImages = b
+    ? ([
+        { label: "Logo", url: b.logoUrl, dark: false },
+        { label: "Dark logo", url: b.darkLogoUrl, dark: true },
+        { label: "Icon", url: b.iconUrl, dark: false },
+      ].filter((k) => k.url) as { label: string; url: string; dark: boolean }[])
+    : [];
+  const colours = b
+    ? ([
+        { label: "Primary", hex: b.primaryColor },
+        { label: "Secondary", hex: b.secondaryColor },
+        { label: "Accent", hex: b.accentColor },
+      ].filter((c) => c.hex) as { label: string; hex: string }[])
+    : [];
+
+  const payload = (url: string, alt: string) => "asset:" + JSON.stringify({ url, alt });
+
+  return (
+    <div className="rounded-xl border border-line bg-surface p-3">
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">Brand assets</p>
+        <a href="/brands" className="text-[11px] font-semibold text-brand hover:underline">Manage →</a>
+      </div>
+
+      {b ? (
+        <>
+          <p className="mt-1 text-[12px] font-medium">{b.name}</p>
+          {kitImages.length > 0 && (
+            <div className="mt-2 grid grid-cols-3 gap-1.5">
+              {kitImages.map((k) => (
+                <button
+                  key={k.label}
+                  type="button"
+                  title={`${k.label} · click to insert, or drag into the block list`}
+                  draggable
+                  onDragStart={() => props.onDragPayload(payload(k.url, `${b.name} ${k.label.toLowerCase()}`))}
+                  onClick={() => props.onInsert(k.url, `${b.name} ${k.label.toLowerCase()}`)}
+                  className={`flex h-14 cursor-grab flex-col items-center justify-center gap-1 rounded-lg border border-line p-1 hover:border-brand active:cursor-grabbing ${k.dark ? "bg-[#14121f]" : "bg-white"}`}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={k.url} alt={k.label} className="max-h-7 max-w-full object-contain" />
+                  <span className={`text-[9px] font-medium ${k.dark ? "text-white/70" : "text-ink-3"}`}>{k.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {colours.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {colours.map((c) => (
+                <button
+                  key={c.label}
+                  type="button"
+                  title={`${c.label} ${c.hex} · click to copy`}
+                  onClick={() => { navigator.clipboard?.writeText(c.hex).catch(() => {}); props.onError(`Copied ${c.hex}.`); }}
+                  className="flex items-center gap-1.5 rounded-full border border-line px-2 py-1 text-[10px] font-semibold text-ink-2 hover:border-brand"
+                >
+                  <span className="h-3 w-3 rounded-full border border-black/10" style={{ background: c.hex }} />
+                  {c.hex}
+                </button>
+              ))}
+            </div>
+          )}
+          {(b.headingFont || b.bodyFont) && (
+            <p className="mt-1.5 truncate text-[10px] text-ink-3" title={`Headings: ${b.headingFont ?? "default"} · Body: ${b.bodyFont ?? "default"}`}>
+              Fonts: {(b.headingFont ?? "default").split(",")[0]} / {(b.bodyFont ?? "default").split(",")[0]}
+            </p>
+          )}
+        </>
+      ) : (
+        <p className="mt-1 text-[12px] text-ink-3">Pick a brand above to see its logo and colours here.</p>
+      )}
+
+      <div className="mt-3 border-t border-line pt-2">
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">Uploads</span>
+          <label className="cursor-pointer rounded-lg bg-brand-soft px-2 py-1 text-[11px] font-semibold text-brand hover:bg-[#ece2fa]">
+            + Upload
+            <input
+              type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" className="hidden"
+              onChange={async (e) => {
+                const f = e.target.files?.[0];
+                e.target.value = "";
+                if (!f) return;
+                const fd = new FormData();
+                fd.append("file", f);
+                try {
+                  const j = await fetch("/api/assets", { method: "POST", body: fd }).then((r) => r.json());
+                  if (j.ok) props.onUploaded();
+                  else props.onError(j.error ?? "Upload failed.");
+                } catch {
+                  props.onError("Upload failed.");
+                }
+              }}
+            />
+          </label>
+        </div>
+        {props.assets.length === 0 ? (
+          <p className="mt-1.5 text-[11px] text-ink-3">No uploads yet. Images land here for every campaign.</p>
+        ) : (
+          <div className="mt-1.5 grid max-h-40 grid-cols-3 gap-1.5 overflow-y-auto">
+            {props.assets.map((a) => (
+              <button
+                key={a.name}
+                type="button"
+                title={`${a.name} · click to insert, or drag into the block list`}
+                draggable
+                onDragStart={() => props.onDragPayload(payload(a.url, a.name.replace(/\.[^.]*$/, "")))}
+                onClick={() => props.onInsert(a.url, a.name.replace(/\.[^.]*$/, ""))}
+                className="h-14 cursor-grab overflow-hidden rounded-lg border border-line bg-white p-0.5 hover:border-brand active:cursor-grabbing"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={a.url} alt={a.name} className="h-full w-full object-cover" />
+              </button>
+            ))}
           </div>
         )}
       </div>

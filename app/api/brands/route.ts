@@ -9,33 +9,39 @@ import { currentUser } from "@/lib/server/permissions";
 
 const Links = z.array(z.object({ label: z.string().max(60), url: z.string().max(300) })).max(12);
 
+// Forms submit untouched fields as "" — that must read as "not set", never as
+// an invalid value. This was the "Save brand does nothing" bug: an empty
+// sender email failed z.email() and 400'd every save.
+const blankToNull = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? null : v), schema);
+
 const Upsert = z.object({
   id: z.string().optional(), // present = update
   name: z.string().min(1).max(80),
-  websiteUrl: z.string().max(300).nullable().optional(),
-  storeId: z.string().nullable().optional(),
-  logoUrl: z.string().max(500).nullable().optional(),
-  darkLogoUrl: z.string().max(500).nullable().optional(),
-  iconUrl: z.string().max(500).nullable().optional(),
-  primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
-  secondaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
-  accentColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
-  backgroundColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
-  textColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  websiteUrl: blankToNull(z.string().max(300).nullable()).optional(),
+  storeId: blankToNull(z.string().nullable()).optional(),
+  logoUrl: blankToNull(z.string().max(500).nullable()).optional(),
+  darkLogoUrl: blankToNull(z.string().max(500).nullable()).optional(),
+  iconUrl: blankToNull(z.string().max(500).nullable()).optional(),
+  primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, "use a full hex colour like #6d28d9").optional(),
+  secondaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, "use a full hex colour like #6d28d9").optional(),
+  accentColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, "use a full hex colour like #6d28d9").optional(),
+  backgroundColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, "use a full hex colour like #6d28d9").optional(),
+  textColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, "use a full hex colour like #6d28d9").optional(),
   headingFont: z.string().max(200).optional(),
   bodyFont: z.string().max(200).optional(),
   buttonRadius: z.number().int().min(0).max(32).optional(),
   socialLinks: Links.optional(),
   menuLinks: Links.optional(),
   legalLinks: Links.optional(),
-  contactDetails: z.string().max(300).nullable().optional(),
-  mailingAddress: z.string().max(300).nullable().optional(),
-  senderName: z.string().max(120).nullable().optional(),
-  senderEmail: z.string().email().nullable().optional(),
-  replyToEmail: z.string().email().nullable().optional(),
+  contactDetails: blankToNull(z.string().max(300).nullable()).optional(),
+  mailingAddress: blankToNull(z.string().max(300).nullable()).optional(),
+  senderName: blankToNull(z.string().max(120).nullable()).optional(),
+  senderEmail: blankToNull(z.string().email().nullable()).optional(),
+  replyToEmail: blankToNull(z.string().email().nullable()).optional(),
   currency: z.string().length(3).optional(),
   locale: z.string().max(10).optional(),
-  footerText: z.string().max(500).nullable().optional(),
+  footerText: blankToNull(z.string().max(500).nullable()).optional(),
   unsubscribeText: z.string().max(300).optional(),
 });
 
@@ -71,7 +77,10 @@ export async function POST(req: NextRequest) {
 
   const parsed = Upsert.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
-    return Response.json({ ok: false, error: parsed.error.issues[0]?.message ?? "Check the brand details." }, { status: 400 });
+    const issue = parsed.error.issues[0];
+    const field = issue?.path?.filter((p) => typeof p === "string").join(".") ?? "";
+    const msg = issue ? `${field ? field + ": " : ""}${issue.message}` : "Check the brand details.";
+    return Response.json({ ok: false, error: msg }, { status: 400 });
   }
   const { id, socialLinks, menuLinks, legalLinks, storeId, ...rest } = parsed.data;
 

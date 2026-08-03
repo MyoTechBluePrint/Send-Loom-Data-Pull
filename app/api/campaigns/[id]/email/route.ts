@@ -87,8 +87,9 @@ const Act = z.discriminatedUnion("action", [
   z.object({ action: z.literal("apply_template"), templateId: z.string(), confirmReplace: z.boolean().default(false) }),
   z.object({ action: z.literal("start_blank"), confirmReplace: z.boolean().default(false) }),
   z.object({ action: z.literal("save_as_template"), name: z.string().min(1).max(120), category: z.string().max(40).default("newsletter") }),
-  z.object({ action: z.literal("preview"), content: z.string().optional() }),
-  z.object({ action: z.literal("send_test"), to: z.string().email(), content: z.string().optional() }),
+  z.object({ action: z.literal("preview"), content: z.string().optional(), brandId: z.string().nullable().optional() }),
+  z.object({ action: z.literal("send_test"), to: z.string().email(), content: z.string().optional(), brandId: z.string().nullable().optional() }),
+  z.object({ action: z.literal("duplicate") }),
 ]);
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -149,7 +150,10 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     case "preview": {
       const blocks = parseBlocks(a.content ?? c.content);
       if (!blocks.length) return Response.json({ ok: false, error: "Nothing to preview yet." }, { status: 400 });
-      const rendered = await renderPreview({ workspaceId: user.workspaceId, blocks, brandId: c.brandId });
+      // The editor's brand selector overrides the stored brand so switching
+      // brands restyles the preview live, before anything is saved.
+      const brandId = a.brandId === undefined ? c.brandId : a.brandId;
+      const rendered = await renderPreview({ workspaceId: user.workspaceId, blocks, brandId });
       return Response.json({ ok: true, ...rendered, issues: validateBlocks(blocks) });
     }
     case "send_test": {
@@ -162,7 +166,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       // Tests render with preview context (sample personalisation, no coupon
       // minting) so a test can never issue a customer's real code.
       const resolved = await resolveFeeds(blocks, user.workspaceId, null);
-      const rendered = await renderPreview({ workspaceId: user.workspaceId, blocks: resolved, brandId: c.brandId });
+      const rendered = await renderPreview({ workspaceId: user.workspaceId, blocks: resolved, brandId: a.brandId === undefined ? c.brandId : a.brandId });
       const provider = activeProvider();
       const result = await provider.send({
         to: a.to,
@@ -177,6 +181,25 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         detail: result.detail,
         error: result.status === "sent" ? undefined : result.detail,
       });
+    }
+    case "duplicate": {
+      // The way forward for a sent (locked) campaign: a fresh draft carrying
+      // the same content, brand and audience, ready to edit.
+      const copy = await db.campaign.create({
+        data: {
+          workspaceId: user.workspaceId,
+          name: `${c.name} (copy)`,
+          subject: c.subject, previewText: c.previewText,
+          status: "draft",
+          audienceType: c.audienceType, audienceRef: c.audienceRef,
+          content: c.content, templateId: c.templateId, brandId: c.brandId,
+          contentDirty: c.contentDirty,
+          sendMode: c.sendMode, sendDurationMins: c.sendDurationMins, sendBatchSize: c.sendBatchSize,
+          sendWindowStart: c.sendWindowStart, sendWindowEnd: c.sendWindowEnd,
+        },
+      });
+      await audit(user.workspaceId, user.email, "campaign.duplicated", `'${c.name}' → '${copy.name}'`);
+      return Response.json({ ok: true, id: copy.id });
     }
   }
 }

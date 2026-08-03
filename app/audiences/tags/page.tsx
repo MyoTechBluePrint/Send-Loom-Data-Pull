@@ -4,7 +4,7 @@
 // usage and dependencies. Deletion is only offered for unused tags; anything
 // in use gets merge/archive instead.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Shell, PrimaryButton } from "@/components/shell";
 import { Card, CardHeader, Th, Td } from "@/components/ui";
 
@@ -21,6 +21,7 @@ export default function TagsPage() {
   const [newName, setNewName] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [mergeFrom, setMergeFrom] = useState<Row | null>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(() => {
     fetch(`/api/tags?archived=${showArchived ? "1" : "0"}`)
@@ -29,10 +30,28 @@ export default function TagsPage() {
   useEffect(load, [load]);
 
   async function act(body: Record<string, unknown>, msg?: string) {
-    const r = await fetch("/api/tags", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    const j = await r.json();
-    setNotice(j.ok ? msg ?? "Done." : j.error ?? "Failed.");
-    if (j.ok) { setMergeFrom(null); load(); }
+    try {
+      const r = await fetch("/api/tags", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const j = await r.json();
+      setNotice(j.ok ? msg ?? "Done." : j.error ?? "Failed.");
+      if (j.ok) { setMergeFrom(null); load(); }
+      return j.ok as boolean;
+    } catch {
+      setNotice("Could not reach the server. Try again.");
+      return false;
+    }
+  }
+
+  // Always responds: empty name focuses the input and says why instead of
+  // silently doing nothing (that silence was reported as a dead button).
+  async function create() {
+    const name = newName.trim();
+    if (!name) {
+      setNotice("Type a tag name first, then hit Create.");
+      nameRef.current?.focus();
+      return;
+    }
+    if (await act({ action: "create", name }, `Created "${name}".`)) setNewName("");
   }
 
   return (
@@ -40,16 +59,21 @@ export default function TagsPage() {
       title="Tags"
       subtitle="Labels applied by forms, surveys, polls and imports · audiences build on them"
       actions={
-        <span onClick={() => newName && act({ action: "create", name: newName }, `Created "${newName}".`)}>
+        <span onClick={create}>
           <PrimaryButton>Create tag</PrimaryButton>
         </span>
       }
     >
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <input
+          ref={nameRef}
           value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="New tag name, e.g. interest:recovery"
+          onKeyDown={(e) => { if (e.key === "Enter") create(); }}
           className="w-72 rounded-lg border border-line bg-surface px-3 py-2 text-[13px] outline-none focus:border-brand"
         />
+        <button onClick={create} className="rounded-lg bg-gradient-to-b from-[#7c3aed] to-[#5b21b6] px-3.5 py-2 text-[13px] font-semibold text-white">
+          Create
+        </button>
         <label className="flex cursor-pointer items-center gap-1.5 text-[12px] text-ink-2">
           <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} className="h-3.5 w-3.5 accent-[#6d28d9]" />
           Show archived

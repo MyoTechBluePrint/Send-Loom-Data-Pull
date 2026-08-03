@@ -4,7 +4,7 @@
 // the shared editor, and wires save/preview/test back to the campaign API.
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Shell } from "@/components/shell";
 import { EmailEditor } from "@/components/email-editor";
@@ -21,9 +21,34 @@ type Data = {
 
 export default function CampaignEmailPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const id = params.id;
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [duplicating, setDuplicating] = useState(false);
+
+  async function duplicateAndEdit() {
+    setDuplicating(true);
+    try {
+      const j = await fetch(`/api/campaigns/${id}/email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "duplicate" }),
+      }).then((r) => r.json());
+      if (j.ok && j.id) {
+        router.push(`/campaigns/${j.id}/email`);
+        // Same route, new id: force the data reload the push alone won't trigger.
+        setData(null);
+        router.refresh();
+      } else {
+        setError(j.error ?? "Could not duplicate the campaign.");
+        setDuplicating(false);
+      }
+    } catch {
+      setError("Could not duplicate the campaign.");
+      setDuplicating(false);
+    }
+  }
 
   useEffect(() => {
     fetch(`/api/campaigns/${id}/email`)
@@ -62,9 +87,18 @@ export default function CampaignEmailPage() {
       }
     >
       {c.sent && (
-        <p className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-[13px] text-amber-900">
-          This campaign has been sent, so its content is locked as a historical record. Duplicate the campaign to build on it.
-        </p>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5">
+          <p className="text-[13px] text-amber-900">
+            This campaign has been sent, so its content is locked as a historical record.
+          </p>
+          <button
+            onClick={duplicateAndEdit}
+            disabled={duplicating}
+            className="rounded-lg bg-gradient-to-b from-[#7c3aed] to-[#5b21b6] px-3.5 py-2 text-[13px] font-semibold text-white disabled:opacity-60"
+          >
+            {duplicating ? "Duplicating…" : "Duplicate and edit"}
+          </button>
+        </div>
       )}
       <EmailEditor
         initialBlocks={blocks as never}

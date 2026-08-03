@@ -4,7 +4,7 @@
 // /api/segments against actual contacts.
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Shell, PrimaryButton } from "@/components/shell";
 import { Card, CardHeader, Th, Td } from "@/components/ui";
 import { gbp, num, type Condition, type Segment } from "@/lib/data";
@@ -14,6 +14,115 @@ const fieldOptions = [
   "Import batch", "Lead score", "Keyword searched", "Consent", "Engagement",
 ];
 const operatorOptions = ["is", "is not", "is greater than", "is less than", "is at least", "is exactly", "is more than", "contains"];
+
+// Sources a contact can arrive from. Names here line up with the alias map in
+// lib/server/segments.ts so picking one matches how sources are recorded.
+const sourceOptions = [
+  "WhatsApp", "Email Sign Up", "Purchase", "Abandoned Checkout",
+  "Facebook Lead", "Instagram", "TikTok", "CSV Import", "API / Integration", "Zapier", "Manual",
+];
+
+// Full country list from the browser's own region names — no hardcoded list
+// to drift out of date.
+function allCountries(): string[] {
+  try {
+    const dn = new Intl.DisplayNames(["en"], { type: "region" });
+    const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    // Special region codes that are not countries.
+    const NOT_COUNTRIES = new Set(["EU", "EZ", "UN", "XA", "XB", "ZZ", "QO"]);
+    const names = new Set<string>();
+    for (const a of letters) for (const b of letters) {
+      const code = a + b;
+      if (NOT_COUNTRIES.has(code)) continue;
+      try {
+        const name = dn.of(code);
+        if (name && name !== code && !/^[A-Z0-9]{2,3}$/.test(name)) names.add(name);
+      } catch { /* not a region */ }
+    }
+    return [...names].sort((x, y) => x.localeCompare(y));
+  } catch {
+    return ["United Kingdom", "Spain", "United States", "Germany", "France", "Ireland", "Netherlands", "Italy", "Portugal", "United Arab Emirates"];
+  }
+}
+
+// Searchable dropdown. multi=false picks one value; multi=true stores a comma
+// list and offers Select all (of the filtered set) / Clear.
+function SearchSelect(props: {
+  value: string; onChange: (v: string) => void; options: string[];
+  placeholder: string; multi?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const h = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
+
+  const selected = props.multi ? props.value.split(",").map((x) => x.trim()).filter(Boolean) : [];
+  const filtered = props.options.filter((o) => o.toLowerCase().includes(q.trim().toLowerCase()));
+  const label = props.multi
+    ? selected.length === 0 ? props.placeholder
+      : selected.length <= 2 ? selected.join(", ")
+      : `${selected.length} selected`
+    : props.value || props.placeholder;
+
+  function toggle(o: string) {
+    if (!props.multi) { props.onChange(o); setOpen(false); setQ(""); return; }
+    const next = selected.includes(o) ? selected.filter((x) => x !== o) : [...selected, o];
+    props.onChange(next.join(", "));
+  }
+
+  return (
+    <div ref={ref} className="relative min-w-40 flex-1">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={`flex w-full items-center justify-between gap-2 rounded-lg border border-line bg-surface px-2.5 py-2 text-left text-[13px] outline-none focus:border-brand ${(props.multi ? selected.length === 0 : !props.value) ? "text-ink-3" : ""}`}
+      >
+        <span className="truncate">{label}</span>
+        <span className="text-[10px] text-ink-3">▾</span>
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full z-30 mt-1 w-72 rounded-xl border border-line bg-white shadow-xl">
+          <div className="border-b border-line p-2">
+            <input
+              autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search…"
+              className="w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[13px] outline-none focus:border-brand"
+            />
+          </div>
+          {props.multi && (
+            <div className="flex gap-3 border-b border-line px-3 py-1.5 text-[11px] font-semibold">
+              <button type="button" onClick={() => props.onChange([...new Set([...selected, ...filtered])].join(", "))} className="text-brand hover:underline">
+                Select all{q ? " matching" : ""}
+              </button>
+              <button type="button" onClick={() => props.onChange("")} className="text-ink-3 hover:underline">Clear all</button>
+            </div>
+          )}
+          <ul className="max-h-56 overflow-y-auto py-1">
+            {filtered.length === 0 && <li className="px-3 py-2 text-[12px] text-ink-3">No matches.</li>}
+            {filtered.map((o) => (
+              <li key={o}>
+                <button
+                  type="button" onClick={() => toggle(o)}
+                  className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] hover:bg-brand-soft ${(props.multi ? selected.includes(o) : props.value === o) ? "font-semibold text-brand" : ""}`}
+                >
+                  {props.multi && (
+                    <span className={`flex h-3.5 w-3.5 items-center justify-center rounded border text-[9px] ${selected.includes(o) ? "border-brand bg-brand text-white" : "border-line"}`}>
+                      {selected.includes(o) ? "✓" : ""}
+                    </span>
+                  )}
+                  <span className="truncate">{o}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
 
 type Estimate = { count: number; revenue: number; preview: { id: string; name: string; email: string; score: number }[] };
 
@@ -42,6 +151,7 @@ export function SegmentsClient({ segments }: { segments: Segment[] }) {
   const [estimate, setEstimate] = useState<Estimate | null>(null);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
+  const countries = useMemo(allCountries, []);
 
   useEffect(() => {
     if (!building) return;
@@ -244,13 +354,42 @@ export function SegmentsClient({ segments }: { segments: Segment[] }) {
                     <span className="w-14 text-center text-[11px] font-bold text-brand">
                       {c.exclude ? "NOT" : i === 0 ? "WHERE" : match === "all" ? "AND" : "OR"}
                     </span>
-                    <select value={c.field} onChange={(e) => setConditions(conditions.map((x, j) => (j === i ? { ...x, field: e.target.value } : x)))} className="rounded-lg border border-line bg-surface px-2.5 py-2 text-[13px] font-medium outline-none focus:border-brand">
+                    <select
+                      value={c.field}
+                      onChange={(e) => {
+                        const nf = e.target.value;
+                        // Picker-backed fields start clean so stale free text
+                        // from the previous field can't linger in the rule.
+                        setConditions(conditions.map((x, j) => (j === i
+                          ? { ...x, field: nf, ...(nf === "Source" || nf === "Country" ? { value: "", operator: "is" } : {}) }
+                          : x)));
+                      }}
+                      className="rounded-lg border border-line bg-surface px-2.5 py-2 text-[13px] font-medium outline-none focus:border-brand"
+                    >
                       {fieldOptions.map((f) => <option key={f}>{f}</option>)}
                     </select>
-                    <select value={c.operator} onChange={(e) => setConditions(conditions.map((x, j) => (j === i ? { ...x, operator: e.target.value } : x)))} className="rounded-lg border border-line bg-surface px-2.5 py-2 text-[13px] text-ink-2 outline-none focus:border-brand">
-                      {operatorOptions.map((o) => <option key={o}>{o}</option>)}
-                    </select>
-                    <input value={c.value} onChange={(e) => setConditions(conditions.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))} className="min-w-32 flex-1 rounded-lg border border-line bg-surface px-2.5 py-2 text-[13px] outline-none focus:border-brand" />
+                    {c.field === "Source" || c.field === "Country" ? (
+                      <span className="rounded-lg border border-line bg-[#f7f6f4] px-2.5 py-2 text-[13px] text-ink-3">is one of</span>
+                    ) : (
+                      <select value={c.operator} onChange={(e) => setConditions(conditions.map((x, j) => (j === i ? { ...x, operator: e.target.value } : x)))} className="rounded-lg border border-line bg-surface px-2.5 py-2 text-[13px] text-ink-2 outline-none focus:border-brand">
+                        {operatorOptions.map((o) => <option key={o}>{o}</option>)}
+                      </select>
+                    )}
+                    {c.field === "Source" ? (
+                      <SearchSelect
+                        value={c.value} multi
+                        onChange={(v) => setConditions(conditions.map((x, j) => (j === i ? { ...x, value: v } : x)))}
+                        options={sourceOptions} placeholder="Choose sources…"
+                      />
+                    ) : c.field === "Country" ? (
+                      <SearchSelect
+                        value={c.value} multi
+                        onChange={(v) => setConditions(conditions.map((x, j) => (j === i ? { ...x, value: v } : x)))}
+                        options={countries} placeholder="Choose countries…"
+                      />
+                    ) : (
+                      <input value={c.value} onChange={(e) => setConditions(conditions.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))} className="min-w-32 flex-1 rounded-lg border border-line bg-surface px-2.5 py-2 text-[13px] outline-none focus:border-brand" />
+                    )}
                     <button
                       onClick={() => setConditions(conditions.map((x, j) => (j === i ? { ...x, exclude: !x.exclude } : x)))}
                       className={`rounded-lg border px-2 py-1.5 text-[11px] font-bold ${c.exclude ? "border-red-200 bg-red-50 text-red-700" : "border-line text-ink-3 hover:bg-[#f0efec]"}`}

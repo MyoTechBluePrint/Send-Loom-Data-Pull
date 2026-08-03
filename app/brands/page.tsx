@@ -39,6 +39,10 @@ export default function BrandsPage() {
   const [elements, setElements] = useState<ElementRow[]>([]);
   const [editing, setEditing] = useState<Partial<Brand> | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // Shown beside the Save button — the top-of-page notice is off-screen when
+  // the long edit form is scrolled, which made failed saves look like a dead button.
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const load = useCallback(() => {
     fetch("/api/brands").then((r) => r.json()).then((j) => { if (j.ok) { setBrands(j.brands); setStores(j.stores); } }).catch(() => setBrands([]));
@@ -47,7 +51,7 @@ export default function BrandsPage() {
   useEffect(load, [load]);
 
   async function save() {
-    if (!editing?.name) { setNotice("Give the brand a name."); return; }
+    if (!editing?.name) { setSaveError("Give the brand a name."); return; }
     const body: Record<string, unknown> = { ...editing };
     body.socialLinks = textLinks(String((editing as Record<string, unknown>).socialLinksText ?? linksText(editing.socialLinks ?? null)));
     body.menuLinks = textLinks(String((editing as Record<string, unknown>).menuLinksText ?? linksText(editing.menuLinks ?? null)));
@@ -59,10 +63,24 @@ export default function BrandsPage() {
     delete (body as Record<string, unknown>).templates;
     delete (body as Record<string, unknown>).elements;
 
-    const r = await fetch("/api/brands", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    const j = await r.json();
-    setNotice(j.ok ? "Brand saved. Templates and campaigns using it pick the change up on next render." : j.error ?? "Could not save.");
-    if (j.ok) { setEditing(null); load(); }
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const r = await fetch("/api/brands", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const j = await r.json();
+      if (j.ok) {
+        setNotice("Brand saved. Templates and campaigns using it pick the change up on next render.");
+        setEditing(null);
+        load();
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } else {
+        setSaveError(j.error ?? "Could not save.");
+      }
+    } catch {
+      setSaveError("Could not reach the server. Check your connection and try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function elementAct(body: Record<string, unknown>, msg: string) {
@@ -127,9 +145,12 @@ export default function BrandsPage() {
             <label><span className={small}>Unsubscribe wording</span>
               <textarea rows={2} className={input} value={editing.unsubscribeText ?? "You are receiving this because you subscribed. Unsubscribe at any time."} onChange={(ev) => setEditing({ ...editing, unsubscribeText: ev.target.value })} /></label>
           </div>
-          <div className="flex gap-2 border-t border-line px-5 py-3">
-            <button onClick={save} className="rounded-lg bg-gradient-to-b from-[#7c3aed] to-[#5b21b6] px-4 py-2 text-[13px] font-semibold text-white">Save brand</button>
-            <button onClick={() => setEditing(null)} className="rounded-lg px-4 py-2 text-[13px] font-medium text-ink-3">Cancel</button>
+          <div className="flex flex-wrap items-center gap-2 border-t border-line px-5 py-3">
+            <button onClick={save} disabled={saving} className="rounded-lg bg-gradient-to-b from-[#7c3aed] to-[#5b21b6] px-4 py-2 text-[13px] font-semibold text-white disabled:opacity-60">
+              {saving ? "Saving…" : "Save brand"}
+            </button>
+            <button onClick={() => { setEditing(null); setSaveError(null); }} className="rounded-lg px-4 py-2 text-[13px] font-medium text-ink-3">Cancel</button>
+            {saveError && <span className="rounded-lg bg-[#fdf2f2] px-3 py-1.5 text-[12px] font-medium text-[#b91c1c]">{saveError}</span>}
           </div>
         </Card>
       )}
