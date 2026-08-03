@@ -73,13 +73,34 @@ const BRANDS: Record<string, ReactNode> = {
   ),
   woo: (
     <>
-      <rect x="1.5" y="4.5" width="21" height="15" rx="4" fill="#7F54B3" />
-      <text x="12" y="15.6" textAnchor="middle" fontSize="9.5" fontWeight="800" fontFamily="Helvetica, Arial" fill="#fff">W</text>
+      <rect x="1.5" y="5.5" width="21" height="13" rx="6.5" fill="#7F54B3" />
+      <text x="12" y="15.2" textAnchor="middle" fontSize="7.2" fontWeight="800" fontFamily="Helvetica, Arial" fill="#fff">Woo</text>
     </>
   ),
   shopify: (
     <Chip>
       <path fill="#95BF47" d="M14.8 6.1c-.2-.1-.4 0-.5 0l-.7.2c-.2-.5-.5-1-1-1.4-.5-.4-1-.4-1.4-.3-1 .3-1.9 1.4-2.4 2.7l-1.5.5c-.4.1-.5.2-.5.6L5.6 17l8 1.5 3.2-13.2c-.7-.1-1.4.4-2 .8zm-3.2.3c.3.3.5.7.7 1.1l-1.9.6c.3-.8.7-1.4 1.2-1.7zm-1.4 6.2c.1 1 1.5 1.1 1.6 2.2.1.9-.7 1.6-1.8 1.5-.9-.1-1.5-.5-1.5-.5l.3-1s.6.4 1.1.4c.4 0 .5-.3.5-.4-.1-1.2-1.3-1-1.4-2.4-.1-1.4 1-2.6 2.7-2.5.6 0 .9.2.9.2l-.4 1.2s-.4-.2-.9-.2c-.9 0-1.1.7-1.1 1z" />
+    </Chip>
+  ),
+  youtube: (
+    <>
+      <rect x="1.5" y="5.5" width="21" height="13" rx="4.5" fill="#FF0000" />
+      <path fill="#fff" d="M10 9l6 3-6 3z" />
+    </>
+  ),
+  linkedin: (
+    <Chip bg="#0A66C2">
+      <text x="12" y="15.6" textAnchor="middle" fontSize="9" fontWeight="800" fontFamily="Helvetica, Arial" fill="#fff">in</text>
+    </Chip>
+  ),
+  tiktok: (
+    <Chip bg="#010101">
+      <path fill="#fff" d="M14.5 5c.4 1.6 1.5 2.7 3.1 3v2.4c-1.2 0-2.2-.4-3.1-1v4.7a4.3 4.3 0 1 1-4.3-4.3c.2 0 .5 0 .7.1v2.5a1.9 1.9 0 1 0 1.2 1.8V5h2.4z" />
+    </Chip>
+  ),
+  stripe: (
+    <Chip bg="#635BFF">
+      <text x="12" y="16" textAnchor="middle" fontSize="11" fontWeight="800" fontFamily="Helvetica, Arial" fill="#fff">S</text>
     </Chip>
   ),
   sms: (
@@ -92,9 +113,9 @@ const BRANDS: Record<string, ReactNode> = {
 
 /** [cy, rx, ry, durationSec, brand keys] — orbits sized to the slender funnel. */
 const LANES: [number, number, number, number, string[]][] = [
-  [74, 208, 46, 24, ["gmail", "whatsapp", "instagram", "google", "facebook"]],
-  [250, 122, 30, 17, ["telegram", "googleAds", "woo", "shopify"]],
-  [410, 56, 16, 12, ["sms", "google"]],
+  [74, 210, 47, 24, ["gmail", "whatsapp", "instagram", "google", "facebook", "youtube"]],
+  [250, 124, 30, 17, ["telegram", "googleAds", "woo", "shopify", "linkedin"]],
+  [410, 58, 16, 12, ["sms", "tiktok", "stripe"]],
 ];
 
 function orbitFrames(name: string, rx: number, ry: number): string {
@@ -234,9 +255,9 @@ export function TornadoBg() {
               >
                 <svg
                   viewBox="0 0 24 24"
-                  width={li === 0 ? 30 : li === 1 ? 25 : 20}
-                  height={li === 0 ? 30 : li === 1 ? 25 : 20}
-                  style={{ opacity: 0.95 - li * 0.05, marginLeft: -13, marginTop: -13 }}
+                  width={li === 0 ? 40 : li === 1 ? 33 : 27}
+                  height={li === 0 ? 40 : li === 1 ? 33 : 27}
+                  style={{ opacity: 0.95 - li * 0.05, marginLeft: -17, marginTop: -17 }}
                 >
                   {BRANDS[key]}
                 </svg>
