@@ -55,19 +55,23 @@ export default function SignupPage() {
 
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
-      {/* Value proposition. */}
-      <div className="flex flex-col justify-center bg-[#14121f] px-8 py-12 text-white lg:px-14">
-        <div className="mx-auto w-full max-w-md">
-          <div className="flex items-center gap-2.5">
+      {/* Value proposition: the landing page's midnight world continues here
+          so the funnel feels like one product, not two designs. */}
+      <div className="relative flex flex-col justify-center overflow-hidden bg-gradient-to-br from-[#102C58] via-[#081226] to-[#03050B] px-8 py-12 text-white lg:px-14">
+        <div aria-hidden className="pointer-events-none absolute -left-24 top-1/4 h-96 w-96 rounded-full bg-[#14356B]/50 blur-3xl" />
+        <div aria-hidden className="pointer-events-none absolute -bottom-32 right-0 h-80 w-80 rounded-full bg-[#14356B]/30 blur-3xl" />
+        <div className="relative mx-auto w-full max-w-md">
+          <Link href="/home" className="flex w-fit items-center gap-2.5" aria-label="Back to the SendLoom homepage">
             <img src="/logo.png" alt="" className="h-10 w-10 rounded-xl bg-white object-contain p-0.5" />
             <div>
-              <p className="text-base font-semibold leading-tight">Sendloom</p>
-              <p className="text-[11px] text-white/50">Growth Intelligence OS</p>
+              <p className="text-base font-semibold leading-tight">sendloom</p>
+              <p className="text-[11px] text-white/50">All-in-one marketing automation platform</p>
             </div>
-          </div>
+          </Link>
 
-          <h1 className="mt-10 text-3xl font-semibold leading-tight">
-            Try SendLoom free for three days
+          <h1 className="mt-10 text-3xl font-bold leading-tight tracking-tight sm:text-4xl">
+            Try SendLoom free for{" "}
+            <span className="bg-gradient-to-b from-[#9cc0ff] to-[#3478f6] bg-clip-text text-transparent">three days</span>
           </h1>
           <p className="mt-3 text-sm leading-relaxed text-white/70">
             Explore the platform, build campaigns, connect your website and see how SendLoom can
@@ -82,7 +86,7 @@ export default function SignupPage() {
               "Cancel before the trial ends and you will not be charged",
             ].map((t) => (
               <li key={t} className="flex items-start gap-2.5 text-sm text-white/80">
-                <span className="mt-0.5 text-[#a78bfa]">✓</span> {t}
+                <span className="mt-0.5 grid h-4.5 w-4.5 shrink-0 place-items-center rounded-full border border-white/15 bg-white/[0.06] text-[10px] text-[#8fb4fa]">✓</span> {t}
               </li>
             ))}
           </ul>
@@ -90,7 +94,20 @@ export default function SignupPage() {
           <p className="mt-10 text-[11px] leading-relaxed text-white/40">
             Card details are handled by our payment provider and never touch SendLoom&apos;s servers.
           </p>
+
         </div>
+
+        {/* Loomi peeks over the bottom edge, same trick as the landing card */}
+        <img
+          src="/mascot/peek-top.png"
+          alt=""
+          aria-hidden
+          loading="lazy"
+          decoding="async"
+          width={174}
+          height={229}
+          className="pointer-events-none absolute -bottom-14 left-[12%] w-28 -rotate-6 drop-shadow-[0_10px_24px_rgba(0,0,0,0.5)]"
+        />
       </div>
 
       {/* The form. */}
@@ -108,14 +125,14 @@ export default function SignupPage() {
               <span className="text-xs font-medium text-ink-3">First name</span>
               <input
                 value={firstName} onChange={(e) => setFirstName(e.target.value)} required autoComplete="given-name"
-                className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand"
+                className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none transition focus:border-[#3478f6] focus:ring-2 focus:ring-[#3478f6]/20"
               />
             </label>
             <label className="block">
               <span className="text-xs font-medium text-ink-3">Last name</span>
               <input
                 value={lastName} onChange={(e) => setLastName(e.target.value)} required autoComplete="family-name"
-                className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand"
+                className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none transition focus:border-[#3478f6] focus:ring-2 focus:ring-[#3478f6]/20"
               />
             </label>
           </div>
@@ -123,7 +140,7 @@ export default function SignupPage() {
             <span className="text-xs font-medium text-ink-3">Work email</span>
             <input
               type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email"
-              className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand"
+              className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none transition focus:border-[#3478f6] focus:ring-2 focus:ring-[#3478f6]/20"
             />
           </label>
           <label className="mt-3 block">
@@ -131,7 +148,7 @@ export default function SignupPage() {
             <input
               type="password" value={password} onChange={(e) => setPassword(e.target.value)} required
               minLength={8} autoComplete="new-password"
-              className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand"
+              className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none transition focus:border-[#3478f6] focus:ring-2 focus:ring-[#3478f6]/20"
             />
             <span className="mt-1 block text-[11px] text-ink-3">At least 8 characters.</span>
           </label>
@@ -139,38 +156,38 @@ export default function SignupPage() {
             <span className="text-xs font-medium text-ink-3">Business or brand name</span>
             <input
               value={companyName} onChange={(e) => setCompanyName(e.target.value)} required autoComplete="organization"
-              className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand"
+              className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none transition focus:border-[#3478f6] focus:ring-2 focus:ring-[#3478f6]/20"
             />
           </label>
           <label className="mt-3 block">
             <span className="text-xs font-medium text-ink-3">Website <span className="font-normal">(optional)</span></span>
             <input
               value={websiteUrl} onChange={(e) => setWebsiteUrl(e.target.value)} placeholder="yourstore.com"
-              className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand"
+              className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none transition focus:border-[#3478f6] focus:ring-2 focus:ring-[#3478f6]/20"
             />
           </label>
 
           <label className="mt-4 flex cursor-pointer items-start gap-2.5 text-xs leading-relaxed text-ink-2">
             <input
               type="checkbox" checked={acceptTerms} onChange={(e) => setAcceptTerms(e.target.checked)}
-              className="mt-0.5 h-3.5 w-3.5 accent-[#6d28d9]"
+              className="mt-0.5 h-3.5 w-3.5 accent-[#3478f6]"
             />
             <span>
-              I accept the <a href="/terms" className="font-medium text-brand hover:underline">terms of service</a> and{" "}
-              <a href="/privacy" className="font-medium text-brand hover:underline">privacy policy</a>.
+              I accept the <a href="/terms" className="font-medium text-[#2f6ae0] hover:underline">terms of service</a> and{" "}
+              <a href="/privacy" className="font-medium text-[#2f6ae0] hover:underline">privacy policy</a>.
             </span>
           </label>
 
           <button
             type="submit" disabled={busy}
-            className="mt-5 w-full rounded-lg bg-gradient-to-b from-[#7c3aed] to-[#5b21b6] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:from-[#6d28d9] hover:to-[#4c1d95] disabled:opacity-50"
+            className="mt-5 w-full rounded-xl bg-gradient-to-b from-[#5b93f8] to-[#3478f6] px-4 py-3 text-sm font-semibold text-white shadow-md shadow-[#3478f6]/30 transition hover:from-[#4d87f4] hover:to-[#2a6ae8] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3478f6] active:scale-[0.99] disabled:opacity-50"
           >
             {busy ? "Creating your account…" : "Start my free trial"}
           </button>
 
           <p className="mt-4 text-center text-xs text-ink-3">
             Already have an account?{" "}
-            <Link href="/login" className="font-medium text-brand hover:underline">Sign in</Link>
+            <Link href="/login" className="font-medium text-[#2f6ae0] hover:underline">Sign in</Link>
           </p>
         </form>
       </div>

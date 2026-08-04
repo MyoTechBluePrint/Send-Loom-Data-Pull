@@ -46,3 +46,5 @@ backups/
 
 # Uploaded assets (persist on the Render disk, never in git)
 data/uploads/
+
+.qa-login

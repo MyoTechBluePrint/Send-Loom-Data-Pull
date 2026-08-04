@@ -6,6 +6,7 @@
 // real numbers and real customers before this page carries paid traffic.
 
 import Link from "next/link";
+import { Loomi } from "@/components/loomi";
 import { Reveal } from "@/components/reveal";
 
 export const metadata = {
@@ -90,7 +91,8 @@ function PayButtons({ compact = false, onDark = false, large = false }: { compac
     <div className={compact ? (large ? "w-full max-w-sm" : "w-full max-w-xs") : "w-full"}>
       <Link
         href="/signup"
-        className={`flex ${h} w-full items-center justify-center gap-1.5 rounded-xl font-semibold shadow-md transition active:scale-[0.98] ${
+        data-loomi-cheer
+        className={`flex ${h} w-full items-center justify-center gap-1.5 rounded-xl font-semibold shadow-md transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3478f6] active:scale-[0.98] ${
           onDark
             ? "bg-gradient-to-b from-white to-[#e8e8ec] text-black shadow-black/40"
             : "bg-gradient-to-b from-[#2c2c2e] to-black text-white shadow-black/25"
@@ -98,13 +100,13 @@ function PayButtons({ compact = false, onDark = false, large = false }: { compac
       >
         <AppleLogo className={mark} /> Pay
       </Link>
-      <Link href="/signup" className={`mt-2.5 flex ${h2} w-full items-center justify-center gap-2 rounded-xl border border-black/10 bg-white font-semibold transition hover:border-black/25 active:scale-[0.98]`} style={{ color: ink }}>
+      <Link href="/signup" data-loomi-cheer className={`mt-2.5 flex ${h2} w-full items-center justify-center gap-2 rounded-xl border border-black/10 bg-white font-semibold transition hover:border-black/25 active:scale-[0.98]`} style={{ color: ink }}>
         <GoogleG className={mark} /> Pay
       </Link>
       {!compact && (
         <>
           <p className="my-3 text-center text-[11px] uppercase tracking-widest text-black/30">or</p>
-          <Link href="/signup" className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-black/10 bg-white text-[14px] font-semibold transition hover:border-black/25" style={{ color: ink }}>
+          <Link href="/signup" data-loomi-cheer className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-black/10 bg-white text-[14px] font-semibold transition hover:border-black/25" style={{ color: ink }}>
             <Icon d={PATHS.card} className="h-[17px] w-[17px]" stroke={blue} /> Enter Card Details
           </Link>
         </>
@@ -125,7 +127,8 @@ export default function HomePage() {
           @keyframes sl-ambient { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(30px, -18px); } }
           @keyframes sl-strike { 0%, 78% { opacity: 0.10; } 84% { opacity: 0.4; } 88% { opacity: 0.16; } 92% { opacity: 0.32; } 100% { opacity: 0.10; } }
           @keyframes sl-beam { 0%, 100% { transform: rotate(24deg) translateY(-2%); opacity: 0.14; } 50% { transform: rotate(24deg) translateY(2%); opacity: 0.24; } }
-          @media (prefers-reduced-motion: reduce) { .sl-shimmer-layer, .sl-float, .sl-ambient { animation: none !important; } }
+          html { scroll-behavior: smooth; }
+          @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .sl-shimmer-layer, .sl-float, .sl-ambient, .sl-motion { animation: none !important; } }
         `}</style>
 
         {/* Lacquer atmosphere: layered glows, gloss streak, vignette */}
@@ -136,7 +139,7 @@ export default function HomePage() {
           <div className="absolute inset-0 opacity-[0.05]" style={{ background: "linear-gradient(115deg, transparent 42%, #9db8e8 49%, transparent 55%)" }} />
           {/* Diagonal light beam on the left: soft white-blue shaft */}
           <div
-            className="absolute -left-24 -top-40 h-[130%] w-[280px] blur-2xl"
+            className="sl-motion absolute -left-24 -top-40 h-[130%] w-[280px] blur-2xl"
             style={{
               background: "linear-gradient(180deg, rgba(255,255,255,0.5), rgba(157,196,255,0.35) 45%, transparent 85%)",
               transformOrigin: "top left",
@@ -144,7 +147,7 @@ export default function HomePage() {
             }}
           />
           {/* The strike itself: a jagged bolt that flashes softly */}
-          <svg viewBox="0 0 400 900" className="absolute -top-10 left-[2%] h-[115%] w-[360px]" fill="none" style={{ animationName: "sl-strike", animationDuration: "11s", animationTimingFunction: "ease-in-out", animationIterationCount: "infinite" }}>
+          <svg viewBox="0 0 400 900" aria-hidden className="sl-motion absolute -top-10 left-[2%] h-[115%] w-[360px]" fill="none" style={{ animationName: "sl-strike", animationDuration: "11s", animationTimingFunction: "ease-in-out", animationIterationCount: "infinite" }}>
             <path d="M150 -20 L196 210 L154 236 L232 470 L196 492 L292 760" stroke="#dbe9ff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" style={{ filter: "drop-shadow(0 0 14px rgba(157,196,255,0.9)) drop-shadow(0 0 40px rgba(91,147,248,0.5))" }} />
             <path d="M150 -20 L196 210 L154 236 L232 470 L196 492 L292 760" stroke="#ffffff" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" opacity="0.9" />
             <path d="M196 210 L246 196 M232 470 L278 452" stroke="#9dc4ff" strokeWidth="2" strokeLinecap="round" opacity="0.6" />
@@ -160,7 +163,7 @@ export default function HomePage() {
           </span>
           <Link
             href="/login"
-            className="flex items-center gap-2 rounded-full bg-gradient-to-b from-white to-[#dfe6f2] px-5 py-2.5 text-[14px] font-bold text-[#0A1830] shadow-[0_2px_10px_rgba(255,255,255,0.15),0_8px_24px_-8px_rgba(0,0,0,0.6)] transition hover:from-[#f2f6ff] hover:to-[#cfd9ea] active:scale-[0.98]"
+            className="flex items-center gap-2 rounded-full bg-gradient-to-b from-white to-[#dfe6f2] px-5 py-2.5 text-[14px] font-bold text-[#0A1830] shadow-[0_2px_10px_rgba(255,255,255,0.15),0_8px_24px_-8px_rgba(0,0,0,0.6)] transition hover:from-[#f2f6ff] hover:to-[#cfd9ea] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8fb4fa] active:scale-[0.98]"
           >
             Sign in <span aria-hidden>→</span>
           </Link>
@@ -216,16 +219,17 @@ export default function HomePage() {
               <div className="mt-8 flex flex-wrap items-center gap-4">
                 <Link
                   href="/signup"
-                  className="flex h-12 items-center gap-2 rounded-xl bg-gradient-to-b from-[#5b93f8] to-[#2c63d9] px-6 text-[15px] font-semibold text-white shadow-lg shadow-[#2c63d9]/40 transition hover:from-[#4a86f7] hover:to-[#2458c8] active:scale-[0.98]"
+                  data-loomi-cheer
+                  className="flex h-12 items-center gap-2 rounded-xl bg-gradient-to-b from-[#5b93f8] to-[#2c63d9] px-6 text-[15px] font-semibold text-white shadow-lg shadow-[#2c63d9]/40 transition hover:from-[#4a86f7] hover:to-[#2458c8] hover:shadow-xl hover:shadow-[#2c63d9]/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8fb4fa] active:scale-[0.98]"
                 >
                   Start your free trial <span aria-hidden>→</span>
                 </Link>
-                <button className="flex items-center gap-2.5 text-[14px] font-semibold text-white/80 transition hover:text-white">
-                  <span className="grid h-10 w-10 place-items-center rounded-full border border-white/15 bg-white/[0.05]">
+                <a href="#features" className="flex items-center gap-2.5 rounded-full text-[14px] font-semibold text-white/80 transition hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#8fb4fa]">
+                  <span className="grid h-10 w-10 place-items-center rounded-full border border-white/15 bg-white/[0.05] transition group-hover:bg-white/[0.1]">
                     <Icon d={PATHS.play} className="ml-0.5 h-3.5 w-3.5" stroke="#ffffff" />
                   </span>
-                  Watch 30 second demo
-                </button>
+                  See SendLoom in action
+                </a>
               </div>
             </Reveal>
 
@@ -264,13 +268,18 @@ export default function HomePage() {
             </Reveal>
           </div>
 
-          {/* The centrepiece: bright card in a warm showroom bloom */}
+          {/* The centrepiece: bright card in a warm showroom bloom.
+              The float lives on the wrapper so Loomi rides with the card and
+              his grip on its edge never drifts. */}
           <Reveal delay={150}>
-            <div className="relative lg:mt-4">
+            <div
+              className="sl-float relative lg:mt-4"
+              style={{ animationName: "sl-float", animationDuration: "9s", animationTimingFunction: "ease-in-out", animationIterationCount: "infinite" }}
+            >
               <div aria-hidden className="pointer-events-none absolute -inset-14 rounded-[48px] opacity-90 blur-3xl" style={{ background: "radial-gradient(closest-side, rgba(255,249,240,0.32), rgba(200,219,255,0.12) 60%, transparent 75%)" }} />
+              <Loomi />
               <div
-                className="sl-float relative rounded-[28px] bg-white p-7 text-[#1d1d1f] shadow-[0_2px_8px_rgba(0,0,0,0.35),0_48px_120px_-24px_rgba(0,0,0,0.7)]"
-                style={{ animationName: "sl-float", animationDuration: "9s", animationTimingFunction: "ease-in-out", animationIterationCount: "infinite" }}
+                className="relative z-[2] rounded-[28px] bg-white p-7 text-[#1d1d1f] shadow-[0_2px_8px_rgba(0,0,0,0.35),0_48px_120px_-24px_rgba(0,0,0,0.7)]"
               >
                 <p className="mx-auto w-fit rounded-full bg-[#eaf1fe] px-3 py-1 text-[11px] font-bold uppercase tracking-widest text-[#2f6ae0]">
                   3 Day Free Trial
@@ -332,7 +341,7 @@ export default function HomePage() {
       </div>
 
       {/* Features */}
-      <section className="mx-auto max-w-6xl px-6 pb-16 pt-6">
+      <section id="features" className="mx-auto max-w-6xl px-6 pb-16 pt-6 scroll-mt-6">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
           {FEATURES.map((f, i) => (
             <Reveal key={f.t} delay={i * 60}>
