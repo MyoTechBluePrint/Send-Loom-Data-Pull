@@ -9,6 +9,7 @@
 // Consent honesty: a survey answer NEVER creates marketing consent. Only the
 // explicit consent checkbox on the email step does.
 import { NextRequest } from "next/server";
+import { enrolOnEvent } from "@/lib/server/automations";
 import { recordConsent } from "@/lib/server/consent";
 import { z } from "zod";
 import { db } from "@/lib/server/db";
@@ -219,6 +220,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   // Routing for the tracker: which step next, or the success state.
   const nextStep = applied.goToStep ?? (b.stepIndex + 1 < form.steps.length ? b.stepIndex + 1 : null);
   const finished = isFinal || nextStep === null;
+
+  // A completed form is a trigger event: live automations listening for
+  // form_submitted enrol the contact the moment the last step lands.
+  if (finished && contactId) {
+    await enrolOnEvent(store.workspaceId, "form_submitted", contactId).catch((err) =>
+      console.error("[sendloom] automation enrol failed", err),
+    );
+  }
 
   return Response.json({
     ok: true,

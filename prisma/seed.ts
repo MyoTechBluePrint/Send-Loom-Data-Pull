@@ -2,6 +2,7 @@
 // schema supports it; imports/contacts/events are real rows exercising the
 // same code paths as live data.
 import { PrismaClient } from "@prisma/client";
+import { syncConsentMirror } from "../lib/server/consent";
 import {
   subscribers, timelines, segments, campaigns, automations, forms,
   importBatches, keywords, opportunities, siteSearches, salesTasks, providers,

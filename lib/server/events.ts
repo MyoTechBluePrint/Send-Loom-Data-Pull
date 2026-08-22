@@ -3,6 +3,7 @@
 import { recordConsent } from "./consent";
 // calls eventIngestionService.process(); later this body moves behind a queue
 // worker without the callers changing.
+import { enrolOnEvent } from "./automations";
 import { db } from "./db";
 import { audit } from "./audit";
 import { recomputeLeadScore } from "./scoring";
@@ -219,6 +220,12 @@ export const eventIngestionService = {
         data: { contactId, type: e.type, title, detail, eventId: event.id, occurredAt },
       });
       await db.contact.update({ where: { id: contactId }, data: { lastActivityAt: occurredAt } });
+
+      // Live automations listening for this event pick the contact up here:
+      // a popup signup lands in the welcome flow within the same request.
+      await enrolOnEvent(e.workspaceId, e.type, contactId).catch((err) =>
+        console.error("[sendloom] automation enrol failed", err),
+      );
 
       // 5. Rescore.
       if (def.affectsScoring) await recomputeLeadScore(contactId);

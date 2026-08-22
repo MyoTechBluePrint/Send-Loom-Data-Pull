@@ -458,18 +458,21 @@ model CampaignSend {
 }
 
 model Automation {
-  id          String    @id @default(cuid())
-  workspaceId String
-  workspace   Workspace @relation(fields: [workspaceId], references: [id])
-  name        String
-  trigger     String
-  status      String    @default("draft") // live | paused | draft
-  isDemo      Boolean   @default(false)
-  entered     Int       @default(0)
-  completed   Int       @default(0)
-  revenue     Float     @default(0)
-  conversion  Float     @default(0)
-  createdAt   DateTime  @default(now())
+  id           String    @id @default(cuid())
+  workspaceId  String
+  workspace    Workspace @relation(fields: [workspaceId], references: [id])
+  name         String
+  trigger      String
+  // The machine half of the trigger: the event type that enrols a contact.
+  // "trigger" above stays the human sentence the list shows.
+  triggerEvent String? // popup_submitted | form_submitted | checkout_started | purchase_completed | imported
+  status       String    @default("draft") // live | paused | draft
+  isDemo       Boolean   @default(false)
+  entered      Int       @default(0)
+  completed    Int       @default(0)
+  revenue      Float     @default(0)
+  conversion   Float     @default(0)
+  createdAt    DateTime  @default(now())
 
   nodes AutomationNode[]
   runs  AutomationRun[]
@@ -496,6 +499,8 @@ model AutomationRun {
   contact      Contact    @relation(fields: [contactId], references: [id])
   status       String     @default("running") // running | completed | exited | converted
   currentNode  String?
+  // When the run's next step is due; null means "advance whenever seen".
+  nextDueAt    DateTime?
   startedAt    DateTime   @default(now())
   endedAt      DateTime?
 

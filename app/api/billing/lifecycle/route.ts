@@ -9,6 +9,7 @@
 import { NextRequest } from "next/server";
 import { advanceAll } from "@/lib/server/billing/lifecycle";
 import { runDueBatches } from "@/lib/server/smart-send";
+import { advanceDueRuns } from "@/lib/server/automations";
 import { currentUser, can } from "@/lib/server/permissions";
 
 export async function POST(req: NextRequest) {
@@ -29,11 +30,12 @@ export async function POST(req: NextRequest) {
   const actions = await advanceAll({ origin: process.env.APP_ORIGIN ?? req.nextUrl.origin });
   // The same tick drives smart-send batches: one cron seam for the platform.
   const batches = await runDueBatches();
+  const automationRuns = await advanceDueRuns();
   return Response.json({
     ok: true,
     ranBy: actor,
     changed: actions.length,
     actions,
-    smartSendBatches: batches,
+    smartSendBatches: batches, automationRuns,
   });
 }

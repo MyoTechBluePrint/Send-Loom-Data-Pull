@@ -1,0 +1,276 @@
+// The automation engine: what turns a workflow drawing into emails arriving.
+//
+// The pieces were all here already and this file only connects them. Nodes
+// are the drawing; a run is one contact walking it. An email node borrows the
+// whole campaign machine by keeping a shadow campaign per node: sends become
+// CampaignSend rows under it, which buys the unsubscribe link, the delivery
+// webhook, per-node stats and, through the (campaignId, contactId) unique
+// constraint, the guarantee that no contact can ever receive the same
+// automation email twice, whatever the scheduler does.
+//
+// Consent is the same gate as everywhere else. A welcome email is marketing:
+// no granted email consent, no send, however the contact got enrolled.
+
+import { db } from "./db";
+import { audit } from "./audit";
+import { activeProvider } from "./sending";
+import { eligibleForChannel } from "./consent";
+import { renderForRecipient } from "./email-render";
+import { newBlockId, type EmailBlock } from "./email-blocks";
+
+export const TRIGGER_EVENTS = [
+  { value: "popup_submitted", label: "Popup or form signup" },
+  { value: "form_submitted", label: "Multi-step form completed" },
+  { value: "checkout_started", label: "Checkout started" },
+  { value: "purchase_completed", label: "Purchase completed" },
+  { value: "imported", label: "Contact imported" },
+] as const;
+
+export interface EmailNodeConfig {
+  subject?: string;
+  /** Simple HTML for the body text block. */
+  html?: string;
+  /** The shadow campaign backing this node's sends. */
+  campaignId?: string;
+}
+
+export interface DelayNodeConfig {
+  hours?: number;
+}
+
+const parseConfig = <T,>(raw: string | null): T => {
+  try {
+    return JSON.parse(raw ?? "{}") as T;
+  } catch {
+    return {} as T;
+  }
+};
+
+/**
+ * Enrol a contact into every live automation listening for this event.
+ *
+ * One run per contact per automation, ever: re-triggering does not restart
+ * a welcome series. Advances immediately so a zero-delay first email goes
+ * out while the signup is still warm.
+ */
+export async function enrolOnEvent(
+  workspaceId: string,
+  eventType: string,
+  contactId: string,
+) {
+  const automations = await db.automation.findMany({
+    where: { workspaceId, status: "live", triggerEvent: eventType },
+    select: { id: true },
+  });
+  for (const a of automations) {
+    const existing = await db.automationRun.findFirst({
+      where: { automationId: a.id, contactId },
+      select: { id: true },
+    });
+    if (existing) continue;
+    const run = await db.automationRun.create({
+      data: { automationId: a.id, contactId, status: "running" },
+    });
+    await db.automation.update({
+      where: { id: a.id },
+      data: { entered: { increment: 1 } },
+    });
+    await advanceRun(run.id);
+  }
+}
+
+/** The cron half: push every due run forward. Called beside runDueBatches. */
+export async function advanceDueRuns(): Promise<number> {
+  const due = await db.automationRun.findMany({
+    where: {
+      status: "running",
+      OR: [{ nextDueAt: null }, { nextDueAt: { lte: new Date() } }],
+    },
+    select: { id: true },
+    take: 200,
+  });
+  for (const r of due) await advanceRun(r.id);
+  return due.length;
+}
+
+/**
+ * Walk one run forward until it parks on a delay or finishes.
+ *
+ * Unknown node kinds pass through rather than wedge the run: a condition or
+ * task node someone sketches in the editor must never strand real contacts.
+ */
+export async function advanceRun(runId: string) {
+  const run = await db.automationRun.findUnique({
+    where: { id: runId },
+    include: {
+      automation: { include: { nodes: { orderBy: { position: "asc" } } } },
+      contact: true,
+    },
+  });
+  if (!run || run.status !== "running") return;
+
+  const nodes = run.automation.nodes.filter((n) => !n.branch);
+  let index = run.currentNode
+    ? nodes.findIndex((n) => n.id === run.currentNode) + 1
+    : 0;
+
+  while (index < nodes.length) {
+    const node = nodes[index];
+
+    if (node.kind === "trigger") {
+      index += 1;
+      continue;
+    }
+
+    if (node.kind === "delay") {
+      const config = parseConfig<DelayNodeConfig>(node.config);
+      const hours = Math.max(0, Number(config.hours ?? 24));
+      await db.automationRun.update({
+        where: { id: run.id },
+        data: {
+          currentNode: node.id,
+          nextDueAt: new Date(Date.now() + hours * 3600 * 1000),
+        },
+      });
+      return;
+    }
+
+    if (node.kind === "email") {
+      await deliverEmailNode(run.automation, node, run.contact);
+      await db.automationRun.update({
+        where: { id: run.id },
+        data: { currentNode: node.id, nextDueAt: null },
+      });
+      index += 1;
+      continue;
+    }
+
+    if (node.kind === "exit") break;
+
+    index += 1; // condition/task/tag/webhook: pass through for now
+  }
+
+  await db.automationRun.update({
+    where: { id: run.id },
+    data: { status: "completed", endedAt: new Date(), nextDueAt: null },
+  });
+  await db.automation.update({
+    where: { id: run.automation.id },
+    data: { completed: { increment: 1 } },
+  });
+}
+
+/** The shadow campaign that gives an email node its send machinery. */
+async function shadowCampaign(
+  automation: { id: string; workspaceId: string; name: string },
+  node: { id: string; label: string; config: string | null },
+) {
+  const config = parseConfig<EmailNodeConfig>(node.config);
+  if (config.campaignId) {
+    const existing = await db.campaign.findUnique({ where: { id: config.campaignId } });
+    if (existing) return existing;
+  }
+  const campaign = await db.campaign.create({
+    data: {
+      workspaceId: automation.workspaceId,
+      name: `${automation.name} · ${node.label}`,
+      subject: config.subject ?? node.label,
+      status: "automation",
+      channel: "email",
+      audienceType: "automation",
+      audienceRef: automation.id,
+    },
+  });
+  await db.automationNode.update({
+    where: { id: node.id },
+    data: { config: JSON.stringify({ ...config, campaignId: campaign.id }) },
+  });
+  return campaign;
+}
+
+function blocksFor(node: { label: string; config: string | null }): EmailBlock[] {
+  const config = parseConfig<EmailNodeConfig>(node.config);
+  const html = config.html?.trim() || "<p>Thanks for signing up. We'll be in touch.</p>";
+  return [
+    { id: newBlockId(), type: "logo" },
+    { id: newBlockId(), type: "text", html },
+    { id: newBlockId(), type: "footer" },
+  ];
+}
+
+async function deliverEmailNode(
+  automation: { id: string; workspaceId: string; name: string },
+  node: { id: string; label: string; config: string | null },
+  contact: {
+    id: string; email: string | null; phone: string | null;
+    firstName: string | null; lastName: string | null;
+    emailConsent: string; smsConsent: string; whatsappConsent: string;
+    doNotContact: boolean;
+  },
+) {
+  const suppressed = new Set(
+    (
+      await db.suppressionRecord.findMany({
+        where: { workspaceId: automation.workspaceId },
+        select: { email: true },
+      })
+    ).map((s) => s.email.toLowerCase()),
+  );
+  const gate = eligibleForChannel(contact, "email", suppressed);
+  if (!gate.eligible || !contact.email) return;
+
+  const campaign = await shadowCampaign(automation, node);
+
+  // The double-send guard: one row per contact per node, enforced by the
+  // schema, so a crashed scheduler re-walking a run cannot email twice.
+  let send;
+  try {
+    send = await db.campaignSend.create({
+      data: { campaignId: campaign.id, contactId: contact.id, status: "queued" },
+    });
+  } catch {
+    return; // already sent by an earlier walk
+  }
+
+  const config = parseConfig<EmailNodeConfig>(node.config);
+  try {
+    const { html, textBody } = await renderForRecipient({
+      workspaceId: automation.workspaceId,
+      campaignId: campaign.id,
+      sendId: send.id,
+      contact: {
+        id: contact.id,
+        email: contact.email,
+        firstName: contact.firstName,
+        lastName: contact.lastName,
+      },
+      blocks: blocksFor(node),
+    });
+    const provider = activeProvider();
+    void textBody; // providers take html; the text part rides inside it
+    await provider.send({
+      to: contact.email,
+      subject: config.subject?.trim() || node.label,
+      html,
+      campaignSendId: send.id,
+    });
+    await db.campaignSend.update({ where: { id: send.id }, data: { status: "sent" } });
+    await db.timelineItem.create({
+      data: {
+        contactId: contact.id,
+        type: "email_sent",
+        title: `Automation email sent · ${automation.name}`,
+        detail: config.subject?.trim() || node.label,
+      },
+    });
+    await audit(
+      automation.workspaceId,
+      "system:automation",
+      "automation.email_sent",
+      `'${automation.name}' → ${contact.email}`,
+    );
+  } catch (error) {
+    console.error("[sendloom] automation send failed", error);
+    await db.campaignSend.update({ where: { id: send.id }, data: { status: "failed" } });
+  }
+}
