@@ -50,6 +50,21 @@ export async function POST(req: NextRequest) {
     return Response.json({ ok: false }, { status: 400 });
   }
 
+  // Delivery confirmation closes the honesty loop: "delivered" is only ever
+  // written here, on the provider's own word, matched by the message id it
+  // gave us at acceptance.
+  if (event.type === "email.delivered") {
+    const messageId = (event.data as { email_id?: string } | undefined)?.email_id;
+    if (messageId) {
+      const updated = await db.campaignSend.updateMany({
+        where: { providerMessageId: messageId, status: "sent" },
+        data: { status: "delivered" },
+      });
+      return Response.json({ ok: true, delivered: updated.count });
+    }
+    return Response.json({ ok: true, ignored: "no email_id" });
+  }
+
   const kind = event.type === "email.bounced" ? "bounced" : event.type === "email.complained" ? "complained" : null;
   if (!kind) return Response.json({ ok: true, ignored: event.type });
 
@@ -61,10 +76,15 @@ export async function POST(req: NextRequest) {
   for (const c of contacts) {
     // Most recent sent record becomes the bounce/complaint carrier, which is
     // what the per-campaign safety rates read.
-    const send = await db.campaignSend.findFirst({
-      where: { contactId: c.id, status: "sent" },
-      orderBy: { createdAt: "desc" },
-    });
+    const messageId = (event.data as { email_id?: string } | undefined)?.email_id;
+    const send =
+      (messageId
+        ? await db.campaignSend.findFirst({ where: { providerMessageId: messageId } })
+        : null) ??
+      (await db.campaignSend.findFirst({
+        where: { contactId: c.id, status: { in: ["sent", "delivered"] } },
+        orderBy: { createdAt: "desc" },
+      }));
     if (send) await db.campaignSend.update({ where: { id: send.id }, data: { status: kind } });
 
     const suppressed = await db.suppressionRecord.findFirst({ where: { workspaceId: c.workspaceId, email } });

@@ -61,7 +61,7 @@ export async function deliverToContact(
     const brand = campaign.brandId
       ? await db.brand.findUnique({ where: { id: campaign.brandId }, select: { senderName: true, senderEmail: true, replyToEmail: true } })
       : null;
-    await provider.send({
+    const result = await provider.send({
       to: contact.email,
       subject: campaign.subject ?? campaign.name,
       html,
@@ -69,11 +69,16 @@ export async function deliverToContact(
       from: brand?.senderEmail ? `${brand.senderName ?? "SendLoom"} <${brand.senderEmail}>` : undefined,
       replyTo: brand?.replyToEmail ?? undefined,
     });
-    await db.campaignSend.update({ where: { id: send.id }, data: { status: "sent" } });
+    const status = await recordSendOutcome(send.id, result);
     await db.timelineItem.create({
-      data: { contactId: contact.id, type: "email_sent", title: "Campaign email sent", detail: `${campaign.name} · via ${provider.name}` },
+      data: {
+        contactId: contact.id,
+        type: "email_sent",
+        title: status === "sent" ? "Campaign email sent" : status === "simulated" ? "Campaign email simulated (no live provider)" : "Campaign email failed",
+        detail: `${campaign.name} · via ${provider.name}`,
+      },
     });
-    return "sent";
+    return status === "failed" ? "failed" : "sent";
   } catch {
     await db.campaignSend.update({ where: { id: send.id }, data: { status: "failed" } });
     return "failed";
@@ -91,7 +96,27 @@ export type OutboundEmail = {
   replyTo?: string;
 };
 
-export type SendResult = { providerId: string; status: "sent" | "failed"; detail?: string };
+export type SendResult = { providerId: string; status: "sent" | "failed" | "simulated"; detail?: string };
+
+/**
+ * One truth for what a send attempt produced. "sent" means the real provider
+ * accepted the message and gave us its reference; "simulated" means the dev
+ * transport logged it; "failed" is failed, with the reason in the audit.
+ */
+export async function recordSendOutcome(
+  sendId: string,
+  result: SendResult,
+): Promise<SendResult["status"]> {
+  await db.campaignSend.update({
+    where: { id: sendId },
+    data: {
+      status: result.status,
+      providerMessageId: result.providerId,
+      attempts: { increment: 1 },
+    },
+  });
+  return result.status;
+}
 
 export interface EmailProvider {
   name: string;
@@ -103,7 +128,9 @@ class DevLogProvider implements EmailProvider {
   name = "dev-log";
   async send(msg: OutboundEmail): Promise<SendResult> {
     console.log(`[dev-log send] to=${msg.to} subject="${msg.subject}" send=${msg.campaignSendId}`);
-    return { providerId: `dev_${msg.campaignSendId}`, status: "sent", detail: "Dev transport · no real email delivered" };
+    // "simulated", never "sent": a line in a log is not an email, and every
+    // counter in the product treats these rows accordingly.
+    return { providerId: `dev_${msg.campaignSendId}`, status: "simulated", detail: "Dev transport · no real email delivered" };
   }
 }
 

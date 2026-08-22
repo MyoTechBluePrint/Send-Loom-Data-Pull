@@ -124,7 +124,9 @@ export async function POST(req: NextRequest) {
   for (const to of recipients) {
     try {
       const r = await provider.send({ to, subject, html, campaignSendId: `${b.requestId}:${sent + failed}` });
-      if (r.status === "sent") { sent++; providerIds.push(r.providerId); } else failed++;
+      if (r.status === "sent" || r.status === "simulated") { sent++; providerIds.push(r.providerId); } else failed++;
+      // Integrators get the truth in the status field below; "simulated"
+      // counts as accepted here only so a staging integration can complete.
     } catch { failed++; }
   }
 

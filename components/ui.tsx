@@ -54,6 +54,7 @@ export function Stat({ label, value, delta, deltaGood = true, hint }: { label: s
           {delta} <span className="font-normal text-ink-3">{hint ?? "vs last 30 days"}</span>
         </p>
       )}
+      {!delta && hint && <p className="mt-1 text-xs font-normal text-ink-3">{hint}</p>}
     </Card>
   );
 }

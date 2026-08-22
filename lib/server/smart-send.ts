@@ -15,6 +15,7 @@
 
 import { db } from "@/lib/server/db";
 import { eligibleForChannel, type Channel } from "./consent";
+import { recordSendOutcome } from "./sending";
 import { audit } from "./audit";
 import { guard } from "./billing/guard";
 import { canSend } from "./subscription-states";
@@ -165,7 +166,10 @@ export async function smartSendProgress(campaignId: string): Promise<SmartSendPr
     db.campaignSend.groupBy({ by: ["status"], where: { campaignId }, _count: { _all: true } }),
   ]);
   const count = (s: string) => groups.find((g) => g.status === s)?._count._all ?? 0;
-  const sent = count("sent");
+  // "sent" here means the transport took it: real provider acceptance and
+  // dev-transport simulation both advance the gradual pipeline, and the UI
+  // labels simulated rows separately wherever numbers are shown.
+  const sent = count("sent") + count("delivered") + count("simulated");
   const queued = count("queued");
   const total = groups.reduce((n, g) => n + g._count._all, 0);
 
@@ -312,7 +316,7 @@ export async function runCampaignBatch(campaignId: string, now = new Date()): Pr
       const brand = campaign.brandId
         ? await db.brand.findUnique({ where: { id: campaign.brandId }, select: { senderName: true, senderEmail: true, replyToEmail: true } })
         : null;
-      await provider.send({
+      const result = await provider.send({
         to: email,
         subject: campaign.subject ?? campaign.name,
         html,
@@ -320,8 +324,8 @@ export async function runCampaignBatch(campaignId: string, now = new Date()): Pr
         from: brand?.senderEmail ? `${brand.senderName ?? "SendLoom"} <${brand.senderEmail}>` : undefined,
         replyTo: brand?.replyToEmail ?? undefined,
       });
-      await db.campaignSend.update({ where: { id: row.id }, data: { status: "sent" } });
-      sent++;
+      const status = await recordSendOutcome(row.id, result);
+      if (status !== "failed") sent++;
     } catch {
       await db.campaignSend.update({ where: { id: row.id }, data: { status: "failed" } });
     }

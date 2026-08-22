@@ -13,7 +13,7 @@
 
 import { db } from "./db";
 import { audit } from "./audit";
-import { activeProvider } from "./sending";
+import { activeProvider, recordSendOutcome } from "./sending";
 import { eligibleForChannel } from "./consent";
 import { renderForRecipient } from "./email-render";
 import { newBlockId, type EmailBlock } from "./email-blocks";
@@ -30,8 +30,11 @@ export const TRIGGER_EVENTS = [
 
 export interface EmailNodeConfig {
   subject?: string;
+  previewText?: string;
   /** Simple HTML for the body text block. */
   html?: string;
+  /** Step switch: a disabled step is skipped by the engine, content kept. */
+  disabled?: boolean;
   /** The shadow campaign backing this node's sends. */
   campaignId?: string;
 }
@@ -87,6 +90,49 @@ export async function enrolOnEvent(
   }
 }
 
+/**
+ * Retry failed automation sends, three strikes total.
+ *
+ * A provider hiccup should not permanently silence a welcome email. Failed
+ * rows under three attempts are put back through delivery on the next cron
+ * beat; at three they stay failed and the workflow page carries the ACTION
+ * REQUIRED card instead of the system quietly looping forever.
+ */
+export async function retryFailedSends(): Promise<number> {
+  const failed = await db.campaignSend.findMany({
+    where: {
+      status: "failed",
+      attempts: { lt: 3 },
+      campaign: { audienceType: "automation" },
+    },
+    include: {
+      campaign: { select: { audienceRef: true } },
+      contact: true,
+    },
+    take: 50,
+  });
+  let retried = 0;
+  for (const send of failed) {
+    if (!send.campaign.audienceRef) continue;
+    const automation = await db.automation.findUnique({
+      where: { id: send.campaign.audienceRef },
+      include: { nodes: true },
+    });
+    if (!automation) continue;
+    const node = automation.nodes.find((n) => {
+      const config = parseConfig<EmailNodeConfig>(n.config);
+      return config.campaignId === send.campaignId;
+    });
+    if (!node) continue;
+    // Reset to queued and walk the delivery again against the same row, so
+    // the attempts counter and the never-twice constraint both hold.
+    await db.campaignSend.update({ where: { id: send.id }, data: { status: "queued" } });
+    await redeliverExisting(automation, node, send.contact, send.id);
+    retried += 1;
+  }
+  return retried;
+}
+
 /** The cron half: push every due run forward. Called beside runDueBatches. */
 export async function advanceDueRuns(): Promise<number> {
   const due = await db.automationRun.findMany({
@@ -124,6 +170,14 @@ export async function advanceRun(runId: string) {
 
   while (index < nodes.length) {
     const node = nodes[index];
+
+    // A disabled step is skipped, never deleted: pausing one email in a
+    // series should not lose its wording or its send history.
+    const nodeConfig = parseConfig<{ disabled?: boolean }>(node.config);
+    if (nodeConfig.disabled) {
+      index += 1;
+      continue;
+    }
 
     if (node.kind === "trigger") {
       index += 1;
@@ -199,10 +253,16 @@ async function shadowCampaign(
 function blocksFor(node: { label: string; config: string | null }): EmailBlock[] {
   const config = parseConfig<EmailNodeConfig>(node.config);
   const html = config.html?.trim() || "<p>Thanks for signing up. We'll be in touch.</p>";
+  // The preheader is the line inboxes show after the subject. Hidden in the
+  // body itself, which is the only place email clients read it from.
+  const preheader = config.previewText?.trim()
+    ? `<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">${config.previewText.trim()}</div>`
+    : "";
   return [
-    { id: newBlockId(), type: "logo" },
-    { id: newBlockId(), type: "text", html },
-    { id: newBlockId(), type: "footer" },
+    ...(preheader ? [{ id: newBlockId(), type: "text" as const, html: preheader }] : []),
+    { id: newBlockId(), type: "logo" as const },
+    { id: newBlockId(), type: "text" as const, html },
+    { id: newBlockId(), type: "footer" as const },
   ];
 }
 
@@ -240,12 +300,27 @@ async function deliverEmailNode(
     return; // already sent by an earlier walk
   }
 
+  await redeliverExisting(automation, node, contact, send.id);
+}
+
+/** Render and deliver one email node against an existing send row. */
+async function redeliverExisting(
+  automation: { id: string; workspaceId: string; name: string },
+  node: { id: string; label: string; config: string | null },
+  contact: {
+    id: string; email: string | null;
+    firstName: string | null; lastName: string | null;
+  },
+  sendId: string,
+) {
+  if (!contact.email) return;
   const config = parseConfig<EmailNodeConfig>(node.config);
+  const campaign = await shadowCampaign(automation, node);
   try {
     const { html, textBody } = await renderForRecipient({
       workspaceId: automation.workspaceId,
       campaignId: campaign.id,
-      sendId: send.id,
+      sendId,
       contact: {
         id: contact.id,
         email: contact.email,
@@ -256,18 +331,23 @@ async function deliverEmailNode(
     });
     const provider = activeProvider();
     void textBody; // providers take html; the text part rides inside it
-    await provider.send({
+    const result = await provider.send({
       to: contact.email,
       subject: config.subject?.trim() || node.label,
       html,
-      campaignSendId: send.id,
+      campaignSendId: sendId,
     });
-    await db.campaignSend.update({ where: { id: send.id }, data: { status: "sent" } });
+    const status = await recordSendOutcome(sendId, result);
     await db.timelineItem.create({
       data: {
         contactId: contact.id,
         type: "email_sent",
-        title: `Automation email sent · ${automation.name}`,
+        title:
+          status === "sent"
+            ? `Automation email sent · ${automation.name}`
+            : status === "simulated"
+              ? `Automation email simulated (no live provider) · ${automation.name}`
+              : `Automation email failed · ${automation.name}`,
         detail: config.subject?.trim() || node.label,
       },
     });
@@ -279,7 +359,16 @@ async function deliverEmailNode(
     );
   } catch (error) {
     console.error("[sendloom] automation send failed", error);
-    await db.campaignSend.update({ where: { id: send.id }, data: { status: "failed" } });
+    await db.campaignSend.update({
+      where: { id: sendId },
+      data: { status: "failed", attempts: { increment: 1 } },
+    });
+    await audit(
+      automation.workspaceId,
+      "system:automation",
+      "automation.email_failed",
+      `'${automation.name}' → ${contact.email}: ${error instanceof Error ? error.message.slice(0, 200) : "unknown error"}`,
+    );
   }
 }
 

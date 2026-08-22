@@ -49,11 +49,14 @@ async function main() {
     where: { contactId: contact!.id, campaign: { audienceType: "automation", audienceRef: flow!.id } },
     include: { campaign: true },
   });
-  check("welcome email sent", send?.status === "sent", send?.status);
+  // Dev transport writes "simulated"; a live provider writes "sent". Both
+  // prove the journey executed; neither is confused with the other.
+  check("welcome email handed to the transport", send?.status === "sent" || send?.status === "simulated", send?.status);
+  check("provider reference captured", Boolean(send?.providerMessageId));
   check("shadow campaign named after the flow", (send?.campaign.name ?? "").includes(flow!.name));
 
   const timeline = await db.timelineItem.findMany({ where: { contactId: contact!.id } });
-  check("timeline shows the automation email", timeline.some((t) => t.title.includes("Automation email sent")));
+  check("timeline shows the automation email honestly", timeline.some((t) => t.title.includes("Automation email sent") || t.title.includes("Automation email simulated")));
   check("timeline shows the consent", timeline.some((t) => t.type === "consent"));
 
   const after = await db.automation.findUnique({ where: { id: flow!.id } });

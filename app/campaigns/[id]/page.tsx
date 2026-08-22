@@ -51,7 +51,12 @@ export default async function CampaignReport({ params }: { params: Promise<{ id:
     }
   }
 
-  const delivered = c.isDemo ? Math.round(c.audienceSnapshot * 0.984) : c.sends.filter((s) => s.status === "sent").length;
+  const delivered = c.isDemo
+    ? Math.round(c.audienceSnapshot * 0.984)
+    : c.sends.filter((s) => ["sent", "delivered"].includes(s.status)).length;
+  // Dev-transport rows, counted apart: a line in a log is not a delivery and
+  // must never inflate the numbers a marketer reads.
+  const simulated = c.isDemo ? 0 : c.sends.filter((s) => s.status === "simulated").length;
   const opened = c.isDemo ? Math.round(delivered * (c.openRate / 100)) : c.sends.filter((s) => s.openedAt).length;
   const clicked = c.isDemo ? Math.round(delivered * (c.clickRate / 100)) : c.sends.filter((s) => s.clickedAt).length;
 
@@ -103,7 +108,7 @@ export default async function CampaignReport({ params }: { params: Promise<{ id:
 
       <div className="mt-3 grid grid-cols-2 gap-4 xl:grid-cols-4">
         <Stat label="Recipients" value={num(c.audienceSnapshot)} />
-        <Stat label="Delivered" value={num(delivered)} />
+        <Stat label="Delivered" value={num(delivered)} hint={simulated > 0 ? `${num(simulated)} simulated (no live provider)` : undefined} />
         <Stat label="Open rate" value={delivered ? `${((opened / delivered) * 100).toFixed(1)}%` : "–"} />
         <Stat label="Click rate" value={delivered ? `${((clicked / delivered) * 100).toFixed(1)}%` : "–"} />
       </div>

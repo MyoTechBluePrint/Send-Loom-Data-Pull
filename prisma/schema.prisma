@@ -440,15 +440,22 @@ model Campaign {
 }
 
 model CampaignSend {
-  id         String    @id @default(cuid())
-  campaignId String
-  campaign   Campaign  @relation(fields: [campaignId], references: [id])
-  contactId  String
-  contact    Contact   @relation(fields: [contactId], references: [id])
-  status     String    @default("queued") // queued | sent | delivered | bounced | complained | failed | suppressed | cancelled
-  openedAt   DateTime?
-  clickedAt  DateTime?
-  createdAt  DateTime  @default(now())
+  id                String    @id @default(cuid())
+  campaignId        String
+  campaign          Campaign  @relation(fields: [campaignId], references: [id])
+  contactId         String
+  contact           Contact   @relation(fields: [contactId], references: [id])
+  status            String    @default("queued") // queued | sent | delivered | bounced | complained | failed | suppressed | cancelled
+  // The provider's own reference for this message, captured at acceptance.
+  // What turns "we believe it went" into "Resend accepted it as re_abc" and
+  // lets the delivery webhook mark true delivery.
+  providerMessageId String?
+  // Delivery attempts, for the retry sweep. Three strikes, then it stays
+  // failed and the failure is surfaced instead of retried forever.
+  attempts          Int       @default(0)
+  openedAt          DateTime?
+  clickedAt         DateTime?
+  createdAt         DateTime  @default(now())
 
   // One send record per contact per campaign, enforced by the database. This
   // is the duplicate-delivery guard: a retried batch job upserts against this

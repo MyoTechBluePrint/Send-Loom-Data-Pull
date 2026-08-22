@@ -9,7 +9,7 @@
 import { NextRequest } from "next/server";
 import { advanceAll } from "@/lib/server/billing/lifecycle";
 import { runDueBatches } from "@/lib/server/smart-send";
-import { advanceDueRuns, sweepWinback } from "@/lib/server/automations";
+import { advanceDueRuns, retryFailedSends, sweepWinback } from "@/lib/server/automations";
 import { currentUser, can } from "@/lib/server/permissions";
 
 export async function POST(req: NextRequest) {
@@ -32,11 +32,12 @@ export async function POST(req: NextRequest) {
   const batches = await runDueBatches();
   const automationRuns = await advanceDueRuns();
   const winbackEnrolled = await sweepWinback();
+  const retriedSends = await retryFailedSends();
   return Response.json({
     ok: true,
     ranBy: actor,
     changed: actions.length,
     actions,
-    smartSendBatches: batches, automationRuns, winbackEnrolled,
+    smartSendBatches: batches, automationRuns, winbackEnrolled, retriedSends,
   });
 }

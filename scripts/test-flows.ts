@@ -240,7 +240,7 @@ async function main() {
     check("dev transport used (no SES creds)", sendResult.provider === "dev-log");
     check("consent skips reported", sendResult.skippedConsent >= 1);
     check("suppressed contacts skipped", sendResult.skippedSuppressed >= 1);
-    const sendRows = await db.campaignSend.count({ where: { campaignId: camp.id, status: "sent" } });
+    const sendRows = await db.campaignSend.count({ where: { campaignId: camp.id, status: { in: ["sent", "simulated"] } } });
     check("send rows recorded", sendRows === sendResult.sent);
   }
   const resent = await sendCampaign(camp.id, "test-script");

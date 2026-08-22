@@ -13,10 +13,31 @@ export function AutomationStatusButton({ automationId, status }: { automationId:
   const router = useRouter();
   const [busy, setBusy] = useState(false);
 
-  if (status === "draft") return null;
+  const duplicate = (
+    <button
+      disabled={busy}
+      onClick={async () => {
+        setBusy(true);
+        try {
+          const res = await fetch(`/api/automations/${automationId}/duplicate`, { method: "POST" });
+          const json = await res.json();
+          if (json.ok) window.location.href = `/automations/${json.id}/edit`;
+        } finally {
+          setBusy(false);
+        }
+      }}
+      className="rounded-lg border border-line px-3.5 py-2 text-[13px] font-semibold text-ink-2 hover:bg-[#f0efec] disabled:opacity-50"
+    >
+      Duplicate
+    </button>
+  );
+
+  if (status === "draft") return duplicate;
 
   const next = status === "live" ? "paused" : "live";
   return (
+    <>
+    {duplicate}
     <button
       disabled={busy}
       onClick={async () => {
@@ -40,5 +61,6 @@ export function AutomationStatusButton({ automationId, status }: { automationId:
     >
       {busy ? "…" : status === "live" ? "Pause" : "Resume"}
     </button>
+    </>
   );
 }

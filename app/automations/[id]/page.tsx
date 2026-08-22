@@ -59,6 +59,7 @@ export default async function AutomationDetail({ params }: { params: Promise<{ i
     }),
   ]);
   const sent = sends.filter((s) => ["sent", "delivered"].includes(s.status)).reduce((n, s) => n + s._count, 0);
+  const simulated = sends.filter((s) => s.status === "simulated").reduce((n, s) => n + s._count, 0);
   const failedSends = sends.filter((s) => s.status === "failed").reduce((n, s) => n + s._count, 0);
   const lastRun = await db.automationRun.findFirst({
     where: { automationId: id },
@@ -118,7 +119,7 @@ export default async function AutomationDetail({ params }: { params: Promise<{ i
           <Stat label="Contacts entered" value={num(row?.entered ?? auto.entered)} />
           <Stat label="In workflow now" value={num(runningCount)} />
           <Stat label="Completed" value={num(row?.completed ?? auto.completed)} />
-          <Stat label="Emails sent" value={num(sent)} />
+          <Stat label="Emails sent" value={num(sent)} hint={simulated > 0 ? `${num(simulated)} simulated (no live provider)` : undefined} />
           <Stat
             label="Last triggered"
             value={lastRun ? lastRun.startedAt.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "Never"}

@@ -37,6 +37,9 @@ export function WorkflowEditor({ automationId }: { automationId: string }) {
   const [flash, setFlash] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [dragging, setDragging] = useState<number | null>(null);
+  const [preview, setPreview] = useState<{ html: string; subject: string } | null>(null);
+  const [testResult, setTestResult] = useState<string | null>(null);
+  const [confirmTest, setConfirmTest] = useState<NodeDraft | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -176,6 +179,71 @@ export function WorkflowEditor({ automationId }: { automationId: string }) {
       {flash && <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800">{flash}</div>}
       {problem && <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700">{problem}</div>}
 
+      {preview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setPreview(null)}>
+          <div onClick={(e) => e.stopPropagation()} className="flex h-[85vh] w-full max-w-2xl flex-col rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-line px-5 py-3">
+              <p className="text-sm font-semibold">Preview · {preview.subject}</p>
+              <button onClick={() => setPreview(null)} className="text-sm font-semibold text-ink-3 hover:text-ink-2">Close</button>
+            </div>
+            <iframe title="Email preview" srcDoc={preview.html} className="w-full flex-1 rounded-b-2xl" />
+          </div>
+        </div>
+      )}
+
+      {confirmTest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setConfirmTest(null)}>
+          <div onClick={(e) => e.stopPropagation()} className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl">
+            <h2 className="text-base font-semibold">Send a test email?</h2>
+            <p className="mt-2 text-[13px] leading-relaxed text-ink-2">
+              One email goes to <b>you only</b>, never to customers. The reply
+              will say which transport carried it, so a dev-log test is never
+              mistaken for a delivered one.
+            </p>
+            <dl className="mt-3 space-y-1 rounded-lg border border-line px-3 py-2 text-[12.5px]">
+              <div className="flex justify-between"><dt className="text-ink-3">Subject</dt><dd className="font-medium">[Test] {String(confirmTest.config.subject || confirmTest.label)}</dd></div>
+              <div className="flex justify-between"><dt className="text-ink-3">Channel</dt><dd className="font-medium">Email</dd></div>
+            </dl>
+            <div className="mt-4 flex justify-end gap-2">
+              <button onClick={() => setConfirmTest(null)} className="rounded-lg border border-line px-3.5 py-2 text-[13px] font-semibold text-ink-2 hover:bg-[#f0efec]">Cancel</button>
+              <button
+                disabled={busy !== null}
+                onClick={async () => {
+                  setBusy("test");
+                  try {
+                    const res = await fetch(`/api/automations/${automationId}/test-send`, {
+                      method: "POST", headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ subject: confirmTest.config.subject, previewText: confirmTest.config.previewText, html: confirmTest.config.html }),
+                    });
+                    const json = await res.json();
+                    setTestResult(
+                      json.ok
+                        ? json.real
+                          ? `Real email sent to ${json.to} via ${json.transport}${json.providerMessageId ? ` · provider id ${json.providerMessageId}` : ""}`
+                          : `Simulated only: written to the ${json.transport} transport, no real email delivered. Connect the provider to send for real.`
+                        : `Test failed: ${json.detail ?? "provider refused"}`,
+                    );
+                    setConfirmTest(null);
+                  } finally {
+                    setBusy(null);
+                  }
+                }}
+                className="rounded-lg bg-brand px-3.5 py-2 text-[13px] font-semibold text-white hover:bg-[#5b21b6] disabled:opacity-50"
+              >
+                {busy === "test" ? "Sending…" : "Send test to me"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {testResult && (
+        <div className="mt-3 rounded-lg border border-line bg-surface px-4 py-2.5 text-sm text-ink-2">
+          {testResult}
+          <button onClick={() => setTestResult(null)} className="ml-3 text-xs font-semibold text-ink-3 hover:text-ink-2">Dismiss</button>
+        </div>
+      )}
+
       <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_320px]">
         <div>
           {nodes.map((n, at) => (
@@ -207,6 +275,24 @@ export function WorkflowEditor({ automationId }: { automationId: string }) {
                 onConfig={(k, v) => updateConfig(at, k, v)}
                 onMove={(dir) => move(at, dir)}
                 onRemove={() => remove(at)}
+                onPreview={async () => {
+                  const res = await fetch(`/api/automations/${automationId}/preview`, {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ subject: n.config.subject, previewText: n.config.previewText, html: n.config.html }),
+                  });
+                  const json = await res.json();
+                  if (json.ok) setPreview({ html: json.html, subject: String(n.config.subject ?? n.label) });
+                }}
+                onTest={() => setConfirmTest(n)}
+                onDuplicate={() =>
+                  setNodes((ns) => {
+                    const copy: NodeDraft = { kind: n.kind, label: `${n.label} (copy)`, detail: n.detail, config: { ...n.config } };
+                    delete (copy.config as Record<string, unknown>).campaignId;
+                    const next = [...ns];
+                    next.splice(at + 1, 0, copy);
+                    return next;
+                  })
+                }
               />
             </div>
           ))}
@@ -263,7 +349,7 @@ export function WorkflowEditor({ automationId }: { automationId: string }) {
 
 function StepCard({
   node, first, last, triggerOptions, triggerEvent,
-  onTrigger, onChange, onConfig, onMove, onRemove,
+  onTrigger, onChange, onConfig, onMove, onRemove, onPreview, onTest, onDuplicate,
 }: {
   node: NodeDraft;
   first: boolean;
@@ -275,6 +361,9 @@ function StepCard({
   onConfig: (key: string, value: unknown) => void;
   onMove: (dir: -1 | 1) => void;
   onRemove: () => void;
+  onPreview: () => void;
+  onTest: () => void;
+  onDuplicate: () => void;
 }) {
   const chrome: Record<string, { border: string; chip: string; icon: string; word: string }> = {
     trigger: { border: "border-violet-300", chip: "bg-violet-100 text-violet-700", icon: "⚡", word: "Trigger" },
@@ -292,6 +381,20 @@ function StepCard({
         <div className="ml-auto flex items-center gap-1">
           {node.kind !== "trigger" && (
             <>
+              {node.kind === "email" && (
+                <>
+                  <button onClick={onPreview} className="rounded px-2 py-0.5 text-xs font-semibold text-brand hover:bg-brand-soft">Preview</button>
+                  <button onClick={onTest} className="rounded px-2 py-0.5 text-xs font-semibold text-brand hover:bg-brand-soft">Test send</button>
+                </>
+              )}
+              <button
+                onClick={() => onConfig("disabled", !node.config.disabled)}
+                className={`rounded px-2 py-0.5 text-xs font-semibold ${node.config.disabled ? "bg-zinc-200 text-zinc-600" : "text-ink-3 hover:bg-[#f0efec]"}`}
+                title={node.config.disabled ? "Step is off: the workflow skips it" : "Turn this step off without deleting it"}
+              >
+                {node.config.disabled ? "Off" : "On"}
+              </button>
+              <button onClick={onDuplicate} className="rounded px-1.5 py-0.5 text-xs text-ink-3 hover:bg-[#f0efec]" aria-label="Duplicate step" title="Duplicate step">⧉</button>
               <button onClick={() => onMove(-1)} disabled={first} className="rounded px-1.5 py-0.5 text-xs text-ink-3 hover:bg-[#f0efec] disabled:opacity-30" aria-label="Move up">↑</button>
               <button onClick={() => onMove(1)} disabled={last} className="rounded px-1.5 py-0.5 text-xs text-ink-3 hover:bg-[#f0efec] disabled:opacity-30" aria-label="Move down">↓</button>
               <button onClick={onRemove} className="rounded px-1.5 py-0.5 text-xs text-red-500 hover:bg-red-50" aria-label="Remove step">✕</button>
@@ -332,6 +435,15 @@ function StepCard({
               value={String(node.config.subject ?? "")}
               onChange={(e) => onConfig("subject", e.target.value)}
               placeholder="Welcome — here's your code"
+              className="mt-1 w-full rounded-lg border border-line px-3 py-2 text-sm outline-none focus:border-brand"
+            />
+          </div>
+          <div>
+            <p className="text-xs font-medium text-ink-3">Preview text <span className="font-normal">(the line inboxes show after the subject)</span></p>
+            <input
+              value={String(node.config.previewText ?? "")}
+              onChange={(e) => onConfig("previewText", e.target.value)}
+              placeholder="Your discount code is inside"
               className="mt-1 w-full rounded-lg border border-line px-3 py-2 text-sm outline-none focus:border-brand"
             />
           </div>
