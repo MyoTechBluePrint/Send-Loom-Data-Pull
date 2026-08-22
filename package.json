@@ -15,7 +15,8 @@
     "db:seed-plans": "tsx scripts/seed-plans.ts",
     "postinstall": "prisma generate",
     "plugin:zip": "bash scripts/build-plugin.sh",
-    "test:consent": "tsx scripts/test-consent.ts"
+    "test:consent": "tsx scripts/test-consent.ts",
+    "test:welcome": "tsx scripts/test-welcome.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

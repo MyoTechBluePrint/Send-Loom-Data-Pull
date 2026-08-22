@@ -141,7 +141,7 @@ export default async function Dashboard() {
     >
       {/* Growth snapshot */}
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-        <Stat label="Attributed revenue" value={gbp(48219)} delta="↑ 14.2%" />
+        <Stat label="Attributed revenue" value={gbp(48219)} delta="↑ 14.2%" hint="vs last 30 days · seeded demo" />
         <Stat label="Contacts in database" value={num(contacts)} delta="live" hint="from imports, inbox, store" />
         <Link href="/subscribers">
           <Card className="h-full px-5 py-4 transition-shadow hover:shadow-md">

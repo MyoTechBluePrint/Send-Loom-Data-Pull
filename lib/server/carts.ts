@@ -3,6 +3,7 @@
 // purchases convert or recover; recovered revenue is only attributed when the
 // recovery link was actually clicked. Sweeps run opportunistically on plugin
 // traffic (throttled) and via POST /api/v1/sweep for cron.
+import { enrolOnEvent } from "./automations";
 import { db } from "./db";
 import { audit } from "./audit";
 
@@ -94,6 +95,19 @@ export async function sweepAbandoned(force = false) {
   const cartCutoff = new Date(Date.now() - CART_ABANDON_MINUTES * 60_000);
   const checkoutCutoff = new Date(Date.now() - CHECKOUT_ABANDON_MINUTES * 60_000);
 
+  // Who is about to be flipped, captured first, because genuine abandonment
+  // is the trigger the recovery workflows run on and updateMany tells nobody.
+  const flipping = await db.cart.findMany({
+    where: {
+      OR: [
+        { status: "open", lastActivityAt: { lt: cartCutoff } },
+        { status: "checkout_started", lastActivityAt: { lt: checkoutCutoff } },
+      ],
+      contactId: { not: null },
+    },
+    select: { contactId: true, store: { select: { workspaceId: true } } },
+  });
+
   const [cartRes, checkoutRes] = await Promise.all([
     db.cart.updateMany({
       where: { status: "open", lastActivityAt: { lt: cartCutoff } },
@@ -104,6 +118,14 @@ export async function sweepAbandoned(force = false) {
       data: { status: "abandoned_checkout", abandonedAt: new Date() },
     }),
   ]);
+
+  for (const cart of flipping) {
+    if (!cart.contactId) continue;
+    await enrolOnEvent(cart.store.workspaceId, "cart_abandoned", cart.contactId).catch((err) =>
+      console.error("[sendloom] abandonment enrol failed", err),
+    );
+  }
+
   return { swept: cartRes.count + checkoutRes.count };
 }
 

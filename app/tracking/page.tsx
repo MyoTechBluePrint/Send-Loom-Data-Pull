@@ -21,6 +21,31 @@ export default async function TrackingPage() {
   const showKeys = can(user?.role ?? "viewer", "manage_users");
   const canDownload = can(user?.role ?? "viewer", "download_plugin");
 
+  // The health panel's raw material: when each store last spoke, when a
+  // contact last arrived, and whether the machines that answer are on.
+  const [lastContactSource, liveForms, liveAutomations, recentConsent, recentAutoSends] = await Promise.all([
+    db.contactSource.findFirst({
+      where: { sourceType: { in: ["popup", "api", "checkout"] } },
+      orderBy: { createdAt: "desc" },
+      include: { contact: { select: { email: true } } },
+    }),
+    db.form.count({ where: { workspaceId: wsId, status: "live" } }),
+    db.automation.count({ where: { workspaceId: wsId, status: "live" } }),
+    db.timelineItem.findMany({
+      where: { type: "consent" },
+      orderBy: { occurredAt: "desc" }, take: 6,
+      include: { contact: { select: { email: true, workspaceId: true } } },
+    }),
+    db.campaignSend.findMany({
+      where: { campaign: { workspaceId: wsId, audienceType: "automation" } },
+      orderBy: { createdAt: "desc" }, take: 6,
+      include: { campaign: { select: { name: true } }, contact: { select: { email: true } } },
+    }),
+  ]);
+  const providerArmed =
+    process.env.EMAIL_SENDING_ENABLED === "true" &&
+    Boolean(process.env.RESEND_API_KEY || process.env.AWS_ACCESS_KEY_ID);
+
   const [stores, events, stats, rejects] = await Promise.all([
     db.store.findMany({ where: { workspaceId: wsId }, orderBy: { createdAt: "asc" } }),
     db.event.findMany({
@@ -53,6 +78,28 @@ export default async function TrackingPage() {
       kind: isTest ? ("test" as const) : fromTracker ? ("storefront" as const) : ("server" as const),
     };
   });
+  // One merged stream of the moments that prove the pipes are alive:
+  // storefront events, consent recordings, automation sends.
+  const activity = [
+    ...events.slice(0, 10).map((e) => ({
+      at: e.occurredAt,
+      text: `${e.type.replace(/_/g, " ")}${e.store?.name ? ` · ${e.store.name}` : ""}${e.contact?.email ? ` · ${e.contact.email}` : ""}`,
+    })),
+    ...recentConsent
+      .filter((t) => t.contact.workspaceId === wsId)
+      .map((t) => ({ at: t.occurredAt, text: `${t.title} · ${t.contact.email ?? "contact"}` })),
+    ...recentAutoSends.map((sd) => ({
+      at: sd.createdAt,
+      text: `${sd.status === "sent" ? "Automation email sent" : `Automation email ${sd.status}`} · ${sd.campaign.name}${sd.contact?.email ? ` · ${sd.contact.email}` : ""}`,
+    })),
+  ]
+    .sort((a, b) => b.at.getTime() - a.at.getTime())
+    .slice(0, 12)
+    .map((a) => ({
+      time: a.at.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
+      text: a.text,
+    }));
+
   const cartsQuiet = stats.open + stats.checkoutStarted + stats.abandoned + stats.abandonedCheckout + stats.converted + stats.recovered === 0;
 
   // Known risks: proactive checks instead of reactive debugging.
@@ -81,6 +128,59 @@ export default async function TrackingPage() {
       subtitle="Live events, cart lifecycle and store connections · install checks for MyoTech and Novatec"
       actions={<div className="flex items-center gap-2"><LiveRefresh /><TrackingTestButtons /></div>}
     >
+      {/* Health at a glance: whether the store and Sendloom are actually
+          talking, answerable in seconds. Green means an event inside the
+          last day; everything here is computed from real rows. */}
+      <div className="mb-4 grid gap-4 lg:grid-cols-[1fr_360px]">
+        <Card>
+          <CardHeader title="Connection health" subtitle="Live state of the pipes, per store" />
+          <div className="space-y-3 px-5 py-4">
+            {stores.map((store) => {
+              const lastEvent = events.find((e) => e.storeId === store.id)?.occurredAt ?? null;
+              const trackerActive = lastEvent ? Date.now() - lastEvent.getTime() < 24 * 3600 * 1000 : false;
+              const item = (label: string, ok: boolean, detail: string) => (
+                <span key={label} className="flex items-center gap-1.5 text-[12.5px]">
+                  <span className={`inline-block h-2 w-2 rounded-full ${ok ? "bg-emerald-500" : "bg-red-500"}`} />
+                  <span className="font-medium">{label}</span>
+                  <span className="text-ink-3">{detail}</span>
+                </span>
+              );
+              return (
+                <div key={store.id} className="rounded-xl border border-line px-4 py-3">
+                  <p className="text-[13px] font-semibold">{store.name} <span className="ml-1 text-xs font-normal text-ink-3">{store.url}</span></p>
+                  <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1.5">
+                    {item("Store connected", store.status === "connected", "")}
+                    {item("Tracker", trackerActive, lastEvent ? `last event ${lastEvent.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : "no events yet")}
+                    {item("Popups", liveForms > 0, `${liveForms} live`)}
+                    {item("Automations", liveAutomations > 0, `${liveAutomations} live`)}
+                    {item("Email sending", providerArmed, providerArmed ? "connected" : "dev log only · set provider keys")}
+                  </div>
+                  {lastContactSource && (
+                    <p className="mt-2 text-[11.5px] text-ink-3">
+                      Last contact captured: {lastContactSource.createdAt.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} · {lastContactSource.contact.email ?? "phone-only"} · {lastContactSource.source}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+            {stores.length === 0 && <p className="text-sm text-ink-3">No stores connected yet.</p>}
+          </div>
+        </Card>
+
+        <Card>
+          <CardHeader title="Live activity" subtitle="The pipes, in real time" />
+          <div className="px-5 py-3">
+            {activity.length === 0 && <p className="py-2 text-sm text-ink-3">Quiet right now.</p>}
+            {activity.map((a, i) => (
+              <p key={i} className="border-b border-line py-1.5 text-[12.5px] last:border-0">
+                <span className="tabular mr-2 text-ink-3">{a.time}</span>
+                {a.text}
+              </p>
+            ))}
+          </div>
+        </Card>
+      </div>
+
       {/* Stores */}
       <Card>
         <CardHeader

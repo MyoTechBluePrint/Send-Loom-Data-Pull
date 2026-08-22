@@ -62,9 +62,11 @@ export default function SettingsPage() {
                 </div>
               ))}
             </dl>
+            {/* "Run manual sync" was a dead button with no sync behind it, so
+                it is gone until a real sync endpoint exists. Error history
+                lives on the tracking page. */}
             <div className="flex gap-2 border-t border-line px-5 py-4">
-              <GhostButton>Run manual sync</GhostButton>
-              <GhostButton>View error log</GhostButton>
+              <Link href="/tracking"><GhostButton>View error log</GhostButton></Link>
             </div>
           </Card>
           <Card>
@@ -128,7 +130,7 @@ export default function SettingsPage() {
 
       {tab === "Team" && (
         <Card>
-          <CardHeader title="Members & roles" action={<PrimaryButton>Invite member</PrimaryButton>} />
+          <CardHeader title="Members & roles" action={<Link href="/team"><PrimaryButton>Invite member</PrimaryButton></Link>} />
           <div className="overflow-x-auto scroll-thin"><table className="w-full min-w-[520px]">
             <tbody className="divide-y divide-line text-sm">
               {[
@@ -173,7 +175,9 @@ export default function SettingsPage() {
       {tab === "API & webhooks" && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Card>
-            <CardHeader title="API keys" action={<GhostButton>Create key</GhostButton>} />
+            {/* No create-key endpoint exists yet, so the header carries no
+                action rather than a button that does nothing. */}
+            <CardHeader title="API keys" />
             <div className="space-y-3 px-5 py-4 text-sm">
               {[
                 ["Production", "slm_live_••••••••••4f2a", "Full access"],
@@ -191,7 +195,9 @@ export default function SettingsPage() {
             </div>
           </Card>
           <Card>
-            <CardHeader title="Outbound webhooks" action={<GhostButton>Add endpoint</GhostButton>} />
+            {/* Same reasoning as API keys: no add-endpoint route exists, so no
+                dead button. */}
+            <CardHeader title="Outbound webhooks" />
             <div className="space-y-3 px-5 py-4 text-sm">
               <div className="rounded-lg border border-line px-3.5 py-2.5">
                 <code className="text-xs font-semibold">https://hooks.vitaliswellness.co.uk/sendloom</code>

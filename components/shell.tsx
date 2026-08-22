@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { UpdateBanner } from "./update-banner";
 import { usePathname } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
 import { Walkthrough, WALKTHROUGH_KEY } from "@/components/walkthrough";
@@ -68,6 +69,7 @@ const nav: { section?: string; items: { href: string; label: string; icon: strin
       { href: "/settings/billing", label: "Billing", icon: "◈" },
       { href: "/settings", label: "Settings", icon: "⚙" },
       { href: "/team-handover", label: "Handover Guide", icon: "✦" },
+      { href: "/whats-new", label: "What's New", icon: "★" },
     ],
   },
 ];
@@ -79,6 +81,12 @@ export function Shell({ children, title, subtitle, actions }: { children: ReactN
   useEffect(() => {
     fetch("/api/auth/me").then((r) => (r.ok ? r.json() : null)).then((j) => j?.ok && setMe(j)).catch(() => {});
   }, []);
+  // Staging chrome (the no-live-sending banner and the launch-workspace card)
+  // follows the env reported by /api/auth/me instead of being hard-coded, so
+  // production accounts never see staging warnings. Until the fetch resolves
+  // we show nothing rather than flashing a wrong banner.
+  const env = (me?.env ?? "").toLowerCase();
+  const isStaging = env.includes("staging") || env.includes("no-live") || env.includes("no live");
   return (
     <div className="flex min-h-screen">
       {navOpen && <button aria-label="Close menu" onClick={() => setNavOpen(false)} className="fixed inset-0 z-30 bg-black/50 lg:hidden" />}
@@ -122,7 +130,10 @@ export function Shell({ children, title, subtitle, actions }: { children: ReactN
             </div>
           ))}
         </nav>
-        <div className="mx-3 mb-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2.5">
+        {/* last:mb-4 keeps the bottom spacing correct when the staging
+            launch-workspace card below is hidden and this becomes the
+            final block in the sidebar. */}
+        <div className="mx-3 mb-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 last:mb-4">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
               <p className="truncate text-xs font-semibold">{me?.name ?? "Signed in"}</p>
@@ -152,24 +163,30 @@ export function Shell({ children, title, subtitle, actions }: { children: ReactN
             <Link href="/feedback" className="text-[10px] font-semibold text-white/60 hover:text-white">Feedback</Link>
           </div>
         </div>
-        <div className="mx-3 mb-4 rounded-lg border border-white/10 bg-white/5 px-3 py-3">
-          <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-amber-400" />
-            <p className="truncate text-xs font-medium">Launch workspace</p>
+        {isStaging && (
+          <div className="mx-3 mb-4 rounded-lg border border-white/10 bg-white/5 px-3 py-3">
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-amber-400" />
+              <p className="truncate text-xs font-medium">Launch workspace</p>
+            </div>
+            <p className="mt-1 text-[11px] text-white/50">MyoTech · Novatec · fresh data only</p>
+            <p className="mt-1.5 inline-block rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-white/70">
+              Sector mode: Health & Wellness
+            </p>
           </div>
-          <p className="mt-1 text-[11px] text-white/50">MyoTech · Novatec · fresh data only</p>
-          <p className="mt-1.5 inline-block rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-white/70">
-            Sector mode: Health & Wellness
-          </p>
-        </div>
+        )}
       </aside>
 
       <div className="flex-1 lg:ml-60">
-        <div className="flex items-center justify-center gap-2 bg-[#14121f] px-4 py-1.5 text-center text-[11px] font-medium text-white/80">
-          <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-          Sendloom Staging · No live sending · use test data only
-          <Link href="/team-handover" className="font-bold text-white underline underline-offset-2 hover:text-amber-200">What to try →</Link>
-        </div>
+        {isStaging && (
+          <div className="flex items-center justify-center gap-2 bg-[#14121f] px-4 py-1.5 text-center text-[11px] font-medium text-white/80">
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+            {me?.env === "Staging"
+              ? "Sendloom Staging · No live sending · use test data only"
+              : "Email sending is not connected yet · campaigns and automations record sends without delivering"}
+            <Link href="/team-handover" className="font-bold text-white underline underline-offset-2 hover:text-amber-200">What to try →</Link>
+          </div>
+        )}
         <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-line bg-[rgba(247,247,245,0.85)] px-8 py-4 backdrop-blur max-xl:px-5">
           <button
             aria-label="Open menu"
@@ -197,6 +214,7 @@ export function Shell({ children, title, subtitle, actions }: { children: ReactN
           {/* Renders nothing for complimentary and enterprise accounts, so the
               in-house workspaces see the app exactly as they always have. */}
           <TrialStatus />
+          <UpdateBanner />
           {children}
         </main>
         <Walkthrough />

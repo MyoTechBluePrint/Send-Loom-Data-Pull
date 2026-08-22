@@ -4,7 +4,7 @@
 // POST /api/imports → review → confirm. Nothing here is simulated.
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Shell, GhostButton } from "@/components/shell";
 import { Card, CardHeader, Badge, Th, Td } from "@/components/ui";
 import { gbp, num, type ImportBatch } from "@/lib/data";
@@ -78,6 +78,9 @@ export function ImportsClient({ batches, folders }: { batches: ImportBatch[]; fo
   const [batchLabel, setBatchLabel] = useState<string | null>(null);
   const [projectId, setProjectId] = useState<string | null>(null);
   const MAX_BROWSER_BYTES = 4 * 1024 * 1024;
+  // Hidden input behind the wizard's step-0 panel, so clicking the panel opens
+  // the file picker instead of leaving the panel decorative.
+  const wizardFileRef = useRef<HTMLInputElement>(null);
 
   // Auto-suggested tags: brand names in the filename, the file's detected
   // kind, and the library folder it is being filed into. Prefilled so mass
@@ -146,6 +149,57 @@ export function ImportsClient({ batches, folders }: { batches: ImportBatch[]; fo
         setJobs((j) => j.map((x) => x.id === id ? { ...x, status: "failed", note: "Could not read this file." } : x));
       }
     }
+  }
+
+  // Files dropped or picked on the wizard's step-0 panel go through the same
+  // classification pipeline as the main dropzone. The wizard closes first
+  // because the job cards that show classification progress only render on the
+  // dropzone view; leaving the wizard open would make the drop look ignored.
+  function wizardFiles(files: FileList | File[]) {
+    const accepted = Array.from(files).filter((f) => /\.(csv|txt)$/i.test(f.name));
+    if (accepted.length === 0) {
+      setError("Only CSV and TXT files can be dropped here for now.");
+      return;
+    }
+    setWizard(false);
+    handleFiles(accepted);
+  }
+
+  // Builds the CSV template in the browser from the live field list, so the
+  // download can never drift out of sync with what the field mapper accepts.
+  function downloadTemplate() {
+    const keys = Object.keys(FIELD_LABELS).filter((k) => k !== "custom" && k !== "ignore");
+    const example: Record<string, string> = {
+      email: "laura.chen@example.com",
+      firstName: "Laura",
+      lastName: "Chen",
+      phone: "+44 7700 900123",
+      country: "United Kingdom",
+      city: "London",
+      postcode: "SW1A 1AA",
+      productInterest: "weight management",
+      keywordInterest: "collagen peptides",
+      source: "Website signup",
+      campaign: "summer-launch",
+      consent: "yes",
+      emailConsent: "yes",
+      smsConsent: "no",
+      whatsappConsent: "yes",
+      doNotContact: "no",
+      consentDate: "2026-08-01",
+      consentSource: "Website signup",
+      orderValue: "129.50",
+      lastOrderDate: "2026-07-15",
+      tags: "newsletter; vip",
+      notes: "Asked about GLP-1 support",
+    };
+    const csv = [keys.join(","), keys.map((k) => example[k] ?? "").join(",")].join("\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "sendloom-contact-template.csv";
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   async function jobToWizard(job: Job) {
@@ -275,7 +329,7 @@ export function ImportsClient({ batches, folders }: { batches: ImportBatch[]; fo
           </button>
         ) : (
           <>
-            <GhostButton>Download templates</GhostButton>
+            <GhostButton onClick={downloadTemplate}>Download templates</GhostButton>
             <button onClick={() => { setWizard(true); setStep(0); setResult(null); }} className="rounded-lg bg-[#6d28d9] px-3.5 py-2 text-[13px] font-semibold text-white shadow-sm hover:bg-[#5b21b6]">
               New import
             </button>
@@ -337,7 +391,16 @@ export function ImportsClient({ batches, folders }: { batches: ImportBatch[]; fo
             <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
               <label className="cursor-pointer rounded-lg bg-brand px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#5b21b6]">
                 Upload files
-                <input type="file" multiple accept=".csv,.txt,.xlsx" className="hidden" onChange={(e) => e.target.files && handleFiles(e.target.files)} />
+                {/* The value is cleared after each pick so choosing the same
+                    file twice still fires onChange; the FileList is snapshotted
+                    first because clearing empties the live list. */}
+                <input
+                  type="file" multiple accept=".csv,.txt,.xlsx" className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files?.length) handleFiles(Array.from(e.target.files));
+                    e.target.value = "";
+                  }}
+                />
               </label>
               <button onClick={() => { setWizard(true); setStep(0); setResult(null); }} className="rounded-lg border border-line bg-surface px-4 py-2 text-[13px] font-semibold text-ink-2 hover:bg-[#f0efec]">
                 Try the demo file
@@ -521,11 +584,29 @@ export function ImportsClient({ batches, folders }: { batches: ImportBatch[]; fo
 
           {step === 0 && (
             <Card className="mx-auto max-w-2xl">
-              <div className="flex flex-col items-center border-2 border-dashed border-line px-8 py-16 text-center" style={{ borderRadius: 12 }}>
+              {/* Sharing dragOver with the main dropzone is safe because the
+                  two panels never render at the same time. */}
+              <div
+                onClick={() => wizardFileRef.current?.click()}
+                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={(e) => { e.preventDefault(); setDragOver(false); wizardFiles(e.dataTransfer.files); }}
+                className={`flex cursor-pointer flex-col items-center border-2 border-dashed px-8 py-16 text-center transition-colors ${dragOver ? "border-brand bg-brand-soft" : "border-line"}`}
+                style={{ borderRadius: 12 }}
+              >
+                <input
+                  ref={wizardFileRef}
+                  type="file" multiple accept=".csv,.txt" className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files?.length) wizardFiles(Array.from(e.target.files));
+                    // Cleared so re-selecting the same file fires onChange again.
+                    e.target.value = "";
+                  }}
+                />
                 <p className="text-3xl">⇪</p>
                 <p className="mt-3 text-sm font-semibold">Drop a CSV here</p>
-                <p className="mt-1 text-xs text-ink-3">Columns detected automatically · XLSX/JSON planned</p>
-                <button disabled={busy} onClick={startDemoUpload} className="mt-5 rounded-lg bg-brand px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#5b21b6] disabled:opacity-50">
+                <p className="mt-1 text-xs text-ink-3">Or click to browse · columns detected automatically · XLSX/JSON planned</p>
+                <button disabled={busy} onClick={(e) => { e.stopPropagation(); startDemoUpload(); }} className="mt-5 rounded-lg bg-brand px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#5b21b6] disabled:opacity-50">
                   Use demo file: webinar-attendees-july.csv (12 rows)
                 </button>
                 <p className="mt-2 text-[11px] text-ink-3">The demo file is deliberately dirty: duplicates, a disposable domain, an invalid email and two suppressed contacts.</p>
@@ -566,11 +647,6 @@ export function ImportsClient({ batches, folders }: { batches: ImportBatch[]; fo
                       </Td>
                     </tr>
                   ))}
-                  {visibleBatches.length === 0 && (
-                    <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-ink-3">
-                      {activeFolderName ? `Nothing filed in ${activeFolderName} yet. Drop files while this folder is selected, or move existing imports here with the folder dropdown.` : "No imports yet."}
-                    </td></tr>
-                  )}
                 </tbody>
               </table></div>
             </Card>

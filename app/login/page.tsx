@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 
@@ -75,7 +76,10 @@ function LoginForm() {
           >
             {busy ? "Signing in…" : "Sign in"}
           </button>
-          <p className="mt-4 text-center text-[11px] text-ink-3">No password reset yet · ask Steve if you're locked out</p>
+          <p className="mt-4 text-center text-xs text-ink-2">
+            New to Sendloom? <Link href="/signup" className="font-semibold text-brand hover:underline">Start your free trial</Link>
+          </p>
+          <p className="mt-2 text-center text-[11px] text-ink-3">No password reset yet · ask Steve if you're locked out</p>
         </form>
       </div>
     </div>

@@ -36,6 +36,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
       name: automation.name,
       trigger: automation.trigger,
       triggerEvent: automation.triggerEvent,
+      allowReentry: automation.allowReentry,
       status: automation.status,
       nodes: automation.nodes
         .filter((n) => !n.branch)
@@ -56,6 +57,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
 const Patch = z.object({
   name: z.string().min(1).max(120).optional(),
   triggerEvent: z.string().max(60).nullable().optional(),
+  allowReentry: z.boolean().optional(),
   status: z.enum(["live", "paused", "draft"]).optional(),
 });
 
@@ -86,6 +88,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     data: {
       ...(d.name !== undefined ? { name: d.name } : {}),
       ...(d.triggerEvent !== undefined ? { triggerEvent: d.triggerEvent, trigger } : {}),
+      ...(d.allowReentry !== undefined ? { allowReentry: d.allowReentry } : {}),
       ...(d.status !== undefined ? { status: d.status, isDemo: false } : {}),
     },
   });

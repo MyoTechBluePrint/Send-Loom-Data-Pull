@@ -3,7 +3,7 @@
 import { recordConsent } from "./consent";
 // calls eventIngestionService.process(); later this body moves behind a queue
 // worker without the callers changing.
-import { enrolOnEvent } from "./automations";
+import { enrolOnEvent, stopRecoveryRunsOnPurchase } from "./automations";
 import { db } from "./db";
 import { audit } from "./audit";
 import { recomputeLeadScore } from "./scoring";
@@ -226,6 +226,9 @@ export const eventIngestionService = {
       await enrolOnEvent(e.workspaceId, e.type, contactId).catch((err) =>
         console.error("[sendloom] automation enrol failed", err),
       );
+      if (e.type === "purchase_completed") {
+        await stopRecoveryRunsOnPurchase(contactId).catch(() => {});
+      }
 
       // 5. Rescore.
       if (def.affectsScoring) await recomputeLeadScore(contactId);

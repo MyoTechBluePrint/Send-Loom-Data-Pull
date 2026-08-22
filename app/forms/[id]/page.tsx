@@ -9,6 +9,7 @@ import { num } from "@/lib/data";
 import { FormEditor } from "@/components/form-editor";
 import { FormImageEditor } from "@/components/form-image-editor";
 import { FormStepsEditor } from "@/components/form-steps-editor";
+import { CopyButton } from "@/components/copy-button";
 
 // Step funnel from real submissions: where people start, drop and finish.
 async function FormFunnel({ formId, workspaceId }: { formId: string; workspaceId: string }) {
@@ -122,7 +123,10 @@ export default async function FormDetailPage({ params }: { params: Promise<{ id:
           <div className="space-y-3 px-5 py-4">
             {stores.map((s) => (
               <div key={s.publicId}>
-                <p className="mb-1 text-[12px] font-semibold text-ink-2">{s.name} · already connected? Nothing to do, set the form live.</p>
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <p className="text-[12px] font-semibold text-ink-2">{s.name} · already connected? Nothing to do, set the form live.</p>
+                  <CopyButton small label="Copy snippet" text={`<script src="https://sendloom.onrender.com/t/${s.publicId}.js" async></script>`} />
+                </div>
                 <code className="block overflow-x-auto rounded-lg bg-zinc-900 px-3 py-2.5 text-[11.5px] leading-relaxed text-zinc-100">
                   {`<script src="https://sendloom.onrender.com/t/${s.publicId}.js" async></script>`}
                 </code>

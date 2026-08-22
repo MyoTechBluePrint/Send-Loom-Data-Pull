@@ -28,6 +28,29 @@ export default async function CampaignReport({ params }: { params: Promise<{ id:
       ? null
       : await audienceBreakdown(c.workspaceId, c.audienceType, c.audienceRef, (c.channel ?? "email") as Channel);
 
+  // Confirmed revenue, not modelled: an order counts only when this
+  // campaign's recipient clicked and then ordered within seven days. Real
+  // rows or nothing; demo campaigns keep their seeded figures, labelled.
+  const clicked7d = c.sends.filter((s) => s.clickedAt);
+  let attributedRevenue = 0;
+  let attributedOrders = 0;
+  if (!c.isDemo && clicked7d.length) {
+    const orders = await db.order.findMany({
+      where: { contactId: { in: clicked7d.map((s) => s.contactId) } },
+      select: { contactId: true, total: true, placedAt: true },
+    });
+    for (const send of clicked7d) {
+      for (const order of orders) {
+        if (order.contactId !== send.contactId || !send.clickedAt) continue;
+        const gap = order.placedAt.getTime() - send.clickedAt.getTime();
+        if (gap >= 0 && gap <= 7 * 24 * 3600 * 1000) {
+          attributedRevenue += order.total;
+          attributedOrders += 1;
+        }
+      }
+    }
+  }
+
   const delivered = c.isDemo ? Math.round(c.audienceSnapshot * 0.984) : c.sends.filter((s) => s.status === "sent").length;
   const opened = c.isDemo ? Math.round(delivered * (c.openRate / 100)) : c.sends.filter((s) => s.openedAt).length;
   const clicked = c.isDemo ? Math.round(delivered * (c.clickRate / 100)) : c.sends.filter((s) => s.clickedAt).length;
@@ -90,8 +113,15 @@ export default async function CampaignReport({ params }: { params: Promise<{ id:
           <CardHeader title="Funnel" subtitle={c.isDemo ? "Seeded demo figures" : "Live from send records · opens and clicks feed lead scores"} />
           <div className="px-5 py-4">
             <HBarChart items={funnel} format={num} />
-            {c.revenue > 0 && (
-              <p className="mt-4 border-t border-line pt-3 text-xs text-ink-3">Attributed revenue: <span className="tabular font-semibold text-foreground">{gbp(c.revenue)}</span></p>
+            {c.isDemo && c.revenue > 0 && (
+              <p className="mt-4 border-t border-line pt-3 text-xs text-ink-3">Attributed revenue: <span className="tabular font-semibold text-foreground">{gbp(c.revenue)}</span> <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-500">seeded demo</span></p>
+            )}
+            {!c.isDemo && (
+              <p className="mt-4 border-t border-line pt-3 text-xs text-ink-3">
+                Confirmed revenue: <span className="tabular font-semibold text-foreground">{gbp(attributedRevenue)}</span>
+                {attributedOrders > 0 && <span> · {attributedOrders} order{attributedOrders === 1 ? "" : "s"}</span>}
+                <span className="ml-1.5 text-[11px]">click-attributed · 7-day window · real store orders only</span>
+              </p>
             )}
           </div>
         </Card>

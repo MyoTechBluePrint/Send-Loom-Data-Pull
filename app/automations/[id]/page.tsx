@@ -4,6 +4,8 @@ import { Shell, GhostButton, PrimaryButton } from "@/components/shell";
 import { Card, CardHeader, Badge, Stat } from "@/components/ui";
 import { gbp, num } from "@/lib/data";
 import { getAutomationsView } from "@/lib/server/views";
+import { db } from "@/lib/server/db";
+import { AutomationStatusButton } from "@/components/automation-status-button";
 
 export const dynamic = "force-dynamic";
 
@@ -45,14 +47,38 @@ export default async function AutomationDetail({ params }: { params: Promise<{ i
   if (!auto) notFound();
   const isTemplate = auto.status === "draft" && auto.isDemo;
 
+  // The numbers a live workflow owes its owner: who is in it right now, what
+  // has actually gone out, and what failed, all from real rows.
+  const [row, runningCount, sends] = await Promise.all([
+    db.automation.findUnique({ where: { id }, select: { triggerEvent: true, entered: true, completed: true } }),
+    db.automationRun.count({ where: { automationId: id, status: "running" } }),
+    db.campaignSend.groupBy({
+      by: ["status"],
+      where: { campaign: { audienceType: "automation", audienceRef: id } },
+      _count: true,
+    }),
+  ]);
+  const sent = sends.filter((s) => ["sent", "delivered"].includes(s.status)).reduce((n, s) => n + s._count, 0);
+  const failedSends = sends.filter((s) => s.status === "failed").reduce((n, s) => n + s._count, 0);
+  const lastRun = await db.automationRun.findFirst({
+    where: { automationId: id },
+    orderBy: { startedAt: "desc" },
+    select: { startedAt: true },
+  });
+  const providerArmed =
+    process.env.EMAIL_SENDING_ENABLED === "true" &&
+    Boolean(process.env.RESEND_API_KEY || process.env.AWS_ACCESS_KEY_ID);
+
   return (
     <Shell
       title={auto.name}
       subtitle={`Trigger: ${auto.trigger}`}
       actions={
         <>
-          <GhostButton>{auto.status === "live" ? "Pause" : "Configure"}</GhostButton>
-          <PrimaryButton>Edit workflow</PrimaryButton>
+          <AutomationStatusButton automationId={id} status={auto.status} />
+          <Link href={`/automations/${id}/edit`}>
+            <PrimaryButton>Edit workflow</PrimaryButton>
+          </Link>
         </>
       }
     >
@@ -63,18 +89,40 @@ export default async function AutomationDetail({ params }: { params: Promise<{ i
           : <Badge value={auto.status} />}
       </div>
 
+      {auto.status === "live" && !providerArmed && (
+        <Card className="mt-3 border-amber-300 bg-amber-50 px-5 py-3.5">
+          <p className="text-sm font-bold text-amber-900">ACTION REQUIRED · Email provider not connected</p>
+          <p className="mt-1 text-sm text-amber-900">
+            This workflow is live and enrolling contacts, but sends go to the
+            development log only. Set EMAIL_SENDING_ENABLED and the provider
+            keys in the hosting environment to deliver real email.
+          </p>
+        </Card>
+      )}
+      {failedSends > 0 && (
+        <Card className="mt-3 border-red-200 bg-red-50 px-5 py-3.5">
+          <p className="text-sm font-bold text-red-700">ACTION REQUIRED · {num(failedSends)} failed send{failedSends === 1 ? "" : "s"}</p>
+          <p className="mt-1 text-sm text-red-700">The provider rejected these emails. Recent failures appear in the audit log with the reason.</p>
+        </Card>
+      )}
+
       {isTemplate ? (
         <Card className="mt-3 border-amber-200 bg-amber-50/50 px-5 py-3.5">
           <p className="text-sm text-amber-900">
-            Ready to configure once MyoTech/Novatec tracking is connected. Activation requires store events and (for sends) the sending provider.
+            This is a recipe: open Edit workflow, choose what triggers it, write
+            the emails, and set it live.
           </p>
         </Card>
       ) : (
-        <div className="mt-3 grid grid-cols-2 gap-4 xl:grid-cols-4">
-          <Stat label="Contacts entered" value={num(auto.entered)} />
-          <Stat label="Completed" value={num(auto.completed)} />
-          <Stat label="Conversion rate" value={`${auto.conversion}%`} />
-          <Stat label="Attributed revenue" value={gbp(auto.revenue)} />
+        <div className="mt-3 grid grid-cols-2 gap-4 xl:grid-cols-5">
+          <Stat label="Contacts entered" value={num(row?.entered ?? auto.entered)} />
+          <Stat label="In workflow now" value={num(runningCount)} />
+          <Stat label="Completed" value={num(row?.completed ?? auto.completed)} />
+          <Stat label="Emails sent" value={num(sent)} />
+          <Stat
+            label="Last triggered"
+            value={lastRun ? lastRun.startedAt.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "Never"}
+          />
         </div>
       )}
 

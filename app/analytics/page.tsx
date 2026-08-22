@@ -1,4 +1,4 @@
-import { Shell, GhostButton } from "@/components/shell";
+import { Shell } from "@/components/shell";
 import { Donut } from "@/components/ui";
 import { db } from "@/lib/server/db";
 import { demoWorkspaceId, workspaceIsClean } from "@/lib/server/views";
@@ -104,29 +104,23 @@ export default async function AnalyticsPage() {
     <Shell
       title="Analytics"
       subtitle="Revenue attribution across campaigns, automations and segments"
-      actions={
-        <>
-          <GhostButton>Last 90 days ▾</GhostButton>
-          <GhostButton>Export</GhostButton>
-        </>
-      }
     >
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-        <Stat label="Email-attributed revenue" value={gbp(196461)} delta="↑ 18.4%" hint="vs previous 90 days" />
-        <Stat label="Share of store revenue" value="23.7%" delta="↑ 2.1pts" hint="vs previous 90 days" />
-        <Stat label="Customer lifetime value" value={gbp(214)} delta="↑ 6.0%" hint="subscribers vs non" />
-        <Stat label="Repeat purchase rate" value="31.8%" delta="↑ 3.4pts" hint="email audience" />
+        <Stat label="Email-attributed revenue" value={gbp(196461)} delta="↑ 18.4%" hint="vs previous 90 days · seeded demo" />
+        <Stat label="Share of store revenue" value="23.7%" delta="↑ 2.1pts" hint="vs previous 90 days · seeded demo" />
+        <Stat label="Customer lifetime value" value={gbp(214)} delta="↑ 6.0%" hint="subscribers vs non · seeded demo" />
+        <Stat label="Repeat purchase rate" value="31.8%" delta="↑ 3.4pts" hint="email audience · seeded demo" />
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
         <Card className="xl:col-span-2">
-          <CardHeader title="Attributed revenue by week" subtitle="5-day click attribution window · campaigns vs automations" />
+          <CardHeader title="Attributed revenue by week" subtitle="5-day click attribution window · campaigns vs automations · seeded demo" />
           <div className="px-5 py-4">
             <RevenueChart weeks={revenueSeries.weeks} a={revenueSeries.campaigns} b={revenueSeries.automations} labels={["Campaigns", "Automations"]} />
           </div>
         </Card>
         <Card>
-          <CardHeader title="Revenue by segment" subtitle="Attributed, last 90 days" />
+          <CardHeader title="Revenue by segment" subtitle="Attributed, last 90 days · seeded demo" />
           <div className="px-5 py-4">
             <HBarChart items={bySegment} format={gbp} />
           </div>
@@ -135,7 +129,7 @@ export default async function AnalyticsPage() {
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
-          <CardHeader title="Revenue by data source" subtitle="Orders joined back to the source each contact arrived from · the commercial heart of the source ledger" />
+          <CardHeader title="Revenue by data source" subtitle="Orders joined back to the source each contact arrived from · the commercial heart of the source ledger · seeded demo" />
           <div className="px-5 py-4">
             <HBarChart items={bySource} format={gbp} />
             <p className="mt-4 border-t border-line pt-3 text-xs text-ink-3">
@@ -144,7 +138,7 @@ export default async function AnalyticsPage() {
           </div>
         </Card>
         <Card>
-          <CardHeader title="Revenue by keyword interest" subtitle="First-party search terms that led to purchases" />
+          <CardHeader title="Revenue by keyword interest" subtitle="First-party search terms that led to purchases · seeded demo" />
           <div className="px-5 py-4">
             <HBarChart items={byKeyword} format={gbp} />
             <p className="mt-4 border-t border-line pt-3 text-xs text-ink-3">
@@ -156,7 +150,7 @@ export default async function AnalyticsPage() {
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
-          <CardHeader title="Top performing emails" subtitle="By attributed revenue" />
+          <CardHeader title="Top performing emails" subtitle="By attributed revenue · seeded demo" />
           <div className="overflow-x-auto scroll-thin"><table className="w-full min-w-[520px]">
             <thead className="border-b border-line">
               <tr>
@@ -182,7 +176,7 @@ export default async function AnalyticsPage() {
           </table></div>
         </Card>
         <Card>
-          <CardHeader title="Automation performance" subtitle="All time" />
+          <CardHeader title="Automation performance" subtitle="All time · seeded demo" />
           <div className="overflow-x-auto scroll-thin"><table className="w-full min-w-[520px]">
             <thead className="border-b border-line">
               <tr>
@@ -267,7 +261,7 @@ export default async function AnalyticsPage() {
           { title: "Countries", rows: [["United Kingdom", "88%"], ["Ireland", "6%"], ["United States", "3%"], ["Other", "3%"]] },
         ].map((b) => (
           <Card key={b.title}>
-            <CardHeader title={b.title} />
+            <CardHeader title={b.title} subtitle="Seeded demo" />
             <div className="space-y-2.5 px-5 py-4">
               {b.rows.map(([k, v]) => (
                 <div key={k}>

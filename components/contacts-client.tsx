@@ -207,8 +207,8 @@ export function ContactsClient({ contacts }: { contacts: Subscriber[] }) {
       {adding && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setAdding(false)}>
           <form onSubmit={addContact} onClick={(e) => e.stopPropagation()} className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl">
-            <h2 className="text-base font-semibold">Add demo contact</h2>
-            <p className="mt-0.5 text-xs text-ink-3">Staging only · gets a source ledger entry and pending consent</p>
+            <h2 className="text-base font-semibold">Add contact</h2>
+            <p className="mt-0.5 text-xs text-ink-3">Recorded with a source entry and pending consent</p>
             {addError && <p className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{addError}</p>}
             {([["name", "Full name *"], ["email", "Email"], ["phone", "Phone"], ["tag", "Interest tag"]] as const).map(([key, label]) => (
               <label key={key} className="mt-3 block">

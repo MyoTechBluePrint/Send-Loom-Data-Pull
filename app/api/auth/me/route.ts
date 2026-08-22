@@ -17,6 +17,15 @@ export async function GET(req: NextRequest) {
     roleLabel: ROLE_LABELS[user.role] ?? user.role,
     canTriageFeedback: can(user.role, "triage_feedback"),
     canResetDemo: can(user.role, "reset_demo_data"),
-    env: "Staging",
+    // The honest environment: "Live" only when real email can actually go
+    // out. On production without provider keys the truthful label is that
+    // sending is off, which is exactly what the banner should say.
+    env:
+      process.env.EMAIL_SENDING_ENABLED === "true" &&
+      (process.env.RESEND_API_KEY || process.env.AWS_ACCESS_KEY_ID)
+        ? "Live"
+        : process.env.RENDER
+          ? "No live email sending"
+          : "Staging",
   });
 }

@@ -52,7 +52,11 @@ export function InboxClient({ items }: { items: IntakeItemView[] }) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [acting, setActing] = useState<string | null>(null);
-  const [flash, setFlash] = useState<string | null>(null);
+  // The flash carries a tone so failures render as an error banner rather than
+  // borrowing the success styling.
+  const [flash, setFlash] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+
+  const FAIL = "Something went wrong, nothing was saved. Try again.";
 
   async function extract() {
     setBusy(true);
@@ -64,9 +68,13 @@ export function InboxClient({ items }: { items: IntakeItemView[] }) {
       const json = await res.json();
       if (json.ok) {
         setText("");
-        setFlash(`Extracted ${json.records.length} record${json.records.length === 1 ? "" : "s"} · ready to review below`);
+        setFlash({ tone: "ok", text: `Extracted ${json.records.length} record${json.records.length === 1 ? "" : "s"} · ready to review below` });
         router.refresh();
+      } else {
+        setFlash({ tone: "error", text: typeof json.error === "string" ? json.error : FAIL });
       }
+    } catch {
+      setFlash({ tone: "error", text: FAIL });
     } finally {
       setBusy(false);
     }
@@ -80,10 +88,16 @@ export function InboxClient({ items }: { items: IntakeItemView[] }) {
         body: JSON.stringify({ action }),
       });
       const json = await res.json();
-      if (json.ok && action === "approve") {
-        setFlash(json.merged ? "Merged into existing contact · source ledger updated" : `Contact created${json.taskId ? " + sales task" : ""} · consent held as pending`);
+      if (json.ok) {
+        if (action === "approve") {
+          setFlash({ tone: "ok", text: json.merged ? "Merged into existing contact · source ledger updated" : `Contact created${json.taskId ? " + sales task" : ""} · consent held as pending` });
+        }
+        router.refresh();
+      } else {
+        setFlash({ tone: "error", text: typeof json.error === "string" ? json.error : FAIL });
       }
-      router.refresh();
+    } catch {
+      setFlash({ tone: "error", text: FAIL });
     } finally {
       setActing(null);
     }
@@ -99,9 +113,9 @@ export function InboxClient({ items }: { items: IntakeItemView[] }) {
       actions={<Link href="/imports" className="rounded-lg border border-line bg-surface px-3.5 py-2 text-[13px] font-semibold text-ink-2 hover:bg-[#f0efec]">File uploads →</Link>}
     >
       {flash && (
-        <div className="mb-4 flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-          <span>{flash}</span>
-          <button onClick={() => setFlash(null)} className="text-emerald-700 hover:text-emerald-900">✕</button>
+        <div className={`mb-4 flex items-center justify-between rounded-lg border px-4 py-3 text-sm ${flash.tone === "ok" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-red-200 bg-red-50 text-red-800"}`}>
+          <span>{flash.text}</span>
+          <button onClick={() => setFlash(null)} className={flash.tone === "ok" ? "text-emerald-700 hover:text-emerald-900" : "text-red-700 hover:text-red-900"}>✕</button>
         </div>
       )}
 
@@ -128,9 +142,13 @@ export function InboxClient({ items }: { items: IntakeItemView[] }) {
               value={text}
               onChange={(e) => setText(e.target.value)}
               rows={5}
+              maxLength={20000}
               placeholder={'e.g. "Maria +34 600 123 456 asked about NAD+ and weight loss consultation. Call tomorrow."'}
               className="w-full rounded-lg border border-line bg-surface px-3.5 py-3 text-sm leading-relaxed outline-none placeholder:text-ink-3 focus:border-brand"
             />
+            {text.length > 15000 && (
+              <p className="mt-1 text-right text-xs text-amber-700">{text.length.toLocaleString("en-GB")} characters · 20,000 max</p>
+            )}
             <div className="mt-3 flex flex-wrap items-center gap-3">
               <button
                 disabled={busy || text.trim().length < 3}

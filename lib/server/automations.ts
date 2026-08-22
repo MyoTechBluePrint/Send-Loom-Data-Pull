@@ -24,6 +24,8 @@ export const TRIGGER_EVENTS = [
   { value: "checkout_started", label: "Checkout started" },
   { value: "purchase_completed", label: "Purchase completed" },
   { value: "imported", label: "Contact imported" },
+  { value: "cart_abandoned", label: "Cart abandoned (from the store sweep)" },
+  { value: "customer_inactive", label: "Customer gone quiet (winback)" },
 ] as const;
 
 export interface EmailNodeConfig {
@@ -60,11 +62,17 @@ export async function enrolOnEvent(
 ) {
   const automations = await db.automation.findMany({
     where: { workspaceId, status: "live", triggerEvent: eventType },
-    select: { id: true },
+    select: { id: true, allowReentry: true },
   });
   for (const a of automations) {
+    // Without re-entry, one run per contact ever. With it, only one run at a
+    // time: a contact mid-walk is never enrolled twice in parallel.
     const existing = await db.automationRun.findFirst({
-      where: { automationId: a.id, contactId },
+      where: {
+        automationId: a.id,
+        contactId,
+        ...(a.allowReentry ? { status: "running" } : {}),
+      },
       select: { id: true },
     });
     if (existing) continue;
@@ -273,4 +281,124 @@ async function deliverEmailNode(
     console.error("[sendloom] automation send failed", error);
     await db.campaignSend.update({ where: { id: send.id }, data: { status: "failed" } });
   }
+}
+
+
+/**
+ * Make the Welcome flow real on boot, idempotently.
+ *
+ * The seeded recipe was a drawing with no trigger. This gives it one, plus
+ * sensible default wording, and sets it live, which is exactly what the
+ * owner asked the platform to do: a popup signup on the storefront must
+ * start the welcome series with nobody pressing anything. It runs on every
+ * boot but touches nothing once the flow has a trigger, so the moment a
+ * human edits the workflow their version is the version.
+ */
+export async function ensureWelcomeFlow() {
+  const flows = await db.automation.findMany({
+    where: { name: { contains: "Welcome" }, triggerEvent: null },
+    include: { nodes: { orderBy: { position: "asc" } } },
+  });
+  for (const flow of flows) {
+    await db.automation.update({
+      where: { id: flow.id },
+      data: {
+        name: flow.name.replace(" (recipe)", ""),
+        trigger: "Popup or form signup",
+        triggerEvent: "popup_submitted",
+        status: "live",
+        isDemo: false,
+      },
+    });
+    // Give bare email nodes a real default so the first send is presentable
+    // before anybody has opened the editor.
+    for (const node of flow.nodes) {
+      if (node.kind !== "email") continue;
+      const config = parseConfig<EmailNodeConfig>(node.config);
+      if (config.subject || config.html) continue;
+      await db.automationNode.update({
+        where: { id: node.id },
+        data: {
+          config: JSON.stringify({
+            ...config,
+            subject: "Welcome — you're on the list",
+            html: "<p>Thanks for signing up. You're on the list for our latest offers and discount codes — the next one lands in your inbox soon.</p>",
+          }),
+        },
+      });
+    }
+    await audit(flow.workspaceId, "system", "automation.set_live", `'${flow.name}' armed on boot: popup signups now enrol`);
+  }
+}
+
+
+/**
+ * A purchase ends any recovery chase.
+ *
+ * Somebody who just bought must never receive "you left something in your
+ * cart" an hour later. Called from the event pipeline on purchase, it exits
+ * every running cart-and-checkout run for that contact.
+ */
+export async function stopRecoveryRunsOnPurchase(contactId: string) {
+  const runs = await db.automationRun.findMany({
+    where: {
+      contactId,
+      status: "running",
+      automation: { triggerEvent: { in: ["cart_abandoned", "checkout_started"] } },
+    },
+    select: { id: true },
+  });
+  if (!runs.length) return;
+  await db.automationRun.updateMany({
+    where: { id: { in: runs.map((r) => r.id) } },
+    data: { status: "exited", endedAt: new Date(), nextDueAt: null },
+  });
+}
+
+/**
+ * Winback enrolment: the trigger that is a silence rather than an event.
+ *
+ * A live workflow triggered by "customer gone quiet" defines the silence on
+ * its trigger node: config.inactiveDays (default 90). The sweep runs beside
+ * the other due work and enrols anybody past the threshold who has not been
+ * through this workflow, which the usual one-run rule then remembers.
+ */
+export async function sweepWinback(): Promise<number> {
+  const automations = await db.automation.findMany({
+    where: { status: "live", triggerEvent: "customer_inactive" },
+    include: { nodes: { where: { kind: "trigger" }, take: 1 } },
+  });
+  let enrolled = 0;
+  for (const a of automations) {
+    const config = parseConfig<{ inactiveDays?: number }>(a.nodes[0]?.config ?? null);
+    const days = Math.max(7, Number(config.inactiveDays ?? 90));
+    const cutoff = new Date(Date.now() - days * 24 * 3600 * 1000);
+    const quiet = await db.contact.findMany({
+      where: {
+        workspaceId: a.workspaceId,
+        emailConsent: "granted",
+        doNotContact: false,
+        OR: [
+          { lastOrderAt: { lt: cutoff } },
+          { lastOrderAt: null, lastActivityAt: { lt: cutoff } },
+        ],
+      },
+      select: { id: true },
+      take: 200,
+    });
+    for (const c of quiet) {
+      const existing = await db.automationRun.findFirst({
+        where: { automationId: a.id, contactId: c.id },
+        select: { id: true },
+      });
+      if (existing) continue;
+      const run = await db.automationRun.create({
+        data: { automationId: a.id, contactId: c.id, status: "running" },
+      });
+      await db.automation.update({ where: { id: a.id }, data: { entered: { increment: 1 } } });
+      await advanceRun(run.id);
+      enrolled += 1;
+    }
+  }
+  return enrolled;
 }

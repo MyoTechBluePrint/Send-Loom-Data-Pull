@@ -9,7 +9,7 @@ import { Card, CardHeader } from "@/components/ui";
 
 type Field = {
   key: string;
-  kind: "email" | "text" | "choice" | "multi_choice" | "dropdown" | "yes_no" | "rating" | "nps" | "number_scale";
+  kind: "email" | "text" | "phone" | "choice" | "multi_choice" | "dropdown" | "yes_no" | "rating" | "nps" | "number_scale";
   label: string;
   options?: string[];
   required?: boolean;
@@ -20,6 +20,7 @@ type Step = { title?: string; fields: Field[]; rules: string };
 
 const FIELD_KINDS = [
   { v: "email", l: "Email address" }, { v: "text", l: "Text answer" },
+  { v: "phone", l: "Phone number" },
   { v: "choice", l: "Single choice" }, { v: "multi_choice", l: "Multiple choice" },
   { v: "dropdown", l: "Dropdown" }, { v: "yes_no", l: "Yes / No" },
   { v: "rating", l: "Star rating" }, { v: "nps", l: "NPS 0-10" },

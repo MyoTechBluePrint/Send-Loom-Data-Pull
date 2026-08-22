@@ -195,7 +195,16 @@
             "#sendloom-popup .sendloom-popup-form button[type=submit]{width:100%;padding:11px 16px;font-size:14px;font-weight:600;color:#fff;background:var(--sl-accent,#6d28d9);border:0;border-radius:8px;cursor:pointer}" +
             "#sendloom-popup .sendloom-popup-form button[type=submit]:hover{filter:brightness(.94)}" +
             "#sendloom-popup .sendloom-popup-close{position:absolute;top:8px;right:12px;background:none;border:0;font-size:22px;color:#999;cursor:pointer;line-height:1}" +
-            "#sendloom-popup .sendloom-popup-code{margin:14px 0 4px;padding:10px;border:1px dashed var(--sl-accent,#6d28d9);border-radius:8px;font-weight:700;font-size:16px;letter-spacing:.06em;color:var(--sl-accent,#6d28d9)}";
+            "#sendloom-popup .sendloom-popup-code{margin:14px 0 4px;padding:10px;border:1px dashed var(--sl-accent,#6d28d9);border-radius:8px;font-weight:700;font-size:16px;letter-spacing:.06em;color:var(--sl-accent,#6d28d9)}" +
+            "#sendloom-popup .sendloom-popup-form input[type=tel]{width:100%;box-sizing:border-box;padding:10px 12px;font-size:14px;border:1px solid #ddd;border-radius:8px;margin-bottom:10px}" +
+            "#sendloom-popup .sendloom-popup-form select,#sendloom-popup .sendloom-popup-form textarea{width:100%;box-sizing:border-box;padding:10px 12px;font-size:14px;border:1px solid #ddd;border-radius:8px;margin-bottom:10px;background:#fff}" +
+            "#sendloom-popup .sl-q{margin:0 0 4px;font-size:13px;font-weight:600;color:#333;text-align:left}" +
+            "#sendloom-popup .sl-choices{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}" +
+            "#sendloom-popup .sl-choices button{padding:8px 12px;font-size:13px;border:1px solid #ddd;border-radius:8px;background:#fff;cursor:pointer}" +
+            "#sendloom-popup .sl-choices button.sl-on{border-color:var(--sl-accent,#6d28d9);color:var(--sl-accent,#6d28d9);font-weight:600}" +
+            "#sendloom-popup .sl-progress{height:3px;border-radius:99px;background:#eee;margin-bottom:14px;overflow:hidden}" +
+            "#sendloom-popup .sl-progress span{display:block;height:100%;background:var(--sl-accent,#6d28d9)}" +
+            "#sendloom-popup .sl-hp{position:absolute;left:-9999px;opacity:0;height:0;overflow:hidden}";
           document.head.appendChild(st);
         }
 
@@ -203,6 +212,10 @@
           if (document.getElementById("sendloom-popup")) return;
           set("sendloom_popup_" + popup.id, "shown");
           injectStyles();
+          // A form built with steps renders the step walker; everything else
+          // keeps the exact popup storefronts already run. One renderer per
+          // shape, chosen here, so upgrading one can never break the other.
+          if (popup.steps && popup.steps.length && popup.submitUrl) return showSteps();
           var wrap = document.createElement("div");
           wrap.id = "sendloom-popup";
           if (popup.accent) wrap.style.setProperty("--sl-accent", String(popup.accent));
@@ -252,6 +265,146 @@
             wrap.querySelector(".sendloom-popup-card").innerHTML = doneHtml;
             setTimeout(function () { wrap.remove(); }, popup.offerCode ? 7000 : 2500);
           });
+        }
+
+        function showSteps() {
+          var wrap = document.createElement("div");
+          wrap.id = "sendloom-popup";
+          if (popup.accent) wrap.style.setProperty("--sl-accent", String(popup.accent));
+          document.body.appendChild(wrap);
+          track("popup_viewed", { popup: popup.id });
+
+          var stepIndex = 0;
+          var submissionId = null;
+          var answers = {};
+
+          function fieldHtml(f) {
+            var k = f.key;
+            if (f.kind === "email") return '<p class="sl-q">' + esc(f.label) + '</p><input type="email" data-key="' + esc(k) + '" placeholder="you@email.com" autocomplete="email"' + (f.required ? " required" : "") + " />";
+            if (f.kind === "phone") return '<p class="sl-q">' + esc(f.label) + '</p><input type="tel" data-key="' + esc(k) + '" placeholder="+44…" autocomplete="tel"' + (f.required ? " required" : "") + " />";
+            if (f.kind === "text") return '<p class="sl-q">' + esc(f.label) + '</p><input type="text" data-key="' + esc(k) + '"' + (f.required ? " required" : "") + " />";
+            if (f.kind === "dropdown") {
+              var opts = (f.options || []).map(function (o) { return "<option>" + esc(o) + "</option>"; }).join("");
+              return '<p class="sl-q">' + esc(f.label) + '</p><select data-key="' + esc(k) + '"><option value="">Choose…</option>' + opts + "</select>";
+            }
+            if (f.kind === "choice" || f.kind === "multi_choice" || f.kind === "yes_no") {
+              var choices = f.kind === "yes_no" ? ["Yes", "No"] : f.options || [];
+              var multi = f.kind === "multi_choice";
+              return '<p class="sl-q">' + esc(f.label) + '</p><div class="sl-choices" data-key="' + esc(k) + '" data-multi="' + (multi ? "1" : "") + '">' +
+                choices.map(function (o) { return '<button type="button" data-v="' + esc(o) + '">' + esc(o) + "</button>"; }).join("") + "</div>";
+            }
+            if (f.kind === "rating" || f.kind === "nps" || f.kind === "number_scale") {
+              var top = f.kind === "nps" ? 10 : 5;
+              var btns = "";
+              for (var i = f.kind === "nps" ? 0 : 1; i <= top; i++) btns += '<button type="button" data-v="' + i + '">' + i + "</button>";
+              return '<p class="sl-q">' + esc(f.label) + '</p><div class="sl-choices" data-key="' + esc(k) + '">' + btns + "</div>";
+            }
+            return "";
+          }
+
+          function renderStep() {
+            var step = popup.steps[stepIndex];
+            var isLast = stepIndex >= popup.steps.length - 1;
+            var pct = Math.round(((stepIndex + 1) / popup.steps.length) * 100);
+            var consentHtml = "";
+            if (isLast) {
+              consentHtml =
+                '<label class="sendloom-popup-consent"><input type="checkbox" name="sl-consent" checked /> ' + esc(popup.consentLabel) + "</label>" +
+                (popup.smsConsentLabel ? '<label class="sendloom-popup-consent"><input type="checkbox" name="sl-consent-sms" /> ' + esc(popup.smsConsentLabel) + "</label>" : "") +
+                (popup.whatsappConsentLabel ? '<label class="sendloom-popup-consent"><input type="checkbox" name="sl-consent-wa" /> ' + esc(popup.whatsappConsentLabel) + "</label>" : "");
+            }
+            wrap.innerHTML =
+              '<div class="sendloom-popup-backdrop"></div>' +
+              '<div class="sendloom-popup-card" role="dialog" aria-modal="true">' +
+              '<button class="sendloom-popup-close" aria-label="Close">&times;</button>' +
+              (popup.steps.length > 1 ? '<div class="sl-progress"><span style="width:' + pct + '%"></span></div>' : "") +
+              "<h3>" + esc(step.title || popup.headline) + "</h3>" +
+              (stepIndex === 0 && popup.body ? "<p>" + esc(popup.body) + "</p>" : "") +
+              '<form class="sendloom-popup-form">' +
+              step.fields.map(fieldHtml).join("") +
+              '<input type="text" name="website" class="sl-hp" tabindex="-1" autocomplete="off" />' +
+              consentHtml +
+              '<button type="submit">' + esc(isLast ? popup.buttonLabel || "Submit" : "Continue") + "</button>" +
+              "</form></div>";
+
+            wrap.querySelector(".sendloom-popup-close").addEventListener("click", function () {
+              wrap.remove();
+              track("popup_closed", { popup: popup.id });
+            });
+            wrap.querySelector(".sendloom-popup-backdrop").addEventListener("click", function () {
+              wrap.remove();
+              track("popup_closed", { popup: popup.id });
+            });
+
+            // choice buttons toggle; single-choice groups clear their peers
+            wrap.querySelectorAll(".sl-choices").forEach(function (group) {
+              group.addEventListener("click", function (e) {
+                var btn = e.target.closest("button[data-v]");
+                if (!btn) return;
+                var multi = group.getAttribute("data-multi") === "1";
+                if (!multi) group.querySelectorAll("button").forEach(function (b) { if (b !== btn) b.classList.remove("sl-on"); });
+                btn.classList.toggle("sl-on");
+              });
+            });
+
+            wrap.querySelector("form").addEventListener("submit", function (e) {
+              e.preventDefault();
+              var stepAnswers = {};
+              wrap.querySelectorAll("[data-key]").forEach(function (el) {
+                var key = el.getAttribute("data-key");
+                if (el.classList && el.classList.contains("sl-choices")) {
+                  var on = [].map.call(el.querySelectorAll("button.sl-on"), function (b) { return b.getAttribute("data-v"); });
+                  if (on.length) stepAnswers[key] = on.join(", ");
+                } else if (el.value) {
+                  stepAnswers[key] = el.value;
+                }
+              });
+              var required = step.fields.filter(function (f) { return f.required && !stepAnswers[f.key]; });
+              if (required.length) return; // browser validation covers inputs; choices just wait
+              var hp = wrap.querySelector('input[name="website"]');
+              if (hp && hp.value) stepAnswers.website = hp.value;
+              for (var k in stepAnswers) answers[k] = stepAnswers[k];
+
+              var isLast = stepIndex >= popup.steps.length - 1;
+              var body = {
+                store: CFG.store,
+                submissionId: submissionId || undefined,
+                stepIndex: stepIndex,
+                answers: stepAnswers,
+                done: isLast,
+              };
+              if (isLast) {
+                var box = function (n) { var el2 = wrap.querySelector('input[name="' + n + '"]'); return el2 ? el2.checked : undefined; };
+                body.consent = box("sl-consent") === true;
+                if (wrap.querySelector('input[name="sl-consent-sms"]')) body.consentSms = box("sl-consent-sms");
+                if (wrap.querySelector('input[name="sl-consent-wa"]')) body.consentWhatsapp = box("sl-consent-wa");
+                if (answers.email) identify(answers.email);
+              }
+
+              fetch(CFG.endpoint + popup.submitUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body),
+              })
+                .then(function (r) { return r.json(); })
+                .then(function (res) {
+                  if (!res.ok) return;
+                  submissionId = res.submissionId || submissionId;
+                  if (res.finished) {
+                    var doneHtml = "<h3>" + esc(res.successMessage || popup.successMessage || "Done — thank you.") + "</h3>";
+                    if (res.couponCode) doneHtml += '<div class="sendloom-popup-code">' + esc(res.couponCode) + "</div>";
+                    wrap.querySelector(".sendloom-popup-card").innerHTML = doneHtml;
+                    setTimeout(function () { wrap.remove(); }, res.couponCode ? 7000 : 2500);
+                  } else {
+                    stepIndex = typeof res.nextStep === "number" ? res.nextStep : stepIndex + 1;
+                    renderStep();
+                  }
+                })
+                .catch(function () {});
+            });
+          }
+
+          renderStep();
         }
 
         if (popup.trigger && popup.trigger.kind === "exit_intent") {

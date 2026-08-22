@@ -1,7 +1,7 @@
 "use client";
 
-// Profile quick actions: add note + archive. Real writes, labelled as staging
-// demo changes.
+// Profile quick actions: add note + archive. Real writes to the contact's
+// history, and the copy says so.
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -27,7 +27,7 @@ export function ContactActions({ contactId, archived }: { contactId: string; arc
     <div className="rounded-xl border border-line bg-surface shadow-[0_1px_2px_rgba(11,11,11,0.04)]">
       <div className="border-b border-line px-5 py-4">
         <h2 className="text-sm font-semibold">Actions</h2>
-        <p className="mt-0.5 text-xs text-ink-3">Demo changes · write to the staging database</p>
+        <p className="mt-0.5 text-xs text-ink-3">Notes and archiving are recorded on the contact's history</p>
       </div>
       <div className="space-y-3 px-5 py-4">
         <div className="flex gap-2">

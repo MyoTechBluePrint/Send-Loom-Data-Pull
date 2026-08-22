@@ -11,15 +11,42 @@ export async function GET(req: NextRequest) {
   const wsId = await demoWorkspaceId();
   const user = await currentUser();
 
+  // Quick-nav entries mirror the sidebar nav in components/shell.tsx, so every
+  // page the sidebar can reach is also findable from the search box. Keep the
+  // two lists in step when nav items change.
   const PAGES = [
-    { title: "Handover guide", detail: "How everything works", href: "/team-handover" },
+    { title: "Dashboard", detail: "Workspace overview", href: "/" },
+    { title: "Ads Launch", detail: "Launch and track ad campaigns", href: "/launch" },
+    { title: "Store Tracking", detail: "Store events, errors and revenue tracking", href: "/tracking" },
+    { title: "UTM Builder", detail: "Build tracked campaign links", href: "/utm-builder" },
+    { title: "Universal Inbox", detail: "Paste anything for extraction", href: "/inbox" },
+    { title: "Data Dropzone", detail: "CSV imports and file drops", href: "/imports" },
+    { title: "Forms & Quizzes", detail: "Capture forms and quiz funnels", href: "/forms" },
+    { title: "Contacts", detail: "All subscribers and customers", href: "/subscribers" },
+    { title: "Audience Builder", detail: "Dynamic segments", href: "/segments" },
+    { title: "Tags", detail: "Tags across every contact", href: "/audiences/tags" },
+    { title: "Polls", detail: "Audience polls and votes", href: "/audiences/polls" },
+    { title: "Contact Packs", detail: "Bundled contact collections", href: "/packs" },
+    { title: "Prospect Discovery", detail: "Find new prospects", href: "/prospects" },
+    { title: "Campaigns", detail: "Email campaigns and sends", href: "/campaigns" },
+    { title: "Templates", detail: "Email templates", href: "/templates" },
+    { title: "Brands", detail: "Brand kits and identities", href: "/brands" },
+    { title: "Automations", detail: "Automated flows and journeys", href: "/automations" },
+    { title: "Commerce", detail: "Products, orders and revenue", href: "/commerce" },
+    { title: "Demand Radar", detail: "Keyword intent", href: "/demand" },
+    { title: "Sales Tasks", detail: "Follow-ups and call lists", href: "/tasks" },
+    { title: "Integration Platform", detail: "Connect stores and services", href: "/integrations" },
+    { title: "API Docs", detail: "REST API reference", href: "/integrations/docs" },
+    { title: "Analytics", detail: "Performance dashboards", href: "/analytics" },
+    { title: "API Providers", detail: "Sending and data providers", href: "/providers" },
+    { title: "Subscriptions", detail: "Subscription admin", href: "/admin/subscriptions" },
+    { title: "Admin", detail: "Monitoring, audit, feedback", href: "/admin" },
+    { title: "Team", detail: "Members and roles", href: "/team" },
+    { title: "Billing", detail: "Plan, invoices and payment method", href: "/settings/billing" },
+    { title: "Settings", detail: "Workspace settings", href: "/settings" },
+    { title: "Handover Guide", detail: "How everything works", href: "/team-handover" },
     { title: "Demo notes", detail: "What's real vs seeded", href: "/demo-notes" },
     { title: "Feedback", detail: "Tell us what's confusing", href: "/feedback" },
-    { title: "Universal Inbox", detail: "Paste anything", href: "/inbox" },
-    { title: "Data Uploads", detail: "CSV imports", href: "/imports" },
-    { title: "Audience Builder", detail: "Dynamic segments", href: "/segments" },
-    { title: "Demand Radar", detail: "Keyword intent", href: "/demand" },
-    { title: "Admin", detail: "Monitoring, audit, feedback", href: "/admin" },
   ].filter((pg) => pg.title.toLowerCase().includes(q.toLowerCase()) || pg.detail.toLowerCase().includes(q.toLowerCase()));
 
   const [contacts, campaigns, segments, tasks, keywords] = await Promise.all([

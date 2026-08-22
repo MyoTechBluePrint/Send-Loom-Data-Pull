@@ -193,6 +193,11 @@ async function main() {
 
   console.log(`\nExisting workspaces protected: ${granted} granted complimentary, ${already} already had a subscription, ${backfilled} marked grandfathered.`);
   console.log("New signups will start a 7-day trial; nobody currently using SendLoom is affected.");
+  // Arm the welcome flow if it has never been configured. Idempotent, and
+  // silent once a human has taken over the workflow.
+  const { ensureWelcomeFlow } = await import("../lib/server/automations");
+  await ensureWelcomeFlow();
+
   await db.$disconnect();
 }
 

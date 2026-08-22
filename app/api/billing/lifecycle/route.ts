@@ -9,7 +9,7 @@
 import { NextRequest } from "next/server";
 import { advanceAll } from "@/lib/server/billing/lifecycle";
 import { runDueBatches } from "@/lib/server/smart-send";
-import { advanceDueRuns } from "@/lib/server/automations";
+import { advanceDueRuns, sweepWinback } from "@/lib/server/automations";
 import { currentUser, can } from "@/lib/server/permissions";
 
 export async function POST(req: NextRequest) {
@@ -31,11 +31,12 @@ export async function POST(req: NextRequest) {
   // The same tick drives smart-send batches: one cron seam for the platform.
   const batches = await runDueBatches();
   const automationRuns = await advanceDueRuns();
+  const winbackEnrolled = await sweepWinback();
   return Response.json({
     ok: true,
     ranBy: actor,
     changed: actions.length,
     actions,
-    smartSendBatches: batches, automationRuns,
+    smartSendBatches: batches, automationRuns, winbackEnrolled,
   });
 }

@@ -466,6 +466,9 @@ model Automation {
   // The machine half of the trigger: the event type that enrols a contact.
   // "trigger" above stays the human sentence the list shows.
   triggerEvent String? // popup_submitted | form_submitted | checkout_started | purchase_completed | imported
+  // May a contact who has been through this workflow enter it again? Off by
+  // default: a welcome series that restarts on every popup submit is spam.
+  allowReentry Boolean   @default(false)
   status       String    @default("draft") // live | paused | draft
   isDemo       Boolean   @default(false)
   entered      Int       @default(0)
