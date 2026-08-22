@@ -1,5 +1,6 @@
 // Import pipeline: parse → map → quality review → confirm. The wizard talks to
 // this via /api/imports. Safe rules (V3 brief §5): never auto-overwrite consent,
+import { recordConsent, setDoNotContact } from "./consent";
 // never reactivate unsubscribed, suppressed stay unmarketable, sources are
 // append-only, every batch is audited.
 import Papa from "papaparse";
@@ -11,11 +12,21 @@ import { guard } from "./billing/guard";
 export const PLATFORM_FIELDS = [
   "email", "firstName", "lastName", "phone", "country", "city", "postcode",
   "productInterest", "keywordInterest", "source", "campaign", "consent",
+  "emailConsent", "smsConsent", "whatsappConsent", "doNotContact",
+  "consentDate", "consentSource",
   "orderValue", "lastOrderDate", "tags", "notes", "custom", "ignore",
 ] as const;
 export type PlatformField = (typeof PLATFORM_FIELDS)[number];
 
 const DETECTORS: [RegExp, PlatformField][] = [
+  // Channel-specific consent columns first: "email_consent" must never fall
+  // into the plain email matcher below it.
+  [/^(email[-_ ]?consent|email[-_ ]?opt[-_ ]?in|email[-_ ]?marketing)$/i, "emailConsent"],
+  [/^(sms[-_ ]?consent|sms[-_ ]?opt[-_ ]?in|sms[-_ ]?marketing|text[-_ ]?consent)$/i, "smsConsent"],
+  [/^(whats[-_ ]?app[-_ ]?consent|whatsapp[-_ ]?opt[-_ ]?in|whatsapp[-_ ]?marketing|wa[-_ ]?consent)$/i, "whatsappConsent"],
+  [/^(do[-_ ]?not[-_ ]?contact|dnc)$/i, "doNotContact"],
+  [/^consent[-_ ]?date$/i, "consentDate"],
+  [/^consent[-_ ]?source$/i, "consentSource"],
   [/^e[-_ ]?mail/i, "email"],
   [/^(first[-_ ]?name|fname|forename)$/i, "firstName"],
   [/^(last[-_ ]?name|lname|surname)$/i, "lastName"],
@@ -44,6 +55,8 @@ const DETECTORS: [RegExp, PlatformField][] = [
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const DISPOSABLE_DOMAINS = new Set(["tempmail.io", "mailinator.com", "guerrillamail.com", "10minutemail.com", "yopmail.com"]);
 const TRUTHY = new Set(["true", "yes", "1", "y", "granted", "subscribed", "opted_in", "opted in"]);
+// An explicit no in a consent column is a decline to remember, never a blank.
+const FALSY = new Set(["false", "no", "0", "n", "declined", "unsubscribed", "opted_out", "opted out", "withdrawn"]);
 
 export function detectMapping(columns: string[]): Record<string, PlatformField> {
   const mapping: Record<string, PlatformField> = {};
@@ -133,7 +146,12 @@ export async function reviewBatch(batchId: string, mapping: Record<string, Platf
     }
 
     const hasConsent = mapped.consent !== undefined && TRUTHY.has(mapped.consent.toLowerCase());
-    if (status === "ready" && !hasConsent) {
+    // A channel-specific consent cell answers the question just as well as
+    // the generic column: a file that says sms_consent=yes was not shipped
+    // without consent information.
+    const hasChannelConsent = [mapped.emailConsent, mapped.smsConsent, mapped.whatsappConsent]
+      .some((v) => v !== undefined && v.trim() !== "");
+    if (status === "ready" && !hasConsent && !hasChannelConsent) {
       counts.missingConsent++;
       if (!mapped.consent) { status = "needs_review"; issue = "No consent column value · held for review"; }
     }
@@ -255,23 +273,47 @@ export async function confirmBatch(opts: {
       },
     });
 
-    // Consent: append email-channel consent ONLY when the file grants it and
-    // the contact is not currently opted out (never reactivate silently).
-    const latest = await db.consentRecord.findFirst({
-      where: { contactId, channel: "email" }, orderBy: { createdAt: "desc" },
-    });
-    const optedOut = latest?.status === "withdrawn" || latest?.status === "suppressed";
-    if (hasConsent && !optedOut) {
-      await db.consentRecord.create({
-        data: {
-          contactId, channel: "email", status: "granted",
-          lawfulBasis: opts.lawfulBasis, evidence: `Import batch: ${batch.name}`,
-          actor: `import:${batch.id}`,
-        },
+    // Consent, per channel, through the one door. The generic "consent"
+    // column keeps meaning email, exactly as before; the channel-specific
+    // columns say what they say, and an explicit no is recorded as declined
+    // rather than ignored. recordConsent's guard means nothing here can
+    // silently reactivate an opted-out contact, and the Do Not Contact
+    // column only ever switches the block ON from a file, never off.
+    const changes: { channel: "email" | "sms" | "whatsapp"; status: "granted" | "declined" | "pending" }[] = [];
+    const cell = (v: string | undefined): "granted" | "declined" | null => {
+      if (v === undefined) return null;
+      const t = v.trim().toLowerCase();
+      if (TRUTHY.has(t)) return "granted";
+      if (FALSY.has(t)) return "declined";
+      return null;
+    };
+    const emailCell = cell(mapped.emailConsent) ?? (hasConsent ? "granted" : null);
+    const smsCell = cell(mapped.smsConsent);
+    const waCell = cell(mapped.whatsappConsent);
+    if (emailCell) changes.push({ channel: "email", status: emailCell });
+    else if (!existing) changes.push({ channel: "email", status: "pending" });
+    if (smsCell) changes.push({ channel: "sms", status: smsCell });
+    if (waCell) changes.push({ channel: "whatsapp", status: waCell });
+
+    if (changes.length) {
+      await recordConsent({
+        contactId,
+        workspaceId: batch.workspaceId,
+        changes,
+        source: mapped.consentSource?.trim() || `Import: ${batch.name}`,
+        actor: `import:${batch.id}`,
+        lawfulBasis: opts.lawfulBasis,
+        evidence: `Import batch: ${batch.name}${mapped.consentDate ? ` · file consent date ${mapped.consentDate.trim()}` : ""}`,
+        quiet: true, // the "imported" event already lands on the timeline
       });
-    } else if (!latest && !hasConsent) {
-      await db.consentRecord.create({
-        data: { contactId, channel: "email", status: "pending", lawfulBasis: "Awaiting confirmation", evidence: `Import batch: ${batch.name}`, actor: `import:${batch.id}` },
+    }
+    if (cell(mapped.doNotContact) === "granted") {
+      await setDoNotContact({
+        contactId,
+        workspaceId: batch.workspaceId,
+        value: true,
+        actor: `import:${batch.id}`,
+        source: `Import: ${batch.name}`,
       });
     }
 

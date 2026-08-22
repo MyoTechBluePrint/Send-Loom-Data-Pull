@@ -1,5 +1,6 @@
 // Event ingestion. Single entry point for everything that happens: plugin
 // webhooks, site search, imports, email engagement. Queue-ready: the API layer
+import { recordConsent } from "./consent";
 // calls eventIngestionService.process(); later this body moves behind a queue
 // worker without the callers changing.
 import { db } from "./db";
@@ -173,17 +174,38 @@ export const eventIngestionService = {
     }
     // Popup submissions with an explicit consent tick grant email consent —
     // the one intake route that does, because the form showed a consent box.
-    if (e.type === "popup_submitted" && isCustomerStream && contactId && e.payload?.consent === true) {
-      await db.consentRecord.create({
-        data: {
-          contactId, channel: "email", status: "granted",
+    if (e.type === "popup_submitted" && isCustomerStream && contactId) {
+      // The ticks travel per channel now. A tick grants; an untouched box
+      // says nothing; an explicit false is a decline worth remembering. The
+      // guard inside recordConsent stops any of this reactivating somebody
+      // who unsubscribed.
+      const ticks: { channel: "email" | "sms" | "whatsapp"; status: "granted" | "declined" }[] = [];
+      const read = (key: string, channel: "email" | "sms" | "whatsapp") => {
+        const v = (e.payload as Record<string, unknown> | undefined)?.[key];
+        if (v === true) ticks.push({ channel, status: "granted" });
+        else if (v === false) ticks.push({ channel, status: "declined" });
+      };
+      read("consent", "email");
+      read("consentSms", "sms");
+      read("consentWhatsapp", "whatsapp");
+
+      if (ticks.length) {
+        const granted = ticks.filter((t) => t.status === "granted");
+        await recordConsent({
+          contactId,
+          workspaceId: e.workspaceId,
+          changes: ticks,
+          source: `Website form: ${String(e.payload?.popup ?? "popup")}`,
+          actor: "tracker",
           lawfulBasis: "Consent (popup checkbox)",
-          evidence: String(e.payload?.popup ?? "popup"), actor: "tracker",
-        },
-      });
-      await dispatchPlatformEvent(e.workspaceId, "consent.updated", {
-        contactId, channel: "email", status: "granted", source: "popup",
-      }).catch(() => {});
+          evidence: String(e.payload?.popup ?? "popup"),
+        });
+        for (const t of granted) {
+          await dispatchPlatformEvent(e.workspaceId, "consent.updated", {
+            contactId, channel: t.channel, status: "granted", source: "popup",
+          }).catch(() => {});
+        }
+      }
     }
     if (e.storeId) {
       await db.store.update({ where: { id: e.storeId }, data: { lastEventAt: occurredAt } }).catch(() => {});

@@ -4,6 +4,8 @@ import { Shell, GhostButton } from "@/components/shell";
 import { Card, CardHeader, Stat, Badge, HBarChart, Th, Td } from "@/components/ui";
 import { gbp, num } from "@/lib/data";
 import { db } from "@/lib/server/db";
+import { audienceBreakdown } from "@/lib/server/sending";
+import type { Channel } from "@/lib/server/consent";
 import { CampaignEmailPanel } from "@/components/campaign-email-panel";
 import { SmartSendPanel } from "@/components/smart-send-panel";
 
@@ -16,6 +18,15 @@ export default async function CampaignReport({ params }: { params: Promise<{ id:
     include: { sends: { include: { contact: true }, orderBy: { createdAt: "desc" } } },
   });
   if (!c) notFound();
+
+  // The audience arithmetic, from the same gate the send itself uses, so
+  // what this page promises is exactly what a send would do. Unsent
+  // campaigns show it as the answer to "who will this actually reach?";
+  // sent ones keep their send records as the story.
+  const breakdown =
+    c.status === "sent" || c.isDemo
+      ? null
+      : await audienceBreakdown(c.workspaceId, c.audienceType, c.audienceRef, (c.channel ?? "email") as Channel);
 
   const delivered = c.isDemo ? Math.round(c.audienceSnapshot * 0.984) : c.sends.filter((s) => s.status === "sent").length;
   const opened = c.isDemo ? Math.round(delivered * (c.openRate / 100)) : c.sends.filter((s) => s.openedAt).length;
@@ -48,6 +59,24 @@ export default async function CampaignReport({ params }: { params: Promise<{ id:
       </div>
 
       <SmartSendPanel campaignId={c.id} sent={c.status === "sent"} />
+
+      {breakdown && (
+        <Card className="mt-3">
+          <CardHeader
+            title="Who this will reach"
+            subtitle={`${c.channel === "sms" ? "SMS" : c.channel === "whatsapp" ? "WhatsApp" : "Email"} eligibility · enforced automatically at send time`}
+          />
+          <div className="flex flex-wrap gap-x-6 gap-y-2 px-5 py-4 text-[13px]">
+            <span><b className="tabular text-emerald-700">{num(breakdown.eligible)}</b> eligible</span>
+            {breakdown.noConsent > 0 && <span><b className="tabular">{num(breakdown.noConsent)}</b> no recorded consent</span>}
+            {breakdown.optedOut > 0 && <span><b className="tabular">{num(breakdown.optedOut)}</b> unsubscribed or declined</span>}
+            {breakdown.suppressed > 0 && <span><b className="tabular">{num(breakdown.suppressed)}</b> suppressed</span>}
+            {breakdown.noRoute > 0 && <span><b className="tabular">{num(breakdown.noRoute)}</b> missing contact details</span>}
+            {breakdown.doNotContact > 0 && <span><b className="tabular text-red-600">{num(breakdown.doNotContact)}</b> do not contact</span>}
+            <span className="text-ink-3">of {num(breakdown.total)} in the audience</span>
+          </div>
+        </Card>
+      )}
 
       <div className="mt-3 grid grid-cols-2 gap-4 xl:grid-cols-4">
         <Stat label="Recipients" value={num(c.audienceSnapshot)} />

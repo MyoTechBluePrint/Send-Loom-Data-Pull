@@ -216,6 +216,8 @@
             (popup.collectName ? '<input type="text" name="sl-name" placeholder="First name" autocomplete="given-name" />' : "") +
             '<input type="email" required placeholder="you@email.com" autocomplete="email" />' +
             '<label class="sendloom-popup-consent"><input type="checkbox" checked /> ' + esc(popup.consentLabel) + "</label>" +
+            (popup.smsConsentLabel ? '<label class="sendloom-popup-consent"><input type="checkbox" name="sl-consent-sms" /> ' + esc(popup.smsConsentLabel) + "</label>" : "") +
+            (popup.whatsappConsentLabel ? '<label class="sendloom-popup-consent"><input type="checkbox" name="sl-consent-wa" /> ' + esc(popup.whatsappConsentLabel) + "</label>" : "") +
             '<button type="submit">' + esc(popup.buttonLabel) + "</button>" +
             "</form></div>";
           document.body.appendChild(wrap);
@@ -235,8 +237,15 @@
             var nameEl = wrap.querySelector('input[name="sl-name"]');
             var nm = nameEl ? nameEl.value.trim() : "";
             var consent = wrap.querySelector('input[type="checkbox"]').checked;
+            var smsEl = wrap.querySelector('input[name="sl-consent-sms"]');
+            var waEl = wrap.querySelector('input[name="sl-consent-wa"]');
             identify(em);
-            track("popup_submitted", { popup: popup.id, consent: consent, name: nm || undefined }, em.trim().toLowerCase());
+            var payload = { popup: popup.id, consent: consent, name: nm || undefined };
+            // Channel boxes travel only when they were shown: absent means
+            // "never asked", which the server records as exactly that.
+            if (smsEl) payload.consentSms = smsEl.checked;
+            if (waEl) payload.consentWhatsapp = waEl.checked;
+            track("popup_submitted", payload, em.trim().toLowerCase());
             flush();
             var doneHtml = "<h3>" + esc(popup.successMessage || "Done — check your inbox soon.") + "</h3>";
             if (popup.offerCode) doneHtml += '<div class="sendloom-popup-code">' + esc(popup.offerCode) + "</div>";

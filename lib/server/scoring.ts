@@ -43,7 +43,7 @@ export async function recomputeLeadScore(contactId: string): Promise<{ score: nu
     ? await db.suppressionRecord.findFirst({ where: { workspaceId: contact.workspaceId, email: contact.email } })
     : null;
   if (suppressed || latestEmailConsent?.status === "withdrawn" || latestEmailConsent?.status === "suppressed") {
-    const reason = suppressed?.reason === "hard_bounce" ? { reason: "Hard bounce", points: -40 } : { reason: "Unsubscribed", points: -100 };
+    const reason = suppressed?.reason === "hard_bounce" || suppressed?.reason === "bounced" ? { reason: "Hard bounce", points: -40 } : { reason: "Unsubscribed", points: -100 };
     const result = { score: 0, status: "suppressed", reasons: [reason] };
     await persist(contactId, result);
     return result;

@@ -14,7 +14,8 @@
     "test:campaigns": "tsx scripts/test-campaigns.ts",
     "db:seed-plans": "tsx scripts/seed-plans.ts",
     "postinstall": "prisma generate",
-    "plugin:zip": "bash scripts/build-plugin.sh"
+    "plugin:zip": "bash scripts/build-plugin.sh",
+    "test:consent": "tsx scripts/test-consent.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

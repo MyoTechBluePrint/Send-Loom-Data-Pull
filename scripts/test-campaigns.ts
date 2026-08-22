@@ -8,6 +8,7 @@ import { config } from "dotenv";
 config({ path: ".env.local" });
 config({ path: ".env" });
 
+import { recordConsent } from "../lib/server/consent";
 import { db } from "../lib/server/db";
 import { blankTemplate, parseBlocks, validateBlocks, renderEmail, type EmailBlock, type RenderContext } from "../lib/server/email-blocks";
 import { renderPreview, renderForRecipient, resolveFeeds, signEmailAction, verifyEmailAction } from "../lib/server/email-render";
@@ -33,9 +34,7 @@ async function main() {
   const contact = await db.contact.create({
     data: { workspaceId: ws.id, email: "buyer@test.local", firstName: "Test", lastName: "Buyer" },
   });
-  await db.consentRecord.create({
-    data: { contactId: contact.id, channel: "email", status: "granted", lawfulBasis: "test", actor: "test" },
-  });
+  await recordConsent({ contactId: contact.id, workspaceId: ws.id, changes: [{ channel: "email", status: "granted" }], source: "test", actor: "test", quiet: true });
   const product = await db.product.create({
     data: { storeId: store.id, externalId: "SKU1", title: "Test Serum", price: 29, salePrice: 24, imageUrl: "https://img.test/1.jpg", url: "https://test.example.com/p/1", categories: JSON.stringify(["Recovery"]) },
   });
@@ -160,7 +159,7 @@ async function main() {
     console.log("\nSmart sending");
     // A second consented contact so batching is visible.
     const c2 = await db.contact.create({ data: { workspaceId: ws.id, email: "second@test.local" } });
-    await db.consentRecord.create({ data: { contactId: c2.id, channel: "email", status: "granted", lawfulBasis: "test", actor: "test" } });
+    await recordConsent({ contactId: c2.id, workspaceId: ws.id, changes: [{ channel: "email", status: "granted" }], source: "test", actor: "test", quiet: true });
 
     const gradual = await db.campaign.create({
       data: { workspaceId: ws.id, name: "Gradual", subject: "Gradual", content: JSON.stringify(blank), audienceType: null },
@@ -198,7 +197,7 @@ async function main() {
 
     // Cancel path.
     const c3 = await db.contact.create({ data: { workspaceId: ws.id, email: "third@test.local" } });
-    await db.consentRecord.create({ data: { contactId: c3.id, channel: "email", status: "granted", lawfulBasis: "test", actor: "test" } });
+    await recordConsent({ contactId: c3.id, workspaceId: ws.id, changes: [{ channel: "email", status: "granted" }], source: "test", actor: "test", quiet: true });
     const toCancel = await db.campaign.create({
       data: { workspaceId: ws.id, name: "Cancel me", subject: "x", content: JSON.stringify(blank), audienceType: null },
     });

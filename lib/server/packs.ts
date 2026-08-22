@@ -36,10 +36,13 @@ async function eligibilityFor(workspaceId: string, contactIds: string[]) {
   let excludedSuppressed = 0, excludedUnsubscribed = 0, excludedNoRoute = 0;
 
   for (const c of contacts) {
-    const consent = c.consents[0]?.status;
-    if (c.email && suppressions.has(c.email)) { excludedSuppressed++; continue; }
-    if (consent === "suppressed") { excludedSuppressed++; continue; }
-    if (consent === "withdrawn") { excludedUnsubscribed++; continue; }
+    // The mirror columns carry the current state now, and Do Not Contact
+    // beats everything: a pack must never hand an exporter somebody who
+    // asked to be left alone on every channel.
+    if (c.doNotContact) { excludedUnsubscribed++; continue; }
+    if (c.email && suppressions.has(c.email.toLowerCase())) { excludedSuppressed++; continue; }
+    if (c.emailConsent === "suppressed") { excludedSuppressed++; continue; }
+    if (c.emailConsent === "withdrawn" || c.emailConsent === "declined") { excludedUnsubscribed++; continue; }
     if (!c.email && !c.phone) { excludedNoRoute++; continue; }
     eligible.push(c);
   }

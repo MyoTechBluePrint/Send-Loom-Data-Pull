@@ -320,6 +320,10 @@ export async function main() {
   await seedGrowth(ws.id);
   await seedStores(ws.id);
 
+  // The seed writes the consent ledger directly, which is fine for fixtures,
+  // but the mirror columns must agree with it or nothing seeded is sendable.
+  await syncConsentMirror(ws.id);
+
   console.log("Seed complete.");
   console.log(`Workspace: ${ws.id}`);
   console.log(`Store API key: ${DEMO_API_KEY}`);

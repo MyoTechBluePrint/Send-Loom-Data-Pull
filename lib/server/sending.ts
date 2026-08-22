@@ -3,6 +3,12 @@
 // transport is the default until real credentials exist — it records sends
 // truthfully as "sent (dev transport)" and never claims deliverability.
 import { db } from "./db";
+import {
+  breakdownFor,
+  eligibleForChannel,
+  type Channel,
+  type EligibilityBreakdown,
+} from "./consent";
 import { audit } from "./audit";
 import { evaluateSegmentMembers } from "./segments";
 import { guard } from "./billing/guard";
@@ -147,41 +153,84 @@ export function activeProvider(): EmailProvider {
   return new DevLogProvider();
 }
 
-// Resolves who a campaign may actually be sent to. Consent and suppression
-// are enforced HERE, at send time, regardless of how the audience was built.
-export async function resolveAudience(workspaceId: string, audienceType: string | null, audienceRef: string | null) {
-  let candidates: { id: string; email: string | null }[];
+// Resolves who a campaign may actually be sent to. Consent, suppression and
+// Do Not Contact are enforced HERE, at send time, regardless of how the
+// audience was built. Channel-aware: an SMS campaign checks SMS consent and
+// a phone number, never the email column, and the arithmetic comes from the
+// same eligibleForChannel() the packs and the campaign screen use, so what
+// the user was shown is exactly what the send does.
+const AUDIENCE_SELECT = {
+  id: true, email: true, phone: true,
+  emailConsent: true, smsConsent: true, whatsappConsent: true, doNotContact: true,
+} as const;
+
+export async function resolveAudience(
+  workspaceId: string,
+  audienceType: string | null,
+  audienceRef: string | null,
+  channel: Channel = "email",
+) {
+  let candidates: {
+    id: string; email: string | null; phone: string | null;
+    emailConsent: string; smsConsent: string; whatsappConsent: string; doNotContact: boolean;
+  }[];
 
   if (audienceType === "segment" && audienceRef) {
     const segment = await db.segment.findFirst({ where: { workspaceId, OR: [{ id: audienceRef }, { name: audienceRef }] }, include: { rules: true } });
     if (segment) {
       const memberIds = await evaluateSegmentMembers(workspaceId, segment.match as "all" | "any", segment.rules);
-      candidates = await db.contact.findMany({ where: { id: { in: memberIds } }, select: { id: true, email: true } });
+      candidates = await db.contact.findMany({ where: { id: { in: memberIds } }, select: AUDIENCE_SELECT });
     } else {
       candidates = [];
     }
   } else {
-    candidates = await db.contact.findMany({ where: { workspaceId }, select: { id: true, email: true } });
+    candidates = await db.contact.findMany({ where: { workspaceId }, select: AUDIENCE_SELECT });
   }
 
   const suppressions = new Set(
-    (await db.suppressionRecord.findMany({ where: { workspaceId } })).map((s) => s.email)
+    (await db.suppressionRecord.findMany({ where: { workspaceId } })).map((s) => s.email.toLowerCase())
   );
 
-  const eligible: { id: string; email: string }[] = [];
-  let skippedNoEmail = 0, skippedConsent = 0, skippedSuppressed = 0;
+  const eligible: { id: string; email: string; phone: string | null }[] = [];
+  let skippedNoEmail = 0, skippedConsent = 0, skippedSuppressed = 0, skippedDnc = 0, skippedOptedOut = 0;
 
   for (const c of candidates) {
-    if (!c.email) { skippedNoEmail++; continue; }
-    if (suppressions.has(c.email)) { skippedSuppressed++; continue; }
-    const latest = await db.consentRecord.findFirst({
-      where: { contactId: c.id, channel: "email" }, orderBy: { createdAt: "desc" },
-    });
-    if (latest?.status !== "granted") { skippedConsent++; continue; }
-    eligible.push({ id: c.id, email: c.email });
+    const check = eligibleForChannel(c, channel, suppressions);
+    if (!check.eligible) {
+      if (check.reason === "no_route") skippedNoEmail++;
+      else if (check.reason === "suppressed") skippedSuppressed++;
+      else if (check.reason === "do_not_contact") skippedDnc++;
+      else if (check.reason === "opted_out") skippedOptedOut++;
+      else skippedConsent++;
+      continue;
+    }
+    eligible.push({ id: c.id, email: c.email ?? "", phone: c.phone });
   }
 
-  return { eligible, skippedNoEmail, skippedConsent, skippedSuppressed };
+  return { eligible, skippedNoEmail, skippedConsent, skippedSuppressed, skippedDnc, skippedOptedOut };
+}
+
+/** The numbers a campaign screen shows before anybody presses send. */
+export async function audienceBreakdown(
+  workspaceId: string,
+  audienceType: string | null,
+  audienceRef: string | null,
+  channel: Channel = "email",
+): Promise<EligibilityBreakdown> {
+  let candidates;
+  if (audienceType === "segment" && audienceRef) {
+    const segment = await db.segment.findFirst({ where: { workspaceId, OR: [{ id: audienceRef }, { name: audienceRef }] }, include: { rules: true } });
+    const memberIds = segment
+      ? await evaluateSegmentMembers(workspaceId, segment.match as "all" | "any", segment.rules)
+      : [];
+    candidates = await db.contact.findMany({ where: { id: { in: memberIds } }, select: AUDIENCE_SELECT });
+  } else {
+    candidates = await db.contact.findMany({ where: { workspaceId }, select: AUDIENCE_SELECT });
+  }
+  const suppressions = new Set(
+    (await db.suppressionRecord.findMany({ where: { workspaceId } })).map((s) => s.email.toLowerCase())
+  );
+  return breakdownFor(candidates, channel, suppressions);
 }
 
 export async function sendCampaign(campaignId: string, actor: string) {
@@ -190,8 +239,14 @@ export async function sendCampaign(campaignId: string, actor: string) {
     return { ok: false as const, error: "Campaign already sent." };
   }
 
-  const { eligible, skippedNoEmail, skippedConsent, skippedSuppressed } = await resolveAudience(
-    campaign.workspaceId, campaign.audienceType, campaign.audienceRef
+  const channel = (campaign.channel ?? "email") as Channel;
+  if (channel !== "email") {
+    // Honest refusal: no SMS or WhatsApp provider is wired yet. Gating and
+    // audience arithmetic already work for these channels; delivery does not.
+    return { ok: false as const, error: `No ${channel} provider is configured yet. This campaign's audience is ready, but sending is email-only today.` };
+  }
+  const { eligible, skippedNoEmail, skippedConsent, skippedSuppressed, skippedDnc, skippedOptedOut } = await resolveAudience(
+    campaign.workspaceId, campaign.audienceType, campaign.audienceRef, channel
   );
 
   if (eligible.length === 0) {
@@ -264,8 +319,8 @@ export async function sendCampaign(campaignId: string, actor: string) {
 
   await audit(
     campaign.workspaceId, actor, "campaign.sent",
-    `'${campaign.name}' via ${provider.name}: ${sent} sent, ${failed} failed · skipped: ${skippedConsent} no consent, ${skippedSuppressed} suppressed, ${skippedNoEmail} no email`
+    `'${campaign.name}' via ${provider.name}: ${sent} sent, ${failed} failed · skipped: ${skippedConsent} no consent, ${skippedOptedOut} opted out, ${skippedSuppressed} suppressed, ${skippedNoEmail} no route, ${skippedDnc} do not contact`
   );
 
-  return { ok: true as const, sent, failed, skippedConsent, skippedSuppressed, skippedNoEmail, provider: provider.name };
+  return { ok: true as const, sent, failed, skippedConsent, skippedOptedOut, skippedSuppressed, skippedNoEmail, skippedDnc, provider: provider.name };
 }

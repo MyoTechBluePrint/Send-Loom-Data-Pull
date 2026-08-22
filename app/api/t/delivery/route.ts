@@ -11,6 +11,7 @@
 //   bounced    -> send marked bounced + hard suppression (address is dead)
 //   complained -> send marked complained + suppression + withdrawn consent
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { recordConsent } from "@/lib/server/consent";
 import { NextRequest } from "next/server";
 import { db } from "@/lib/server/db";
 import { audit } from "@/lib/server/audit";
@@ -73,8 +74,14 @@ export async function POST(req: NextRequest) {
       });
     }
     if (kind === "complained") {
-      await db.consentRecord.create({
-        data: { contactId: c.id, channel: "email", status: "withdrawn", lawfulBasis: "Spam complaint", evidence: "Provider complaint webhook", actor: "provider" },
+      await recordConsent({
+        contactId: c.id,
+        workspaceId: c.workspaceId,
+        changes: [{ channel: "email", status: "withdrawn" }],
+        source: "Spam complaint",
+        actor: "provider",
+        evidence: "Provider complaint webhook",
+        allowReactivate: true,
       });
     }
     await audit(c.workspaceId, "provider", `delivery.${kind}`, `${email} · suppressed, safety rates updated`);

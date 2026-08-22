@@ -15,6 +15,8 @@ const Body = z.object({
   body: z.string().max(400).nullable().optional(),
   buttonLabel: z.string().max(60).nullable().optional(),
   consentLabel: z.string().max(200).nullable().optional(),
+  smsConsentLabel: z.string().max(200).nullable().optional(),
+  whatsappConsentLabel: z.string().max(200).nullable().optional(),
   successMessage: z.string().max(200).nullable().optional(),
   offerCode: z.string().max(40).nullable().optional(),
   accent: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().optional(),

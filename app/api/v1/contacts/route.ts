@@ -2,6 +2,7 @@
 // GET: list/search (contacts:read). POST: upsert by email (contacts:write)
 // with optional attribution and consent, all audited, all webhook-fanned.
 import { NextRequest } from "next/server";
+import { recordConsent, setDoNotContact } from "@/lib/server/consent";
 import { z } from "zod";
 import { db } from "@/lib/server/db";
 import { audit } from "@/lib/server/audit";
@@ -45,10 +46,13 @@ const ContactBody = z.object({
     landingPage: z.string().max(300).optional(),
   }).optional(),
   consent: z.object({
-    channel: z.enum(["email", "sms"]).default("email"),
-    status: z.enum(["granted", "revoked"]),
+    channel: z.enum(["email", "sms", "whatsapp"]).default("email"),
+    // "revoked" stays accepted for existing integrations and is stored as
+    // "withdrawn", the word every reader actually checks for.
+    status: z.enum(["granted", "revoked", "withdrawn", "declined"]),
     wording: z.string().max(400).optional(),
   }).optional(),
+  doNotContact: z.boolean().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -98,18 +102,32 @@ export async function POST(req: NextRequest) {
     });
   }
   if (d.consent) {
-    await db.consentRecord.create({
-      data: {
-        contactId: contact.id,
-        channel: d.consent.channel,
-        status: d.consent.status,
-        lawfulBasis: d.consent.wording ? "Consent (integration, wording supplied)" : "Consent (integration)",
-        evidence: d.consent.wording ?? `via ${auth.integrationSlug} API`,
-        actor: `integration:${auth.integrationSlug}`,
-      },
+    const status =
+      d.consent.status === "revoked" ? "withdrawn" : d.consent.status;
+    const result = await recordConsent({
+      contactId: contact.id,
+      workspaceId: auth.workspaceId,
+      changes: [{ channel: d.consent.channel, status }],
+      source: `Integration: ${auth.integrationSlug}`,
+      actor: `integration:${auth.integrationSlug}`,
+      lawfulBasis: d.consent.wording ? "Consent (integration, wording supplied)" : "Consent (integration)",
+      evidence: d.consent.wording ?? `via ${auth.integrationSlug} API`,
+      // Withdrawals always land; a grant is held if the person opted out.
+      allowReactivate: status !== "granted",
     });
-    await dispatchPlatformEvent(auth.workspaceId, "consent.updated", {
-      contactId: contact.id, email, channel: d.consent.channel, status: d.consent.status, integration: auth.integrationSlug,
+    if (result.applied.length) {
+      await dispatchPlatformEvent(auth.workspaceId, "consent.updated", {
+        contactId: contact.id, email, channel: d.consent.channel, status, integration: auth.integrationSlug,
+      });
+    }
+  }
+  if (d.doNotContact !== undefined) {
+    await setDoNotContact({
+      contactId: contact.id,
+      workspaceId: auth.workspaceId,
+      value: d.doNotContact,
+      actor: `integration:${auth.integrationSlug}`,
+      source: `Integration: ${auth.integrationSlug}`,
     });
   }
 

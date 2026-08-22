@@ -6,6 +6,7 @@
 // what content, and why. Consent arrives with the event and is recorded
 // before any channel is used; unconfigured channels report honestly.
 import { db } from "./db";
+import { recordConsent } from "./consent";
 import { audit } from "./audit";
 import { recomputeLeadScore } from "./scoring";
 import { activeProvider } from "./sending";
@@ -117,8 +118,15 @@ async function upsertIntelligenceContact(workspaceId: string, evt: IntelligenceE
     });
   }
   if (evt.consent) {
-    await db.consentRecord.create({
-      data: { contactId: contact.id, channel: evt.consent.channel, status: "granted", lawfulBasis: evt.consent.basis, evidence: evt.consent.evidence ?? `${evt.platform} ${evt.eventType}`, actor: `platform:${evt.platform}` },
+    // Machine grant: recordConsent's reactivation guard means a platform
+    // event can never quietly undo an unsubscribe.
+    await recordConsent({
+      contactId: contact.id,
+      workspaceId: contact.workspaceId,
+      changes: [{ channel: evt.consent.channel as "email" | "sms" | "whatsapp", status: "granted" }],
+      source: evt.consent.basis,
+      actor: `platform:${evt.platform}`,
+      evidence: evt.consent.evidence ?? `${evt.platform} ${evt.eventType}`,
     });
   }
 

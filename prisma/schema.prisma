@@ -17,25 +17,25 @@ model Workspace {
   sector    String? // e.g. "health-wellness" enables sector mode
   createdAt DateTime @default(now())
 
-  users       User[]
-  stores      Store[]
-  contacts    Contact[]
+  users        User[]
+  stores       Store[]
+  contacts     Contact[]
   integrations Integration[]
-  imports     ImportBatch[]
-  segments    Segment[]
-  tags        Tag[]
-  campaigns   Campaign[]
-  automations Automation[]
-  templates   EmailTemplate[]
-  forms       Form[]
-  keywords    Keyword[]
-  clusters    KeywordCluster[]
-  providers   DataProvider[]
-  tasks       SalesTask[]
+  imports      ImportBatch[]
+  segments     Segment[]
+  tags         Tag[]
+  campaigns    Campaign[]
+  automations  Automation[]
+  templates    EmailTemplate[]
+  forms        Form[]
+  keywords     Keyword[]
+  clusters     KeywordCluster[]
+  providers    DataProvider[]
+  tasks        SalesTask[]
   suppressions SuppressionRecord[]
-  audits      AuditLog[]
-  compliance  ComplianceCheck[]
-  intake      IntakeItem[]
+  audits       AuditLog[]
+  compliance   ComplianceCheck[]
+  intake       IntakeItem[]
 
   // Billing. Optional on purpose: a workspace with no Subscription row is
   // treated as complimentary, so nothing that existed before billing can be
@@ -45,81 +45,97 @@ model Workspace {
 }
 
 model User {
-  id          String   @id @default(cuid())
-  workspaceId String
-  workspace   Workspace @relation(fields: [workspaceId], references: [id])
-  email       String   @unique
-  name        String
-  role        String   @default("member") // owner | admin | marketing | editor | viewer
-  passwordHash String? // scrypt salt:hash · null = cannot log in
-  disabled    Boolean  @default(false) // blocked from logging in; sessions die immediately
+  id              String    @id @default(cuid())
+  workspaceId     String
+  workspace       Workspace @relation(fields: [workspaceId], references: [id])
+  email           String    @unique
+  name            String
+  role            String    @default("member") // owner | admin | marketing | editor | viewer
+  passwordHash    String? // scrypt salt:hash · null = cannot log in
+  disabled        Boolean   @default(false) // blocked from logging in; sessions die immediately
   // When this person accepted the terms and privacy policy at signup. Null for
   // accounts provisioned by seed or by an administrator, who never saw a form.
   termsAcceptedAt DateTime?
-  twoFactor   Boolean  @default(false)
-  createdAt   DateTime @default(now())
+  twoFactor       Boolean   @default(false)
+  createdAt       DateTime  @default(now())
 
   tasksAssigned SalesTask[] @relation("assignee")
   audits        AuditLog[]
 }
 
 model Store {
-  id          String   @id @default(cuid())
-  workspaceId String
-  workspace   Workspace @relation(fields: [workspaceId], references: [id])
-  name        String
-  url         String
-  platform    String   @default("woocommerce")
-  apiKey      String   @unique // secret: server-to-server plugin calls only
-  publicId    String   @unique @default(cuid()) // safe for the browser tracker
+  id             String    @id @default(cuid())
+  workspaceId    String
+  workspace      Workspace @relation(fields: [workspaceId], references: [id])
+  name           String
+  url            String
+  platform       String    @default("woocommerce")
+  apiKey         String    @unique // secret: server-to-server plugin calls only
+  publicId       String    @unique @default(cuid()) // safe for the browser tracker
   // domains = ALLOWED storefront tracking domains (comma list).
-  domains     String? // comma-separated allowlist for tracker origins
-  environment String   @default("staging")
-  status      String   @default("pending") // pending | connected | error
-  lastSyncAt  DateTime?
+  domains        String? // comma-separated allowlist for tracker origins
+  environment    String    @default("staging")
+  status         String    @default("pending") // pending | connected | error
+  lastSyncAt     DateTime?
   // Known backend/API hosts (api.*, wp-admin hosts). Tracking from these is
   // rejected and surfaced in QA rather than counted as customer behaviour.
   backendDomains String?
   // live: events count as real. test: EVERY tracker event for this store is
   // routed to the test stream (install/QA days) and never touches analytics.
-  trackingMode   String  @default("live")
-  lastEventAt DateTime?
-  pluginVersion String?
-  createdAt   DateTime @default(now())
+  trackingMode   String    @default("live")
+  lastEventAt    DateTime?
+  pluginVersion  String?
+  createdAt      DateTime  @default(now())
 
-  products Product[]
-  orders   Order[]
-  carts    Cart[]
-  events   Event[]
-  syncs    ProviderSync[]
+  products        Product[]
+  orders          Order[]
+  carts           Cart[]
+  events          Event[]
+  syncs           ProviderSync[]
   trackingRejects TrackingReject[]
 }
 
 model Contact {
-  id          String   @id @default(cuid())
-  workspaceId String
-  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  id                 String    @id @default(cuid())
+  workspaceId        String
+  workspace          Workspace @relation(fields: [workspaceId], references: [id])
   // Optional: phone-only leads arrive via Universal Inbox / WhatsApp pastes.
   // Uniqueness still enforced per workspace when present (nulls exempt).
-  email       String?
-  firstName   String?
-  lastName    String?
-  phone       String?
-  country     String?
-  city        String?
-  postcode    String?
+  email              String?
+  firstName          String?
+  lastName           String?
+  phone              String?
+  country            String?
+  city               String?
+  postcode           String?
   externalCustomerId String? // WooCommerce customer id
-  notes       String?
-  customFields String? // JSON blob of custom fields
-  confidence  Int      @default(70)
-  engagement  String   @default("none") // high | medium | low | none
+  notes              String?
+  customFields       String? // JSON blob of custom fields
+  confidence         Int       @default(70)
+  engagement         String    @default("none") // high | medium | low | none
+  // Current marketing state per channel, denormalised from ConsentRecord so
+  // lists, filters and campaign maths never have to fold the ledger. The
+  // ledger stays the truth; these columns are only ever written by
+  // recordConsent() in lib/server/consent.ts, which appends the ledger row
+  // and mirrors it here.
+  // Vocabulary: the ledger's own, plus "unknown" for "no row yet" and
+  // "declined" for an explicit no that was never a subscription.
+  emailConsent       String    @default("unknown") // granted | declined | pending | withdrawn | suppressed | unknown
+  smsConsent         String    @default("unknown") // granted | declined | pending | withdrawn | suppressed | unknown
+  whatsappConsent    String    @default("unknown") // granted | declined | pending | withdrawn | suppressed | unknown
+  // The kill switch: blocks every marketing channel regardless of the
+  // per-channel state, until legitimately turned off again.
+  doNotContact       Boolean   @default(false)
+  consentSource      String? // where the newest consent came from, human words
+  consentAt          DateTime?
+  consentUpdatedBy   String? // user email | "system" | "tracker" | "import:<id>"
   // denormalised commerce rollups (recomputed on order ingestion)
-  ordersCount Int      @default(0)
-  revenue     Float    @default(0)
-  lastOrderAt DateTime?
-  lastActivityAt DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  ordersCount        Int       @default(0)
+  revenue            Float     @default(0)
+  lastOrderAt        DateTime?
+  lastActivityAt     DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   sources     ContactSource[]
   consents    ConsentRecord[]
@@ -141,16 +157,16 @@ model Contact {
 
 // Append-only. A contact always has >= 1 source; re-appearance adds a row.
 model ContactSource {
-  id          String   @id @default(cuid())
-  contactId   String
-  contact     Contact  @relation(fields: [contactId], references: [id])
-  source      String // "Checkout opt-in", "Import: Klaviyo export", ...
-  sourceType  String // checkout | popup | quiz | import | api | referral | webhook
+  id            String       @id @default(cuid())
+  contactId     String
+  contact       Contact      @relation(fields: [contactId], references: [id])
+  source        String // "Checkout opt-in", "Import: Klaviyo export", ...
+  sourceType    String // checkout | popup | quiz | import | api | referral | webhook
   importBatchId String?
-  importBatch ImportBatch? @relation(fields: [importBatchId], references: [id])
-  uploadedBy  String?
-  detail      String?
-  createdAt   DateTime @default(now())
+  importBatch   ImportBatch? @relation(fields: [importBatchId], references: [id])
+  uploadedBy    String?
+  detail        String?
+  createdAt     DateTime     @default(now())
 
   @@index([contactId])
 }
@@ -171,62 +187,62 @@ model ConsentRecord {
 }
 
 model ImportBatch {
-  id          String   @id @default(cuid())
-  workspaceId String
-  workspace   Workspace @relation(fields: [workspaceId], references: [id])
-  projectId   String?
-  project     ImportProject? @relation(fields: [projectId], references: [id])
-  folderId    String?
-  folder      DataFolder? @relation(fields: [folderId], references: [id])
-  classification String? // contact_list | customer_list | suppression_list | savvy_mango | woocommerce | mailchimp | klaviyo | whatsapp_export | keyword_file | sales_notes | unknown
-  name        String
-  source      String
-  sourceType  String   @default("import")
-  format      String   @default("csv")
-  uploadedBy  String
-  status      String   @default("mapping") // mapping | review | importing | complete | needs_review | blocked
-  mapping     String? // JSON: column -> field
-  options     String? // JSON: duplicate strategy etc.
-  totalRows   Int      @default(0)
-  readyRows   Int      @default(0)
-  duplicateRows Int    @default(0)
-  mergedRows  Int      @default(0)
-  blockedRows Int      @default(0)
-  missingConsentRows Int @default(0)
-  invalidRows Int      @default(0)
-  revenue     Float    @default(0)
-  createdAt   DateTime @default(now())
-  completedAt DateTime?
+  id                 String         @id @default(cuid())
+  workspaceId        String
+  workspace          Workspace      @relation(fields: [workspaceId], references: [id])
+  projectId          String?
+  project            ImportProject? @relation(fields: [projectId], references: [id])
+  folderId           String?
+  folder             DataFolder?    @relation(fields: [folderId], references: [id])
+  classification     String? // contact_list | customer_list | suppression_list | savvy_mango | woocommerce | mailchimp | klaviyo | whatsapp_export | keyword_file | sales_notes | unknown
+  name               String
+  source             String
+  sourceType         String         @default("import")
+  format             String         @default("csv")
+  uploadedBy         String
+  status             String         @default("mapping") // mapping | review | importing | complete | needs_review | blocked
+  mapping            String? // JSON: column -> field
+  options            String? // JSON: duplicate strategy etc.
+  totalRows          Int            @default(0)
+  readyRows          Int            @default(0)
+  duplicateRows      Int            @default(0)
+  mergedRows         Int            @default(0)
+  blockedRows        Int            @default(0)
+  missingConsentRows Int            @default(0)
+  invalidRows        Int            @default(0)
+  revenue            Float          @default(0)
+  createdAt          DateTime       @default(now())
+  completedAt        DateTime?
 
   rows    ImportRow[]
   sources ContactSource[]
 }
 
 model ImportRow {
-  id        String   @id @default(cuid())
+  id        String      @id @default(cuid())
   batchId   String
   batch     ImportBatch @relation(fields: [batchId], references: [id])
   rowNumber Int
   raw       String // JSON of the original row, always preserved
-  status    String   @default("pending") // pending | ready | duplicate | invalid | blocked | needs_review | imported | merged | skipped
+  status    String      @default("pending") // pending | ready | duplicate | invalid | blocked | needs_review | imported | merged | skipped
   issue     String?
   contactId String?
-  contact   Contact? @relation(fields: [contactId], references: [id])
+  contact   Contact?    @relation(fields: [contactId], references: [id])
 
   @@index([batchId, status])
 }
 
 model Segment {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
   name        String
   description String?
-  match       String   @default("all") // all | any
-  count       Int      @default(0) // last computed
-  revenue     Float    @default(0)
+  match       String    @default("all") // all | any
+  count       Int       @default(0) // last computed
+  revenue     Float     @default(0)
   computedAt  DateTime?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
 
   rules SegmentRule[]
 }
@@ -242,14 +258,14 @@ model SegmentRule {
 }
 
 model Tag {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
   name        String
   description String?
-  color       String?  // internal recognition only
-  archived    Boolean  @default(false)
-  createdAt   DateTime @default(now())
+  color       String? // internal recognition only
+  archived    Boolean   @default(false)
+  createdAt   DateTime  @default(now())
 
   contacts ContactTag[]
 
@@ -259,87 +275,87 @@ model Tag {
 
 model ContactTag {
   contactId String
-  contact   Contact @relation(fields: [contactId], references: [id])
+  contact   Contact  @relation(fields: [contactId], references: [id])
   tagId     String
-  tag       Tag     @relation(fields: [tagId], references: [id])
+  tag       Tag      @relation(fields: [tagId], references: [id])
   createdAt DateTime @default(now())
 
   @@id([contactId, tagId])
 }
 
 model Event {
-  id          String   @id @default(cuid())
-  workspaceId String
-  storeId     String?
-  store       Store?   @relation(fields: [storeId], references: [id])
-  contactId   String?
-  contact     Contact? @relation(fields: [contactId], references: [id])
-  type        String // product_viewed | category_viewed | search | cart_add | cart_remove | checkout_started | purchase_completed | email_open | email_click | form_submitted | quiz_completed | guide_downloaded | consultation_requested | imported | consent_recorded | ...
-  payload     String? // JSON
-  anonymousId String? // for not-yet-identified visitors
+  id            String   @id @default(cuid())
+  workspaceId   String
+  storeId       String?
+  store         Store?   @relation(fields: [storeId], references: [id])
+  contactId     String?
+  contact       Contact? @relation(fields: [contactId], references: [id])
+  type          String // product_viewed | category_viewed | search | cart_add | cart_remove | checkout_started | purchase_completed | email_open | email_click | form_submitted | quiz_completed | guide_downloaded | consultation_requested | imported | consent_recorded | ...
+  payload       String? // JSON
+  anonymousId   String? // for not-yet-identified visitors
   // Provenance: which analytics stream this event belongs to and why it was
   // accepted. Customer analytics reads storefront+server ONLY.
-  stream        String  @default("storefront") // storefront | server | test | internal
+  stream        String   @default("storefront") // storefront | server | test | internal
   sourceContext String? // tracker | plugin | qa-panel | system
   acceptReason  String?
-  occurredAt  DateTime @default(now())
-  createdAt   DateTime @default(now())
+  occurredAt    DateTime @default(now())
+  createdAt     DateTime @default(now())
 
   @@index([workspaceId, type, occurredAt])
   @@index([contactId, occurredAt])
 }
 
 model TimelineItem {
-  id        String   @id @default(cuid())
-  contactId String
-  contact   Contact  @relation(fields: [contactId], references: [id])
-  type      String
-  title     String
-  detail    String?
-  value     String?
-  eventId   String?
+  id         String   @id @default(cuid())
+  contactId  String
+  contact    Contact  @relation(fields: [contactId], references: [id])
+  type       String
+  title      String
+  detail     String?
+  value      String?
+  eventId    String?
   occurredAt DateTime @default(now())
 
   @@index([contactId, occurredAt])
 }
 
 model Product {
-  id        String  @id @default(cuid())
-  storeId   String
-  store     Store   @relation(fields: [storeId], references: [id])
+  id         String   @id @default(cuid())
+  storeId    String
+  store      Store    @relation(fields: [storeId], references: [id])
   externalId String
-  title     String
-  sku       String?
-  price     Float   @default(0)
-  salePrice Float?
-  imageUrl  String?
-  url       String?
+  title      String
+  sku        String?
+  price      Float    @default(0)
+  salePrice  Float?
+  imageUrl   String?
+  url        String?
   categories String? // JSON array
-  tags      String? // JSON array
-  inventory Int?
-  updatedAt DateTime @updatedAt
+  tags       String? // JSON array
+  inventory  Int?
+  updatedAt  DateTime @updatedAt
 
   @@unique([storeId, externalId])
 }
 
 model Order {
-  id         String   @id @default(cuid())
-  storeId    String
-  store      Store    @relation(fields: [storeId], references: [id])
-  contactId  String?
-  contact    Contact? @relation(fields: [contactId], references: [id])
-  externalId String
-  number     String
-  status     String
-  total      Float    @default(0)
-  tax        Float    @default(0)
-  shipping   Float    @default(0)
-  discount   Float    @default(0)
-  refunded   Float    @default(0)
-  coupon     String?
+  id            String   @id @default(cuid())
+  storeId       String
+  store         Store    @relation(fields: [storeId], references: [id])
+  contactId     String?
+  contact       Contact? @relation(fields: [contactId], references: [id])
+  externalId    String
+  number        String
+  status        String
+  total         Float    @default(0)
+  tax           Float    @default(0)
+  shipping      Float    @default(0)
+  discount      Float    @default(0)
+  refunded      Float    @default(0)
+  coupon        String?
   paymentMethod String?
-  items      String? // JSON [{externalProductId, title, qty, price, categories}]
-  placedAt   DateTime @default(now())
+  items         String? // JSON [{externalProductId, title, qty, price, categories}]
+  placedAt      DateTime @default(now())
 
   @@unique([storeId, externalId])
   @@index([contactId])
@@ -349,67 +365,71 @@ model Order {
 // fill in as the visitor progresses. Sweeps flip open carts to abandoned
 // (cart: 1h idle, checkout-started: 30min idle) and purchases convert them.
 model Cart {
-  id         String   @id @default(cuid())
-  storeId    String
-  store      Store    @relation(fields: [storeId], references: [id])
-  contactId  String?
-  contact    Contact? @relation(fields: [contactId], references: [id])
-  externalId String?
-  token      String?  @unique // visitor cart token from the tracker
-  email      String?
-  phone      String?
-  items      String? // JSON
-  total      Float    @default(0)
-  currency   String   @default("GBP")
-  status     String   @default("open") // open | checkout_started | abandoned | abandoned_checkout | recovered | converted | expired | suppressed
+  id                String    @id @default(cuid())
+  storeId           String
+  store             Store     @relation(fields: [storeId], references: [id])
+  contactId         String?
+  contact           Contact?  @relation(fields: [contactId], references: [id])
+  externalId        String?
+  token             String?   @unique // visitor cart token from the tracker
+  email             String?
+  phone             String?
+  items             String? // JSON
+  total             Float     @default(0)
+  currency          String    @default("GBP")
+  status            String    @default("open") // open | checkout_started | abandoned | abandoned_checkout | recovered | converted | expired | suppressed
   checkoutStartedAt DateTime?
-  checkoutStep String?
-  abandonedAt DateTime?
-  recoveredAt DateTime?
-  recoveryToken String? @unique @default(cuid())
-  lastActivityAt DateTime @default(now())
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  checkoutStep      String?
+  abandonedAt       DateTime?
+  recoveredAt       DateTime?
+  recoveryToken     String?   @unique @default(cuid())
+  lastActivityAt    DateTime  @default(now())
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   @@index([storeId, status])
   @@index([status, lastActivityAt])
 }
 
 model Campaign {
-  id          String   @id @default(cuid())
-  workspaceId String
-  workspace   Workspace @relation(fields: [workspaceId], references: [id])
-  name        String
-  subject     String?
-  previewText String?
-  status      String   @default("draft") // draft | scheduled | sending | sent
-  audienceType String? // all | segment | tag | import_batch | score_group | keyword_interest
-  audienceRef String?
-  audienceSnapshot Int  @default(0) // contact count at send/schedule time
-  content     String? // JSON blocks from the builder
+  id               String         @id @default(cuid())
+  workspaceId      String
+  workspace        Workspace      @relation(fields: [workspaceId], references: [id])
+  name             String
+  subject          String?
+  previewText      String?
+  status           String         @default("draft") // draft | scheduled | sending | sent
+  // Which door this campaign leaves by. Email is the only wired provider
+  // today; sms/whatsapp gate and count identically so the day a provider
+  // lands nothing about eligibility has to change.
+  channel          String         @default("email") // email | sms | whatsapp
+  audienceType     String? // all | segment | tag | import_batch | score_group | keyword_interest
+  audienceRef      String?
+  audienceSnapshot Int            @default(0) // contact count at send/schedule time
+  content          String? // JSON blocks from the builder
   // Rendered snapshot taken at send time. What actually went out, immune to
   // later template, product or global-element edits.
-  renderedHtml String?
-  renderedText String?
-  templateId  String?
-  template    EmailTemplate? @relation(fields: [templateId], references: [id])
-  brandId     String?
+  renderedHtml     String?
+  renderedText     String?
+  templateId       String?
+  template         EmailTemplate? @relation(fields: [templateId], references: [id])
+  brandId          String?
   // Unsaved-changes marker for the editor: content edited after the template
   // was applied or last saved back.
-  contentDirty Boolean @default(false)
-  scheduledAt DateTime?
-  sentAt      DateTime?
-  isDemo      Boolean  @default(false) // seeded performance data, not real sends
-  openRate    Float    @default(0)
-  clickRate   Float    @default(0)
-  revenue     Float    @default(0)
-  createdAt   DateTime @default(now())
+  contentDirty     Boolean        @default(false)
+  scheduledAt      DateTime?
+  sentAt           DateTime?
+  isDemo           Boolean        @default(false) // seeded performance data, not real sends
+  openRate         Float          @default(0)
+  clickRate        Float          @default(0)
+  revenue          Float          @default(0)
+  createdAt        DateTime       @default(now())
 
   // Smart sending. mode=immediate keeps the original behaviour.
-  sendMode         String  @default("immediate") // immediate | gradual
-  sendDurationMins Int?    // spread window for gradual mode
-  sendBatchSize    Int     @default(100)
-  sendWindowStart  Int?    // hour 0-23, local to workspace
+  sendMode         String    @default("immediate") // immediate | gradual
+  sendDurationMins Int? // spread window for gradual mode
+  sendBatchSize    Int       @default(100)
+  sendWindowStart  Int? // hour 0-23, local to workspace
   sendWindowEnd    Int?
   sendState        String? // running | paused | cancelled | complete
   sendPausedAt     DateTime?
@@ -420,15 +440,15 @@ model Campaign {
 }
 
 model CampaignSend {
-  id         String   @id @default(cuid())
+  id         String    @id @default(cuid())
   campaignId String
-  campaign   Campaign @relation(fields: [campaignId], references: [id])
+  campaign   Campaign  @relation(fields: [campaignId], references: [id])
   contactId  String
-  contact    Contact  @relation(fields: [contactId], references: [id])
-  status     String   @default("queued") // queued | sent | delivered | bounced | complained | failed | suppressed | cancelled
+  contact    Contact   @relation(fields: [contactId], references: [id])
+  status     String    @default("queued") // queued | sent | delivered | bounced | complained | failed | suppressed | cancelled
   openedAt   DateTime?
   clickedAt  DateTime?
-  createdAt  DateTime @default(now())
+  createdAt  DateTime  @default(now())
 
   // One send record per contact per campaign, enforced by the database. This
   // is the duplicate-delivery guard: a retried batch job upserts against this
@@ -438,18 +458,18 @@ model CampaignSend {
 }
 
 model Automation {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
   name        String
   trigger     String
-  status      String   @default("draft") // live | paused | draft
-  isDemo      Boolean  @default(false)
-  entered     Int      @default(0)
-  completed   Int      @default(0)
-  revenue     Float    @default(0)
-  conversion  Float    @default(0)
-  createdAt   DateTime @default(now())
+  status      String    @default("draft") // live | paused | draft
+  isDemo      Boolean   @default(false)
+  entered     Int       @default(0)
+  completed   Int       @default(0)
+  revenue     Float     @default(0)
+  conversion  Float     @default(0)
+  createdAt   DateTime  @default(now())
 
   nodes AutomationNode[]
   runs  AutomationRun[]
@@ -483,19 +503,19 @@ model AutomationRun {
 }
 
 model EmailTemplate {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
   name        String
   content     String // JSON blocks (see lib/server/email-blocks.ts)
   description String?
-  category    String  @default("newsletter") // welcome | product_launch | abandoned_basket | discount | newsletter | educational | re_engagement | post_purchase | review_request | survey | vip | seasonal
+  category    String    @default("newsletter") // welcome | product_launch | abandoned_basket | discount | newsletter | educational | re_engagement | post_purchase | review_request | survey | vip | seasonal
   brandId     String?
-  brand       Brand?  @relation(fields: [brandId], references: [id])
-  archived    Boolean @default(false)
+  brand       Brand?    @relation(fields: [brandId], references: [id])
+  archived    Boolean   @default(false)
   updatedBy   String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @default(now()) @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now()) @updatedAt
 
   campaigns Campaign[]
 }
@@ -504,36 +524,36 @@ model EmailTemplate {
 // One workspace can run several (MyoTech, Novatec, ...). Everything here is
 // a default the campaign level may override, never a straitjacket.
 model Brand {
-  id          String   @id @default(cuid())
-  workspaceId String
-  name        String
-  websiteUrl  String?
-  storeId     String? // default connected store for products and coupons
-  logoUrl     String?
-  darkLogoUrl String?
-  iconUrl     String?
-  primaryColor    String @default("#6d28d9")
-  secondaryColor  String @default("#14121f")
-  accentColor     String @default("#8b5cf6")
-  backgroundColor String @default("#faf9f7")
-  textColor       String @default("#2c2b28")
-  headingFont String @default("Helvetica, Arial, sans-serif")
-  bodyFont    String @default("Helvetica, Arial, sans-serif")
-  buttonRadius Int   @default(8)
-  socialLinks  String? // JSON [{label,url}]
-  menuLinks    String? // JSON [{label,url}]
-  contactDetails String?
-  mailingAddress String?
-  legalLinks   String? // JSON [{label,url}]
-  senderName   String?
-  senderEmail  String?
-  replyToEmail String?
-  currency     String @default("GBP")
-  locale       String @default("en-GB")
-  footerText   String?
-  unsubscribeText String @default("You are receiving this because you subscribed. Unsubscribe at any time.")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now()) @updatedAt
+  id              String   @id @default(cuid())
+  workspaceId     String
+  name            String
+  websiteUrl      String?
+  storeId         String? // default connected store for products and coupons
+  logoUrl         String?
+  darkLogoUrl     String?
+  iconUrl         String?
+  primaryColor    String   @default("#6d28d9")
+  secondaryColor  String   @default("#14121f")
+  accentColor     String   @default("#8b5cf6")
+  backgroundColor String   @default("#faf9f7")
+  textColor       String   @default("#2c2b28")
+  headingFont     String   @default("Helvetica, Arial, sans-serif")
+  bodyFont        String   @default("Helvetica, Arial, sans-serif")
+  buttonRadius    Int      @default(8)
+  socialLinks     String? // JSON [{label,url}]
+  menuLinks       String? // JSON [{label,url}]
+  contactDetails  String?
+  mailingAddress  String?
+  legalLinks      String? // JSON [{label,url}]
+  senderName      String?
+  senderEmail     String?
+  replyToEmail    String?
+  currency        String   @default("GBP")
+  locale          String   @default("en-GB")
+  footerText      String?
+  unsubscribeText String   @default("You are receiving this because you subscribed. Unsubscribe at any time.")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
 
   templates EmailTemplate[]
   elements  GlobalElement[]
@@ -546,14 +566,14 @@ model Brand {
 // edit can be rolled back; sent campaigns are unaffected because sending
 // snapshots rendered content onto the campaign.
 model GlobalElement {
-  id          String  @id @default(cuid())
+  id          String   @id @default(cuid())
   workspaceId String
   brandId     String?
-  brand       Brand?  @relation(fields: [brandId], references: [id])
+  brand       Brand?   @relation(fields: [brandId], references: [id])
   name        String
   content     String // JSON: one block definition
-  version     Int     @default(1)
-  archived    Boolean @default(false)
+  version     Int      @default(1)
+  archived    Boolean  @default(false)
   updatedBy   String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @default(now()) @updatedAt
@@ -564,41 +584,43 @@ model GlobalElement {
 }
 
 model GlobalElementVersion {
-  id        String   @id @default(cuid())
+  id        String        @id @default(cuid())
   elementId String
   element   GlobalElement @relation(fields: [elementId], references: [id])
   version   Int
   content   String
   savedBy   String?
-  createdAt DateTime @default(now())
+  createdAt DateTime      @default(now())
 
   @@unique([elementId, version])
 }
 
 model Form {
-  id          String   @id @default(cuid())
-  workspaceId String
-  workspace   Workspace @relation(fields: [workspaceId], references: [id])
-  name        String
-  type        String // popup | embedded | slide_in | floating_bar | exit_intent | quiz
-  trigger     String?
-  status      String   @default("draft")
-  views       Int      @default(0)
-  signups     Int      @default(0)
-  isDemo      Boolean  @default(false)
-  createdAt   DateTime @default(now())
+  id                   String    @id @default(cuid())
+  workspaceId          String
+  workspace            Workspace @relation(fields: [workspaceId], references: [id])
+  name                 String
+  type                 String // popup | embedded | slide_in | floating_bar | exit_intent | quiz
+  trigger              String?
+  status               String    @default("draft")
+  views                Int       @default(0)
+  signups              Int       @default(0)
+  isDemo               Boolean   @default(false)
+  createdAt            DateTime  @default(now())
   // Builder config (null = the tracker's clean defaults)
-  headline       String?
-  body           String?
-  buttonLabel    String?
-  consentLabel   String?
-  successMessage String?
-  offerCode      String?
-  accent         String? // hex button/brand colour on-site
-  collectName    Boolean  @default(false)
-  triggerKind    String   @default("time_on_page") // time_on_page | exit_intent | scroll
-  triggerSeconds Int      @default(8)
-  updatedAt      DateTime @default(now()) @updatedAt
+  headline             String?
+  body                 String?
+  buttonLabel          String?
+  consentLabel         String? // email consent wording; checkbox renders only when set
+  smsConsentLabel      String? // when set, the form offers an SMS consent checkbox
+  whatsappConsentLabel String? // when set, the form offers a WhatsApp consent checkbox
+  successMessage       String?
+  offerCode            String?
+  accent               String? // hex button/brand colour on-site
+  collectName          Boolean   @default(false)
+  triggerKind          String    @default("time_on_page") // time_on_page | exit_intent | scroll
+  triggerSeconds       Int       @default(8)
+  updatedAt            DateTime  @default(now()) @updatedAt
 
   // Image presentation. The image itself lives at a URL (brand asset or
   // product image), never as base64 inside this row.
@@ -625,18 +647,18 @@ model Form {
 // shape is owned by the shared condition engine (lib/server/conditions.ts),
 // not by the database.
 model FormStep {
-  id      String @id @default(cuid())
-  formId  String
-  form    Form   @relation(fields: [formId], references: [id])
-  order   Int
-  title   String?
+  id     String  @id @default(cuid())
+  formId String
+  form   Form    @relation(fields: [formId], references: [id])
+  order  Int
+  title  String?
   // JSON array of fields: {key, kind: email|text|choice|multi_choice|rating|
   //   nps|dropdown|yes_no|number_scale, label, options?, required?, tagMap?,
   //   propertyKey?}
-  fields  String @default("[]")
+  fields String  @default("[]")
   // JSON array of shared-engine rules evaluated on step completion:
   //   {if: {field, op, value}, then: {action, ...}}
-  rules   String @default("[]")
+  rules  String  @default("[]")
 
   @@unique([formId, order])
 }
@@ -644,17 +666,17 @@ model FormStep {
 // Every completed (or abandoned-at-step) submission, with the original
 // questions and answers preserved verbatim.
 model FormSubmission {
-  id        String   @id @default(cuid())
-  formId    String
-  form      Form     @relation(fields: [formId], references: [id])
-  contactId String?
-  email     String?
+  id           String   @id @default(cuid())
+  formId       String
+  form         Form     @relation(fields: [formId], references: [id])
+  contactId    String?
+  email        String?
   // JSON: [{stepId, key, question, answer}]
-  answers   String   @default("[]")
-  completed Boolean  @default(false)
-  lastStep  Int      @default(0)
+  answers      String   @default("[]")
+  completed    Boolean  @default(false)
+  lastStep     Int      @default(0)
   couponCodeId String?
-  createdAt DateTime @default(now())
+  createdAt    DateTime @default(now())
 
   @@index([formId, createdAt])
 }
@@ -662,30 +684,30 @@ model FormSubmission {
 // A platform-neutral promotion. The editor and forms speak to this; the
 // store adapter turns it into a WooCommerce coupon or a Shopify discount.
 model Promotion {
-  id          String  @id @default(cuid())
-  workspaceId String
-  storeId     String?
-  name        String
-  mode        String  @default("shared") // shared | unique
-  sharedCode  String? // for mode=shared
-  prefix      String  @default("LOOM") // for mode=unique: PREFIX-XXX-XXXXX
-  kind        String  @default("percent") // percent | fixed | free_shipping
-  amount      Float   @default(10)
-  currency    String  @default("GBP")
-  expiryDays  Int?    // per-code lifetime from generation
-  minSpend    Float?
-  maxSpend    Float?
-  usageLimit  Int?    @default(1)
-  perCustomer Int?    @default(1)
-  individualUse Boolean @default(true)
-  emailRestricted Boolean @default(true)
+  id                String   @id @default(cuid())
+  workspaceId       String
+  storeId           String?
+  name              String
+  mode              String   @default("shared") // shared | unique
+  sharedCode        String? // for mode=shared
+  prefix            String   @default("LOOM") // for mode=unique: PREFIX-XXX-XXXXX
+  kind              String   @default("percent") // percent | fixed | free_shipping
+  amount            Float    @default(10)
+  currency          String   @default("GBP")
+  expiryDays        Int? // per-code lifetime from generation
+  minSpend          Float?
+  maxSpend          Float?
+  usageLimit        Int?     @default(1)
+  perCustomer       Int?     @default(1)
+  individualUse     Boolean  @default(true)
+  emailRestricted   Boolean  @default(true)
   includeProductIds String? // JSON of internal product ids
   excludeProductIds String?
   includeCategories String?
   excludeCategories String?
-  archived    Boolean @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @default(now()) @updatedAt
+  archived          Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @default(now()) @updatedAt
 
   codes CouponCode[]
 }
@@ -716,20 +738,20 @@ model CouponCode {
 // An email poll: one question whose answers arrive as signed clicks from the
 // email. Answers apply tags/properties through the shared condition engine.
 model Poll {
-  id          String @id @default(cuid())
+  id          String   @id @default(cuid())
   workspaceId String
   question    String
   // JSON: [{key, label, tag?, propertyKey?, propertyValue?}]
-  options     String @default("[]")
+  options     String   @default("[]")
   createdAt   DateTime @default(now())
 
   answers PollAnswer[]
 }
 
 model PollAnswer {
-  id        String @id @default(cuid())
+  id        String   @id @default(cuid())
   pollId    String
-  poll      Poll   @relation(fields: [pollId], references: [id])
+  poll      Poll     @relation(fields: [pollId], references: [id])
   contactId String?
   sendId    String? // campaign send that carried the poll
   optionKey String
@@ -750,32 +772,32 @@ model LeadScore {
 }
 
 model Keyword {
-  id          String   @id @default(cuid())
-  workspaceId String
-  workspace   Workspace @relation(fields: [workspaceId], references: [id])
-  term        String
-  clusterId   String?
-  cluster     KeywordCluster? @relation(fields: [clusterId], references: [id])
-  volume      Int      @default(0)
-  trend       Int      @default(0)
-  cpc         Float    @default(0)
-  seoDifficulty Int    @default(0)
-  intent      String   @default("research") // buyer | research | question
-  review      String   @default("approved") // approved | needs_review | restricted | internal_only | blocked
-  createdAt   DateTime @default(now())
+  id            String          @id @default(cuid())
+  workspaceId   String
+  workspace     Workspace       @relation(fields: [workspaceId], references: [id])
+  term          String
+  clusterId     String?
+  cluster       KeywordCluster? @relation(fields: [clusterId], references: [id])
+  volume        Int             @default(0)
+  trend         Int             @default(0)
+  cpc           Float           @default(0)
+  seoDifficulty Int             @default(0)
+  intent        String          @default("research") // buyer | research | question
+  review        String          @default("approved") // approved | needs_review | restricted | internal_only | blocked
+  createdAt     DateTime        @default(now())
 
   @@unique([workspaceId, term])
 }
 
 model KeywordCluster {
-  id          String   @id @default(cuid())
-  workspaceId String
-  workspace   Workspace @relation(fields: [workspaceId], references: [id])
-  name        String
-  opportunityScore Int @default(0)
-  demandNote  String?
-  haveAssets  String? // JSON array
-  missingAssets String? // JSON array
+  id               String    @id @default(cuid())
+  workspaceId      String
+  workspace        Workspace @relation(fields: [workspaceId], references: [id])
+  name             String
+  opportunityScore Int       @default(0)
+  demandNote       String?
+  haveAssets       String? // JSON array
+  missingAssets    String? // JSON array
 
   keywords Keyword[]
 
@@ -800,104 +822,104 @@ model DemandSignal {
 }
 
 model DataProvider {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
   name        String
   type        String // commerce | sending | ad_platform | search_data | keyword_data | enrichment | crm | sms
-  status      String   @default("not_connected") // healthy | syncing | error | not_connected
+  status      String    @default("not_connected") // healthy | syncing | error | not_connected
   config      String? // JSON (keys stay in env; this holds non-secret settings)
   lastSyncAt  DateTime?
   note        String?
-  costMonth   Float    @default(0)
+  costMonth   Float     @default(0)
 
   syncs ProviderSync[]
 }
 
 model ProviderSync {
-  id         String   @id @default(cuid())
+  id         String       @id @default(cuid())
   providerId String
   provider   DataProvider @relation(fields: [providerId], references: [id])
   storeId    String?
-  store      Store?   @relation(fields: [storeId], references: [id])
+  store      Store?       @relation(fields: [storeId], references: [id])
   status     String // ok | error
   detail     String?
-  records    Int      @default(0)
-  startedAt  DateTime @default(now())
+  records    Int          @default(0)
+  startedAt  DateTime     @default(now())
   endedAt    DateTime?
 }
 
 model EnrichmentRecord {
-  id         String   @id @default(cuid())
-  contactId  String
-  contact    Contact  @relation(fields: [contactId], references: [id])
-  provider   String
+  id          String   @id @default(cuid())
+  contactId   String
+  contact     Contact  @relation(fields: [contactId], references: [id])
+  provider    String
   fieldsAdded String // JSON
-  confidence Int      @default(0)
-  cost       Float    @default(0)
-  permission String?
-  createdAt  DateTime @default(now())
+  confidence  Int      @default(0)
+  cost        Float    @default(0)
+  permission  String?
+  createdAt   DateTime @default(now())
 }
 
 model SuppressionRecord {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
   email       String
   reason      String // unsubscribed | hard_bounce | complaint | manual | import_blocked
   detail      String?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
 
   @@unique([workspaceId, email])
 }
 
 model SalesTask {
-  id          String   @id @default(cuid())
-  workspaceId String
-  workspace   Workspace @relation(fields: [workspaceId], references: [id])
-  contactId   String?
-  contact     Contact? @relation(fields: [contactId], references: [id])
-  contactLabel String? // for prospects not yet in contacts
-  type        String
-  note        String?
-  priority    String   @default("medium") // high | medium | low
-  status      String   @default("open") // open | done | overdue
-  source      String   @default("manual") // manual | automation | score_threshold | system
-  assigneeId  String?
-  assignee    User?    @relation("assignee", fields: [assigneeId], references: [id])
+  id            String    @id @default(cuid())
+  workspaceId   String
+  workspace     Workspace @relation(fields: [workspaceId], references: [id])
+  contactId     String?
+  contact       Contact?  @relation(fields: [contactId], references: [id])
+  contactLabel  String? // for prospects not yet in contacts
+  type          String
+  note          String?
+  priority      String    @default("medium") // high | medium | low
+  status        String    @default("open") // open | done | overdue
+  source        String    @default("manual") // manual | automation | score_threshold | system
+  assigneeId    String?
+  assignee      User?     @relation("assignee", fields: [assigneeId], references: [id])
   assigneeLabel String?
-  dueAt       DateTime?
-  completedAt DateTime?
-  createdAt   DateTime @default(now())
+  dueAt         DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime  @default(now())
 
   @@index([workspaceId, status])
 }
 
 model ComplianceCheck {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
   subjectType String // keyword | campaign | import
   subjectId   String
   state       String // approved | needs_review | restricted | internal_only | blocked
   rule        String?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
 }
 
 // Universal Inbox: anything messy lands here first (paste, file, WhatsApp
 // forward, email forward, note, form, api), gets extracted into
 // ExtractedRecords, and only becomes Contacts on explicit approval.
 model IntakeItem {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
   kind        String // paste | file | whatsapp | email | note | form | api
   title       String
   raw         String // original text / file summary, always preserved
-  status      String   @default("review") // received | extracting | review | approved | rejected | partial
-  confidence  Int      @default(0)
-  source      String   @default("Universal Inbox")
-  createdAt   DateTime @default(now())
+  status      String    @default("review") // received | extracting | review | approved | rejected | partial
+  confidence  Int       @default(0)
+  source      String    @default("Universal Inbox")
+  createdAt   DateTime  @default(now())
   processedAt DateTime?
 
   records ExtractedRecord[]
@@ -906,15 +928,15 @@ model IntakeItem {
 }
 
 model ExtractedRecord {
-  id         String   @id @default(cuid())
-  intakeId   String
-  intake     IntakeItem @relation(fields: [intakeId], references: [id])
-  fields     String // JSON: {name, phone, email, interests[], taskNote, taskDue, location, notes}
-  confidence Int      @default(0)
-  status     String   @default("pending") // pending | approved | merged | rejected
-  contactId  String? // set on approval
+  id          String     @id @default(cuid())
+  intakeId    String
+  intake      IntakeItem @relation(fields: [intakeId], references: [id])
+  fields      String // JSON: {name, phone, email, interests[], taskNote, taskDue, location, notes}
+  confidence  Int        @default(0)
+  status      String     @default("pending") // pending | approved | merged | rejected
+  contactId   String? // set on approval
   duplicateOf String? // existing contact id when a match was detected
-  createdAt  DateTime @default(now())
+  createdAt   DateTime   @default(now())
 
   @@index([intakeId, status])
 }
@@ -922,43 +944,43 @@ model ExtractedRecord {
 // A frozen, cleaned group of contacts ready to copy/export. Suppressed and
 // unsubscribed contacts are excluded at build time and again at render time.
 model ContactPack {
-  id          String   @id @default(cuid())
-  workspaceId String
-  name        String
-  source      String // "Audience: VIP customers", "Import: Webinar · July", "Search: nad+", "Contacts selection"
-  contactIds  String // JSON array of eligible contact ids
-  total       Int      @default(0) // originally selected
-  eligible    Int      @default(0)
-  withEmail   Int      @default(0)
-  withPhone   Int      @default(0)
-  excludedSuppressed Int @default(0)
-  excludedUnsubscribed Int @default(0)
-  excludedNoRoute Int  @default(0)
-  duplicatesRemoved Int @default(0)
-  suggestedUse String?
-  simulated   Boolean  @default(false) // Savvy-style demo packs render no real rows
-  createdBy   String
-  createdAt   DateTime @default(now())
+  id                   String   @id @default(cuid())
+  workspaceId          String
+  name                 String
+  source               String // "Audience: VIP customers", "Import: Webinar · July", "Search: nad+", "Contacts selection"
+  contactIds           String // JSON array of eligible contact ids
+  total                Int      @default(0) // originally selected
+  eligible             Int      @default(0)
+  withEmail            Int      @default(0)
+  withPhone            Int      @default(0)
+  excludedSuppressed   Int      @default(0)
+  excludedUnsubscribed Int      @default(0)
+  excludedNoRoute      Int      @default(0)
+  duplicatesRemoved    Int      @default(0)
+  suggestedUse         String?
+  simulated            Boolean  @default(false) // Savvy-style demo packs render no real rows
+  createdBy            String
+  createdAt            DateTime @default(now())
 
   exports ExportLog[]
 }
 
 model ExportLog {
-  id          String   @id @default(cuid())
-  workspaceId String
-  packId      String?
-  pack        ContactPack? @relation(fields: [packId], references: [id])
-  user        String
-  dataType    String // pack | audience | tasks | search | import
-  source      String
-  format      String // emails | bcc | name_email | phones | whatsapp | call_sheet | outreach_rows | csv | mailchimp_csv | klaviyo_csv | crm_csv
-  contacts    Int      @default(0)
-  excludedSuppressed Int @default(0)
-  excludedUnsubscribed Int @default(0)
-  duplicatesRemoved Int @default(0)
-  batch       String? // "3 of 8 (size 50)"
-  notes       String?
-  createdAt   DateTime @default(now())
+  id                   String       @id @default(cuid())
+  workspaceId          String
+  packId               String?
+  pack                 ContactPack? @relation(fields: [packId], references: [id])
+  user                 String
+  dataType             String // pack | audience | tasks | search | import
+  source               String
+  format               String // emails | bcc | name_email | phones | whatsapp | call_sheet | outreach_rows | csv | mailchimp_csv | klaviyo_csv | crm_csv
+  contacts             Int          @default(0)
+  excludedSuppressed   Int          @default(0)
+  excludedUnsubscribed Int          @default(0)
+  duplicatesRemoved    Int          @default(0)
+  batch                String? // "3 of 8 (size 50)"
+  notes                String?
+  createdAt            DateTime     @default(now())
 
   @@index([workspaceId, createdAt])
 }
@@ -977,33 +999,33 @@ model ImportProject {
 }
 
 model Feedback {
-  id          String   @id @default(cuid())
-  workspaceId String
-  status      String   @default("new") // new | reviewed | actioned | rejected
+  id           String   @id @default(cuid())
+  workspaceId  String
+  status       String   @default("new") // new | reviewed | actioned | rejected
   internalNote String?
-  area        String
-  workedWell  String?
-  confusing   String?
-  missing     String?
-  improve     String?
-  priority    String   @default("medium") // low | medium | high
-  notes       String?
-  author      String
-  createdAt   DateTime @default(now())
+  area         String
+  workedWell   String?
+  confusing    String?
+  missing      String?
+  improve      String?
+  priority     String   @default("medium") // low | medium | high
+  notes        String?
+  author       String
+  createdAt    DateTime @default(now())
 
   @@index([workspaceId, createdAt])
 }
 
 model AuditLog {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
   actorId     String?
-  actor       User?    @relation(fields: [actorId], references: [id])
+  actor       User?     @relation(fields: [actorId], references: [id])
   actorLabel  String // email or "system" | "plugin:<storeId>"
   action      String // import.created | import.blocked | contact.suppressed | store.connected | event.rejected | ...
   detail      String?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
 
   @@index([workspaceId, createdAt])
 }
@@ -1045,18 +1067,18 @@ model DataFolder {
 // and WooCommerce are catalog entries on it, never special cases in core) ----
 
 model Integration {
-  id          String    @id @default(cuid())
+  id          String            @id @default(cuid())
   workspaceId String
-  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  workspace   Workspace         @relation(fields: [workspaceId], references: [id])
   slug        String // marketvox | mvsocial | woocommerce | shopify | custom-api | ...
   name        String
-  kind        String    @default("custom") // trading | social | commerce | crm | automation | custom
-  status      String    @default("not_connected") // not_connected | connected | error | disabled
-  environment String    @default("live") // live | test
+  kind        String            @default("custom") // trading | social | commerce | crm | automation | custom
+  status      String            @default("not_connected") // not_connected | connected | error | disabled
+  environment String            @default("live") // live | test
   config      String? // JSON connector settings; never secrets
   connectedAt DateTime?
   lastEventAt DateTime?
-  createdAt   DateTime  @default(now())
+  createdAt   DateTime          @default(now())
   apiKeys     ApiKey[]
   webhooks    WebhookEndpoint[]
 
@@ -1064,54 +1086,54 @@ model Integration {
 }
 
 model ApiKey {
-  id            String    @id @default(cuid())
+  id            String      @id @default(cuid())
   workspaceId   String
   integrationId String
   integration   Integration @relation(fields: [integrationId], references: [id])
   name          String
-  publicKey     String    @unique // pk_live_... (identifier, safe to show)
+  publicKey     String      @unique // pk_live_... (identifier, safe to show)
   secretHash    String // scrypt salt:hash of the sk_ secret; shown once at creation
   secretHint    String // last 4 characters for recognition
   permissions   String // JSON array: ["contacts:read","contacts:write","events:write",...]
-  status        String    @default("active") // active | disabled | rotated
-  environment   String    @default("live")
+  status        String      @default("active") // active | disabled | rotated
+  environment   String      @default("live")
   ipAllowlist   String? // comma-separated; empty = any
   expiresAt     DateTime?
   lastUsedAt    DateTime?
   rotatedFromId String?
-  createdAt     DateTime  @default(now())
+  createdAt     DateTime    @default(now())
 }
 
 model WebhookEndpoint {
-  id            String    @id @default(cuid())
+  id            String            @id @default(cuid())
   workspaceId   String
   integrationId String
-  integration   Integration @relation(fields: [integrationId], references: [id])
+  integration   Integration       @relation(fields: [integrationId], references: [id])
   url           String
   secret        String // whsec_...; used server-side to sign deliveries
   events        String // JSON array of subscribed event types; [\"*\"] = all
-  status        String    @default("active") // active | disabled (auto after repeated failure)
-  failCount     Int       @default(0)
+  status        String            @default("active") // active | disabled (auto after repeated failure)
+  failCount     Int               @default(0)
   lastSuccessAt DateTime?
   lastFailureAt DateTime?
-  createdAt     DateTime  @default(now())
+  createdAt     DateTime          @default(now())
   deliveries    WebhookDelivery[]
 }
 
 model WebhookDelivery {
-  id           String    @id @default(cuid())
+  id           String          @id @default(cuid())
   workspaceId  String
   endpointId   String
   endpoint     WebhookEndpoint @relation(fields: [endpointId], references: [id])
   eventType    String
   payload      String
-  status       String    @default("pending") // pending | success | failed | dead
-  attempts     Int       @default(0)
+  status       String          @default("pending") // pending | success | failed | dead
+  attempts     Int             @default(0)
   responseCode Int?
   responseNote String?
   nextRetryAt  DateTime?
   deliveredAt  DateTime?
-  createdAt    DateTime  @default(now())
+  createdAt    DateTime        @default(now())
 
   @@index([status, nextRetryAt])
 }
@@ -1179,27 +1201,27 @@ model JourneyEnrolment {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Plan {
-  id        String  @id @default(cuid())
-  key       String  @unique // launch | growth | scale | enterprise | internal
-  name      String
-  blurb     String?
+  id           String  @id @default(cuid())
+  key          String  @unique // launch | growth | scale | enterprise | internal
+  name         String
+  blurb        String?
   // Pence, so no floating-point money. null = "contact sales" (Enterprise).
   monthlyPence Int?
   annualPence  Int?
-  currency     String @default("GBP")
+  currency     String  @default("GBP")
 
   // Named entitlements as JSON so a new limit never needs a migration.
   // Shape: { "monthly_contacts": 5000, "revenue_attribution": true, ... }
   // -1 means unlimited. See lib/server/entitlements.ts for the contract.
   entitlements String @default("{}")
 
-  recommended Boolean @default(false) // renders as "Most Popular"
+  recommended  Boolean @default(false) // renders as "Most Popular"
   contactSales Boolean @default(false)
-  visible     Boolean @default(true)  // hide without deleting; keeps history intact
-  sortOrder   Int     @default(0)
+  visible      Boolean @default(true) // hide without deleting; keeps history intact
+  sortOrder    Int     @default(0)
 
   // Stripe wiring. Null until Steve connects the account and the sync runs.
-  stripeProductId     String?
+  stripeProductId      String?
   stripeMonthlyPriceId String?
   stripeAnnualPriceId  String?
 
@@ -1239,11 +1261,11 @@ model Subscription {
   // Trial lifecycle. The spec's 3-day and 7-day marks are stored per account
   // rather than computed from a constant, so admin can extend an individual
   // trial without the dates drifting from what the customer was told.
-  trialStartedAt   DateTime?
+  trialStartedAt      DateTime?
   trialStageOneEndsAt DateTime? // day 3: choose plan + verify payment method
-  trialEndsAt      DateTime?    // day 7: first charge
-  firstBillingAt   DateTime?
-  firstChargePence Int?
+  trialEndsAt         DateTime? // day 7: first charge
+  firstBillingAt      DateTime?
+  firstChargePence    Int?
 
   // Payment method verification (the GBP 0 authorisation).
   paymentMethodVerifiedAt DateTime?
@@ -1251,8 +1273,8 @@ model Subscription {
   paymentMethodLast4      String? // display only, never full card data
 
   // Stripe references. No raw card data is ever stored.
-  stripeCustomerId     String? @unique
-  stripeSubscriptionId String? @unique
+  stripeCustomerId      String? @unique
+  stripeSubscriptionId  String? @unique
   stripePaymentMethodId String?
 
   // Cancellation
@@ -1261,8 +1283,8 @@ model Subscription {
   cancelReason      String?
 
   // Payment recovery
-  paymentFailedAt   DateTime?
-  paymentRetryCount Int      @default(0)
+  paymentFailedAt    DateTime?
+  paymentRetryCount  Int       @default(0)
   accessRestrictedAt DateTime? // the date shown to the customer
 
   // Account credit applied to the next charge, in pence. Set by admin.
@@ -1278,12 +1300,12 @@ model Subscription {
 
   // Grandfathering and overrides. Existing in-house workspaces are created
   // as complimentary with this set, so the paywall can never touch them.
-  complimentary Boolean @default(false)
-  notes         String?
+  complimentary        Boolean @default(false)
+  notes                String?
   // Per-account entitlement overrides, same shape as Plan.entitlements.
   // Merged OVER the plan, so one account can be granted more without a
   // bespoke plan.
-  entitlementOverrides String @default("{}")
+  entitlementOverrides String  @default("{}")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1302,14 +1324,14 @@ model Invoice {
   subscriptionId String
   subscription   Subscription @relation(fields: [subscriptionId], references: [id])
 
-  number      String   @unique // SL-0001, or the provider's number
+  number      String    @unique // SL-0001, or the provider's number
   amountPence Int
-  currency    String   @default("GBP")
-  status      String   // paid | open | failed | void
+  currency    String    @default("GBP")
+  status      String // paid | open | failed | void
   description String?
   periodStart DateTime?
   periodEnd   DateTime?
-  issuedAt    DateTime @default(now())
+  issuedAt    DateTime  @default(now())
   paidAt      DateTime?
 
   stripeInvoiceId String? @unique
@@ -1327,13 +1349,13 @@ model SubscriptionEvent {
   subscriptionId String
   subscription   Subscription @relation(fields: [subscriptionId], references: [id])
 
-  type      String // trial.started | plan.selected | pm.verified | charge.succeeded | ...
+  type       String // trial.started | plan.selected | pm.verified | charge.succeeded | ...
   fromStatus String?
   toStatus   String?
-  actorLabel String  @default("system") // email | "system" | "stripe:webhook"
+  actorLabel String   @default("system") // email | "system" | "stripe:webhook"
   detail     String?
   // Stripe event id, so replayed webhooks are provably idempotent.
-  externalId String? @unique
+  externalId String?  @unique
   createdAt  DateTime @default(now())
 
   @@index([subscriptionId, createdAt])
@@ -1343,14 +1365,14 @@ model SubscriptionEvent {
 // from the counters the product already computes so billing never changes
 // what the analytics show.
 model UsageCounter {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
-  key         String   // matches an entitlement key, e.g. monthly_email_sends
+  key         String // matches an entitlement key, e.g. monthly_email_sends
   periodStart DateTime
   periodEnd   DateTime
-  used        Int      @default(0)
-  updatedAt   DateTime @updatedAt
+  used        Int       @default(0)
+  updatedAt   DateTime  @updatedAt
 
   @@unique([workspaceId, key, periodStart])
   @@index([workspaceId, key])

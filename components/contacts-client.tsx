@@ -9,6 +9,79 @@ import { gbp, num, type Subscriber } from "@/lib/data";
 
 const filters = ["All", "Subscribed", "Pending", "Unsubscribed", "Suppressed"] as const;
 
+// The channel lens, combinable with the pills above and the search box: a
+// person can stand in "Location contains Marbella" AND "WhatsApp consented"
+// at once, which is exactly the audience they then select and act on.
+const channelFilters = [
+  "Any", "Email ✓", "SMS ✓", "WhatsApp ✓", "All channels ✓",
+  "No consent", "Unknown", "Do Not Contact",
+] as const;
+type ChannelFilter = (typeof channelFilters)[number];
+
+const consented = (v: string) => v === "granted";
+const unknownish = (v: string) => v === "unknown" || v === "pending";
+
+function matchesChannelFilter(s: Subscriber, f: ChannelFilter): boolean {
+  const cs = s.channelStates;
+  switch (f) {
+    case "Any": return true;
+    case "Email ✓": return consented(cs.email) && !s.doNotContact;
+    case "SMS ✓": return consented(cs.sms) && !s.doNotContact;
+    case "WhatsApp ✓": return consented(cs.whatsapp) && !s.doNotContact;
+    case "All channels ✓": return consented(cs.email) && consented(cs.sms) && consented(cs.whatsapp) && !s.doNotContact;
+    case "No consent": return !consented(cs.email) && !consented(cs.sms) && !consented(cs.whatsapp);
+    case "Unknown": return unknownish(cs.email) && unknownish(cs.sms) && unknownish(cs.whatsapp);
+    case "Do Not Contact": return s.doNotContact;
+  }
+}
+
+/** One little letter per channel, its state carried by colour and tooltip. */
+function ChannelChips({ s }: { s: Subscriber }) {
+  const chip = (label: string, channel: string, state: string) => {
+    const cls = s.doNotContact
+      ? "bg-zinc-200 text-zinc-400 line-through"
+      : state === "granted"
+        ? "bg-emerald-50 text-emerald-700"
+        : state === "withdrawn" || state === "suppressed"
+          ? "bg-red-50 text-red-600"
+          : state === "declined"
+            ? "bg-amber-50 text-amber-700"
+            : "bg-zinc-100 text-zinc-400";
+    const word = s.doNotContact
+      ? "blocked · Do Not Contact"
+      : state === "granted"
+        ? "consented"
+        : state === "withdrawn"
+          ? "unsubscribed"
+          : state === "suppressed"
+            ? "suppressed"
+            : state === "declined"
+              ? "not consented"
+              : "unknown";
+    return (
+      <span
+        key={channel}
+        title={`${channel}: ${word}`}
+        className={`inline-flex h-5 min-w-5 items-center justify-center rounded px-1 text-[10px] font-bold ${cls}`}
+      >
+        {label}
+      </span>
+    );
+  };
+  return (
+    <span className="inline-flex items-center gap-1">
+      {chip("E", "Email", s.channelStates.email)}
+      {chip("S", "SMS", s.channelStates.sms)}
+      {chip("W", "WhatsApp", s.channelStates.whatsapp)}
+      {s.doNotContact && (
+        <span title="Do Not Contact: all marketing blocked" className="inline-flex h-5 items-center rounded bg-red-600 px-1.5 text-[10px] font-bold text-white">
+          DNC
+        </span>
+      )}
+    </span>
+  );
+}
+
 export function ContactsClient({ contacts }: { contacts: Subscriber[] }) {
   const router = useRouter();
   const [q, setQ] = useState("");
@@ -35,6 +108,8 @@ export function ContactsClient({ contacts }: { contacts: Subscriber[] }) {
     }
   }
   const [filter, setFilter] = useState<(typeof filters)[number]>("All");
+  const [channelFilter, setChannelFilter] = useState<ChannelFilter>("Any");
+  const [consentModal, setConsentModal] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
@@ -97,10 +172,24 @@ export function ContactsClient({ contacts }: { contacts: Subscriber[] }) {
           s.email.toLowerCase().includes(q.toLowerCase()) ||
           s.tags.some((t) => t.toLowerCase().includes(q.toLowerCase()));
         const matchesF = filter === "All" || s.consent === filter.toLowerCase();
-        return matchesQ && matchesF;
+        return matchesQ && matchesF && matchesChannelFilter(s, channelFilter);
       }),
-    [contacts, q, filter]
+    [contacts, q, filter, channelFilter]
   );
+
+  // The consent overview, from the rows already in hand: click a number and
+  // the list underneath becomes those people.
+  const overview = useMemo(() => {
+    const count = (f: ChannelFilter) => contacts.filter((s) => matchesChannelFilter(s, f)).length;
+    return [
+      ["Email ✓", count("Email ✓")],
+      ["SMS ✓", count("SMS ✓")],
+      ["WhatsApp ✓", count("WhatsApp ✓")],
+      ["All channels ✓", count("All channels ✓")],
+      ["Unknown", count("Unknown")],
+      ["Do Not Contact", count("Do Not Contact")],
+    ] as [ChannelFilter, number][];
+  }, [contacts]);
 
   return (
     <Shell
@@ -164,6 +253,27 @@ export function ContactsClient({ contacts }: { contacts: Subscriber[] }) {
         </div>
       </div>
 
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        {overview.map(([label, n]) => (
+          <button
+            key={label}
+            onClick={() => setChannelFilter(channelFilter === label ? "Any" : label)}
+            className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+              channelFilter === label
+                ? "border-brand bg-brand-soft text-brand"
+                : "border-line bg-surface text-ink-2 hover:bg-[#f0efec]"
+            }`}
+          >
+            <span className="tabular font-bold">{n.toLocaleString("en-GB")}</span> {label}
+          </button>
+        ))}
+        {channelFilter !== "Any" && (
+          <button onClick={() => setChannelFilter("Any")} className="text-xs font-semibold text-ink-3 hover:text-brand">
+            Clear channel filter
+          </button>
+        )}
+      </div>
+
       {flash && (
         <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800">{flash}</div>
       )}
@@ -172,12 +282,48 @@ export function ContactsClient({ contacts }: { contacts: Subscriber[] }) {
           <span className="text-[13px] font-bold text-brand">{selected.length} selected</span>
           <button disabled={bulkBusy} onClick={createPackFromSelection} className="rounded-lg bg-brand px-3 py-1.5 text-xs font-bold text-white hover:bg-[#5b21b6] disabled:opacity-50">Create Contact Pack</button>
           <button disabled={bulkBusy} onClick={copySelectedEmails} className="rounded-lg bg-brand-soft px-3 py-1.5 text-xs font-bold text-brand hover:bg-[#ece2fa] disabled:opacity-50">Copy emails</button>
+          <button disabled={bulkBusy} onClick={() => setConsentModal(true)} className="rounded-lg bg-brand-soft px-3 py-1.5 text-xs font-bold text-brand hover:bg-[#ece2fa] disabled:opacity-50">Update consent</button>
           <button disabled={bulkBusy} onClick={() => bulk("add_tag")} className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink-2 hover:bg-[#f0efec] disabled:opacity-50">Add tag</button>
           <button disabled={bulkBusy} onClick={() => bulk("create_task")} className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink-2 hover:bg-[#f0efec] disabled:opacity-50">Create tasks</button>
           <button disabled={bulkBusy} onClick={() => bulk("suppress")} className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-100 disabled:opacity-50">Suppress</button>
           <button onClick={() => setSelected([])} className="ml-auto text-xs font-semibold text-ink-3 hover:text-foreground">Clear</button>
         </div>
       )}
+      {consentModal && (
+        <ConsentModal
+          count={selected.length}
+          busy={bulkBusy}
+          onClose={() => setConsentModal(false)}
+          onApply={async (channels, status, dnc) => {
+            setBulkBusy(true);
+            try {
+              if (dnc !== null) {
+                const res = await fetch("/api/contacts/bulk", {
+                  method: "POST", headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ contactIds: selected, action: "set_dnc", value: dnc }),
+                });
+                const json = await res.json();
+                if (json.ok) setFlash(`Do Not Contact ${dnc ? "enabled" : "removed"} on ${json.affected} contacts`);
+              } else {
+                const res = await fetch("/api/contacts/bulk", {
+                  method: "POST", headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ contactIds: selected, action: "set_consent", channels, status }),
+                });
+                const json = await res.json();
+                if (json.ok) {
+                  setFlash(`Consent updated on ${json.affected} contacts${json.held ? ` · ${json.held} kept their opt-out` : ""}`);
+                }
+              }
+              setConsentModal(false);
+              setSelected([]);
+              router.refresh();
+            } finally {
+              setBulkBusy(false);
+            }
+          }}
+        />
+      )}
+
       <Card>
         <div className="overflow-x-auto scroll-thin"><table className="w-full min-w-[900px]">
           <thead className="border-b border-line">
@@ -210,7 +356,7 @@ export function ContactsClient({ contacts }: { contacts: Subscriber[] }) {
                   <Link href={`/subscribers/${s.id}`} className="font-medium hover:text-brand">{s.name}</Link>
                   <p className="text-xs text-ink-3">{s.email}</p>
                 </Td>
-                <Td><Badge value={s.consent} /></Td>
+                <Td><ChannelChips s={s} /></Td>
                 <Td className="text-right">
                   <span className={`tabular inline-block min-w-8 rounded-full px-2 py-0.5 text-center text-[11px] font-bold ${
                     s.score >= 70 ? "bg-emerald-50 text-emerald-700" : s.score >= 40 ? "bg-amber-50 text-amber-700" : "bg-zinc-100 text-zinc-500"
@@ -240,9 +386,128 @@ export function ContactsClient({ contacts }: { contacts: Subscriber[] }) {
         </table></div>
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-4 py-3 text-xs text-ink-3">
           <span>Showing {rows.length} of {num(contacts.length)} contacts</span>
-          <span>Bulk actions: tag · add to list · suppress · delete (GDPR erasure)</span>
+          <span>Bulk actions: update consent · tag · tasks · pack · suppress</span>
         </div>
       </Card>
     </Shell>
+  );
+}
+
+
+/**
+ * Update Marketing Consent, for however many are selected.
+ *
+ * Three clicks: channels, state, apply. "Unknown" is for the bulk review of
+ * historical contacts and is stored as pending, never as consent. The Do Not
+ * Contact switch is its own row because it is a different kind of decision:
+ * it blocks everything, whatever the channels say.
+ */
+function ConsentModal({
+  count,
+  busy,
+  onClose,
+  onApply,
+}: {
+  count: number;
+  busy: boolean;
+  onClose: () => void;
+  onApply: (
+    channels: ("email" | "sms" | "whatsapp")[],
+    status: "granted" | "declined" | "unknown",
+    dnc: boolean | null,
+  ) => void;
+}) {
+  const [channels, setChannels] = useState<("email" | "sms" | "whatsapp")[]>(["email", "sms", "whatsapp"]);
+  const [status, setStatus] = useState<"granted" | "declined" | "unknown">("granted");
+
+  const toggle = (c: "email" | "sms" | "whatsapp") =>
+    setChannels((cs) => (cs.includes(c) ? cs.filter((x) => x !== c) : [...cs, c]));
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl">
+        <h2 className="text-base font-semibold">Update marketing consent</h2>
+        <p className="mt-0.5 text-xs text-ink-3">
+          {count.toLocaleString("en-GB")} selected · every change is recorded in the consent history
+        </p>
+
+        <p className="mt-4 text-xs font-semibold text-ink-2">Channels</p>
+        <div className="mt-1.5 flex gap-1.5">
+          {([["email", "Email"], ["sms", "SMS"], ["whatsapp", "WhatsApp"]] as const).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => toggle(key)}
+              className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${
+                channels.includes(key)
+                  ? "border-brand bg-brand-soft text-brand"
+                  : "border-line text-ink-2 hover:bg-[#f0efec]"
+              }`}
+            >
+              {channels.includes(key) ? "✓ " : ""}{label}
+            </button>
+          ))}
+        </div>
+
+        <p className="mt-4 text-xs font-semibold text-ink-2">Set to</p>
+        <div className="mt-1.5 flex gap-1.5">
+          {([["granted", "Consented"], ["declined", "Not consented"], ["unknown", "Unknown"]] as const).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setStatus(key)}
+              className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${
+                status === key
+                  ? "border-brand bg-brand-soft text-brand"
+                  : "border-line text-ink-2 hover:bg-[#f0efec]"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {status === "granted" && (
+          <p className="mt-2 text-[11px] leading-relaxed text-ink-3">
+            Contacts who unsubscribed keep their opt-out unless changed individually on their profile.
+          </p>
+        )}
+
+        <div className="mt-4 border-t border-line pt-3">
+          <p className="text-xs font-semibold text-ink-2">Do Not Contact</p>
+          <div className="mt-1.5 flex gap-1.5">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => onApply([], "granted", true)}
+              className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-100 disabled:opacity-50"
+            >
+              Block all marketing
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => onApply([], "granted", false)}
+              className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink-2 hover:bg-[#f0efec] disabled:opacity-50"
+            >
+              Remove block
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="rounded-lg border border-line px-3.5 py-2 text-[13px] font-semibold text-ink-2 hover:bg-[#f0efec]">
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={busy || channels.length === 0}
+            onClick={() => onApply(channels, status, null)}
+            className="rounded-lg bg-brand px-3.5 py-2 text-[13px] font-semibold text-white hover:bg-[#5b21b6] disabled:opacity-50"
+          >
+            {busy ? "Applying…" : "Apply"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

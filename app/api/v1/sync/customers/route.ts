@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { recordConsent } from "@/lib/server/consent";
 import { z } from "zod";
 import { db } from "@/lib/server/db";
 import { readSignedBody } from "@/lib/server/apiAuth";
@@ -59,13 +60,15 @@ export async function POST(req: NextRequest) {
         data: { contactId: contact.id, source: "WooCommerce sync", sourceType: "checkout", detail: `customer ${c.externalId}` },
       });
       // Consent only when the store explicitly says the customer opted in.
-      await db.consentRecord.create({
-        data: {
-          contactId: contact.id, channel: "email",
-          status: c.marketingConsent ? "granted" : "pending",
-          lawfulBasis: c.marketingConsent ? "Consent (checkout opt-in)" : "Awaiting confirmation",
-          evidence: "WooCommerce customer sync", actor: `plugin:${store.id}`,
-        },
+      await recordConsent({
+        contactId: contact.id,
+        workspaceId: store.workspaceId,
+        changes: [{ channel: "email", status: c.marketingConsent ? "granted" : "pending" }],
+        source: "Checkout opt-in",
+        actor: `plugin:${store.id}`,
+        lawfulBasis: c.marketingConsent ? "Consent (checkout opt-in)" : "Awaiting confirmation",
+        evidence: "WooCommerce customer sync",
+        quiet: true,
       });
       created++;
     }

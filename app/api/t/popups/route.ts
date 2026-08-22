@@ -43,6 +43,10 @@ export async function GET(req: NextRequest) {
         body: f.body || "Join for early access and honest product education. Unsubscribe anytime.",
         buttonLabel: f.buttonLabel || "Sign up",
         consentLabel: f.consentLabel || "Email me offers and updates (you can opt out anytime)",
+        // Optional per-channel boxes: the popup renders them only when the
+        // form was configured with wording for them.
+        smsConsentLabel: f.smsConsentLabel || null,
+        whatsappConsentLabel: f.whatsappConsentLabel || null,
         successMessage: f.successMessage || "Done — check your inbox soon.",
         offerCode: f.offerCode || null,
         accent: f.accent || "#6d28d9",

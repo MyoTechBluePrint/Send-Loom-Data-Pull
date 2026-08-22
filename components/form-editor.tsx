@@ -16,6 +16,8 @@ export type FormDraft = {
   body: string;
   buttonLabel: string;
   consentLabel: string;
+  smsConsentLabel: string;
+  whatsappConsentLabel: string;
   successMessage: string;
   offerCode: string;
   accent: string;
@@ -30,6 +32,8 @@ const DEFAULTS: FormDraft = {
   body: "Join for early access and honest product education. Unsubscribe anytime.",
   buttonLabel: "Claim my code",
   consentLabel: "Email me offers and updates (you can opt out anytime)",
+  smsConsentLabel: "",
+  whatsappConsentLabel: "",
   successMessage: "Done — check your inbox soon.",
   offerCode: "",
   accent: "#6d28d9",
@@ -59,6 +63,8 @@ export function FormEditor({ initial }: { initial?: Partial<FormDraft> & { id: s
       body: f.body || undefined,
       buttonLabel: f.buttonLabel || undefined,
       consentLabel: f.consentLabel || undefined,
+      smsConsentLabel: f.smsConsentLabel || undefined,
+      whatsappConsentLabel: f.whatsappConsentLabel || undefined,
       successMessage: f.successMessage || undefined,
       offerCode: f.offerCode || undefined,
       accent: /^#[0-9a-fA-F]{6}$/.test(f.accent) ? f.accent : undefined,
@@ -136,6 +142,19 @@ export function FormEditor({ initial }: { initial?: Partial<FormDraft> & { id: s
           <div>
             <label className={labelCls}>Consent line (shown with a tick box)</label>
             <input className={inputCls} value={f.consentLabel} onChange={(e) => set("consentLabel", e.target.value)} />
+          </div>
+          {/* Channel-specific opt-ins. Leave one blank and its box simply
+              never renders: the mapping into SMS or WhatsApp consent is the
+              wording itself, no code required. */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelCls}>SMS consent line (optional)</label>
+              <input className={inputCls} placeholder="Text me offers by SMS" value={f.smsConsentLabel} onChange={(e) => set("smsConsentLabel", e.target.value)} />
+            </div>
+            <div>
+              <label className={labelCls}>WhatsApp consent line (optional)</label>
+              <input className={inputCls} placeholder="Send me offers on WhatsApp" value={f.whatsappConsentLabel} onChange={(e) => set("whatsappConsentLabel", e.target.value)} />
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>

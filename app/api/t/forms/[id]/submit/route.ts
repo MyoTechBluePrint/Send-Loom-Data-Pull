@@ -9,6 +9,7 @@
 // Consent honesty: a survey answer NEVER creates marketing consent. Only the
 // explicit consent checkbox on the email step does.
 import { NextRequest } from "next/server";
+import { recordConsent } from "@/lib/server/consent";
 import { z } from "zod";
 import { db } from "@/lib/server/db";
 import { audit } from "@/lib/server/audit";
@@ -23,6 +24,10 @@ const Body = z.object({
   stepIndex: z.number().int().min(0).max(20),
   answers: z.record(z.string(), z.string().max(500)).default({}),
   consent: z.boolean().default(false),
+  // Per-channel ticks. Absent means the box was not shown or not touched;
+  // an explicit false is a decline worth remembering.
+  consentSms: z.boolean().optional(),
+  consentWhatsapp: z.boolean().optional(),
   done: z.boolean().default(false),
 });
 
@@ -74,14 +79,21 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const existing = await db.contact.findUnique({
       where: { workspaceId_email: { workspaceId: store.workspaceId, email } },
     });
+    // A phone answer is a route for SMS and WhatsApp, so it lands on the
+    // contact rather than staying buried in the submission JSON.
+    const phone = (b.answers.phone ?? "").trim() || null;
     if (existing) {
       contactId = existing.id;
+      if (phone && !existing.phone) {
+        await db.contact.update({ where: { id: existing.id }, data: { phone } });
+      }
     } else {
       const created = await db.contact.create({
         data: {
           workspaceId: store.workspaceId,
           email,
           firstName: b.answers.first_name || b.answers.name || null,
+          phone,
           lastActivityAt: new Date(),
           confidence: 80,
         },
@@ -91,24 +103,33 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         data: { contactId, source: `Form: ${form.name}`, sourceType: "popup", detail: store.name },
       });
     }
-    // Consent comes ONLY from the explicit checkbox, never from answering.
+    // Consent comes ONLY from the explicit checkboxes, never from answering.
+    // Each channel carries the exact wording shown plus a version stamp, so
+    // a future wording change stays distinguishable in the ledger; the
+    // reactivation guard inside recordConsent keeps any of this from
+    // overwriting an unsubscribe.
+    const ticks: { channel: "email" | "sms" | "whatsapp"; status: "granted" | "declined"; wording: string }[] = [];
     if (b.consent) {
-      const latest = await db.consentRecord.findFirst({
-        where: { contactId, channel: "email" }, orderBy: { createdAt: "desc" },
+      ticks.push({ channel: "email", status: "granted", wording: form.consentLabel ?? "Email me offers and updates" });
+    }
+    if (b.consentSms !== undefined && form.smsConsentLabel) {
+      ticks.push({ channel: "sms", status: b.consentSms ? "granted" : "declined", wording: form.smsConsentLabel });
+    }
+    if (b.consentWhatsapp !== undefined && form.whatsappConsentLabel) {
+      ticks.push({ channel: "whatsapp", status: b.consentWhatsapp ? "granted" : "declined", wording: form.whatsappConsentLabel });
+    }
+    if (ticks.length) {
+      await recordConsent({
+        contactId,
+        workspaceId: store.workspaceId,
+        changes: ticks.map(({ channel, status }) => ({ channel, status })),
+        source: `Website form: ${form.name}`,
+        actor: `form:${form.id}`,
+        lawfulBasis: "Consent (form opt-in)",
+        evidence: ticks
+          .map((t) => `${t.channel} checkbox · wording v1 · "${t.wording}"`)
+          .join(" | "),
       });
-      const optedOut = latest?.status === "withdrawn" || latest?.status === "suppressed";
-      if (!optedOut && latest?.status !== "granted") {
-        // The evidence records the exact wording shown AND a version stamp,
-        // so a future wording change is distinguishable in the ledger.
-        await db.consentRecord.create({
-          data: {
-            contactId, channel: "email", status: "granted",
-            lawfulBasis: "Consent (form opt-in)",
-            evidence: `Form "${form.name}" consent checkbox · wording v1 · "${form.consentLabel ?? "Email me offers and updates"}"`,
-            actor: `form:${form.id}`,
-          },
-        });
-      }
     }
   }
 

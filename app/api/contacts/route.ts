@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { recordConsent } from "@/lib/server/consent";
 import { z } from "zod";
 import { db } from "@/lib/server/db";
 import { audit } from "@/lib/server/audit";
@@ -50,8 +51,14 @@ export async function POST(req: NextRequest) {
   await db.contactSource.create({
     data: { contactId: contact.id, source: "Manual · staging", sourceType: "manual", uploadedBy: actor },
   });
-  await db.consentRecord.create({
-    data: { contactId: contact.id, channel: "email", status: "pending", lawfulBasis: "Manually added · no consent evidence", evidence: "Manual add", actor },
+  await recordConsent({
+    contactId: contact.id,
+    workspaceId,
+    changes: [{ channel: "email", status: "pending" }],
+    source: "Manually added · no consent evidence",
+    actor,
+    evidence: "Manual add",
+    quiet: true, // the "Added manually" timeline line below tells the story
   });
   if (tag) {
     const t = await db.tag.upsert({ where: { workspaceId_name: { workspaceId, name: tag } }, create: { workspaceId, name: tag }, update: {} });

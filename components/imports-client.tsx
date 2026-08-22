@@ -17,7 +17,10 @@ const FIELD_LABELS: Record<string, string> = {
   email: "Email", firstName: "First name", lastName: "Last name", phone: "Phone",
   country: "Country", city: "City", postcode: "Postcode", productInterest: "Product interest",
   keywordInterest: "Keyword interest", source: "Source", campaign: "Campaign",
-  consent: "Consent status", orderValue: "Order value", lastOrderDate: "Last order date",
+  consent: "Consent status (email)", emailConsent: "Email consent", smsConsent: "SMS consent",
+  whatsappConsent: "WhatsApp consent", doNotContact: "Do Not Contact",
+  consentDate: "Consent date", consentSource: "Consent source",
+  orderValue: "Order value", lastOrderDate: "Last order date",
   tags: "Tags", notes: "Notes", custom: "Custom field", ignore: "Do not import",
 };
 

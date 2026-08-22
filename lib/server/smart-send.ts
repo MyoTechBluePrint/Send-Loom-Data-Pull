@@ -14,6 +14,7 @@
 //     rows "cancelled" so the numbers always add up.
 
 import { db } from "@/lib/server/db";
+import { eligibleForChannel, type Channel } from "./consent";
 import { audit } from "./audit";
 import { guard } from "./billing/guard";
 import { canSend } from "./subscription-states";
@@ -265,7 +266,7 @@ export async function runCampaignBatch(campaignId: string, now = new Date()): Pr
   // Pre-batch recheck: suppression and consent may have changed since
   // enqueueing. Anyone no longer eligible is marked suppressed, not sent.
   const suppressions = new Set(
-    (await db.suppressionRecord.findMany({ where: { workspaceId: campaign.workspaceId } })).map((s) => s.email)
+    (await db.suppressionRecord.findMany({ where: { workspaceId: campaign.workspaceId } })).map((s) => s.email.toLowerCase())
   );
 
   const provider = activeProvider();
@@ -274,14 +275,17 @@ export async function runCampaignBatch(campaignId: string, now = new Date()): Pr
 
   for (const row of batch) {
     const email = row.contact.email;
-    if (!email || suppressions.has(email)) {
-      await db.campaignSend.update({ where: { id: row.id }, data: { status: "suppressed" } });
-      continue;
-    }
-    const latest = await db.consentRecord.findFirst({
-      where: { contactId: row.contactId, channel: "email" }, orderBy: { createdAt: "desc" },
+    // Same gate as everywhere else: the mirror columns plus Do Not Contact,
+    // via the shared helper, so a mid-send unsubscribe or DNC flip is caught
+    // here exactly as it would have been at enqueue.
+    const gate = await db.contact.findUnique({
+      where: { id: row.contactId },
+      select: { email: true, phone: true, emailConsent: true, smsConsent: true, whatsappConsent: true, doNotContact: true },
     });
-    if (latest?.status !== "granted") {
+    const check = gate
+      ? eligibleForChannel(gate, (campaign.channel ?? "email") as Channel, suppressions)
+      : { eligible: false as const };
+    if (!email || !check.eligible) {
       await db.campaignSend.update({ where: { id: row.id }, data: { status: "suppressed" } });
       continue;
     }

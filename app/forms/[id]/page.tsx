@@ -146,6 +146,8 @@ export default async function FormDetailPage({ params }: { params: Promise<{ id:
           body: form.body ?? "",
           buttonLabel: form.buttonLabel ?? "",
           consentLabel: form.consentLabel ?? "",
+          smsConsentLabel: form.smsConsentLabel ?? "",
+          whatsappConsentLabel: form.whatsappConsentLabel ?? "",
           successMessage: form.successMessage ?? "",
           offerCode: form.offerCode ?? "",
           accent: form.accent ?? "#6d28d9",

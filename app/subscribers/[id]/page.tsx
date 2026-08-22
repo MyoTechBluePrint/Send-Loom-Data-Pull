@@ -5,6 +5,7 @@ import { Card, CardHeader, Badge, Stat } from "@/components/ui";
 import { gbp } from "@/lib/data";
 import { getContactView } from "@/lib/server/views";
 import { ContactActions } from "@/components/contact-actions";
+import { ConsentPreferences } from "@/components/consent-preferences";
 
 export const dynamic = "force-dynamic";
 
@@ -154,6 +155,11 @@ export default async function ContactProfile({ params }: { params: Promise<{ id:
               ))}
               {sub.scoreReasons.length === 0 && <li className="px-5 py-4 text-sm text-ink-3">No scoring signals yet.</li>}
             </ul>
+          </Card>
+
+          <Card>
+            <CardHeader title="Marketing & communication preferences" subtitle="Per-channel consent · changes are recorded" />
+            <ConsentPreferences sub={sub} />
           </Card>
 
           <Card>

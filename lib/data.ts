@@ -23,6 +23,21 @@ export type ChannelPermissions = {
   adExport: boolean;
 };
 
+/** How a channel stands right now, in the mirror's vocabulary. */
+export type ConsentState =
+  | "granted"
+  | "declined"
+  | "pending"
+  | "withdrawn"
+  | "suppressed"
+  | "unknown";
+
+export type ChannelStates = {
+  email: ConsentState;
+  sms: ConsentState;
+  whatsapp: ConsentState;
+};
+
 export type Subscriber = {
   id: string;
   name: string;
@@ -33,6 +48,12 @@ export type Subscriber = {
   source: string;
   lawfulBasis: string;
   channels: ChannelPermissions;
+  /** Per-channel consent state and the contact-level kill switch. */
+  channelStates: ChannelStates;
+  doNotContact: boolean;
+  consentSource?: string;
+  consentAt?: string;
+  consentUpdatedBy?: string;
   confidence: number;
   signup: string;
   tags: string[];
@@ -51,23 +72,28 @@ export type Subscriber = {
 const fullChannels: ChannelPermissions = { email: true, sms: true, whatsapp: true, phone: true, adExport: true };
 const emailOnly: ChannelPermissions = { email: true, sms: false, whatsapp: false, phone: false, adExport: false };
 const none: ChannelPermissions = { email: false, sms: false, whatsapp: false, phone: false, adExport: false };
+const statesFor = (c: ChannelPermissions): ChannelStates => ({
+  email: c.email ? "granted" : "unknown",
+  sms: c.sms ? "granted" : "unknown",
+  whatsapp: c.whatsapp ? "granted" : "unknown",
+});
 
 export const subscribers: Subscriber[] = [
-  { id: "sub_01", name: "Emma Richardson", email: "emma.richardson@gmail.com", phone: "+44 7911 240 881", location: "London, UK", consent: "subscribed", source: "Checkout opt-in", lawfulBasis: "Consent (double opt-in)", channels: fullChannels, confidence: 98, signup: "12 Mar 2025", tags: ["VIP", "NAD+ buyer"], lists: ["Newsletter", "VIP Club"], orders: 14, revenue: 2840.5, aov: 202.89, lastOrder: "9 Jul 2026", lastActivity: "2 hours ago", engagement: "high", score: 94, status: "VIP",
+  { id: "sub_01", name: "Emma Richardson", email: "emma.richardson@gmail.com", phone: "+44 7911 240 881", location: "London, UK", consent: "subscribed", source: "Checkout opt-in", lawfulBasis: "Consent (double opt-in)", channels: fullChannels, channelStates: statesFor(fullChannels), doNotContact: false, confidence: 98, signup: "12 Mar 2025", tags: ["VIP", "NAD+ buyer"], lists: ["Newsletter", "VIP Club"], orders: 14, revenue: 2840.5, aov: 202.89, lastOrder: "9 Jul 2026", lastActivity: "2 hours ago", engagement: "high", score: 94, status: "VIP",
     scoreReasons: [
       { reason: "Repeat purchase (14 orders)", points: 80 },
       { reason: "Searched \"NAD+ dosage\" on site", points: 20 },
       { reason: "Opened 6 of last 8 emails", points: 5 },
       { reason: "Clicked consultation CTA", points: 10 },
     ] },
-  { id: "sub_02", name: "James Okafor", email: "j.okafor@outlook.com", location: "Manchester, UK", consent: "subscribed", source: "Exit-intent popup", lawfulBasis: "Consent (double opt-in)", channels: emailOnly, confidence: 91, signup: "28 Jan 2026", tags: ["First-time buyer"], lists: ["Newsletter"], orders: 1, revenue: 89.99, aov: 89.99, lastOrder: "3 Feb 2026", lastActivity: "1 day ago", engagement: "medium", score: 48, status: "warm",
+  { id: "sub_02", name: "James Okafor", email: "j.okafor@outlook.com", location: "Manchester, UK", consent: "subscribed", source: "Exit-intent popup", lawfulBasis: "Consent (double opt-in)", channels: emailOnly, channelStates: statesFor(emailOnly), doNotContact: false, confidence: 91, signup: "28 Jan 2026", tags: ["First-time buyer"], lists: ["Newsletter"], orders: 1, revenue: 89.99, aov: 89.99, lastOrder: "3 Feb 2026", lastActivity: "1 day ago", engagement: "medium", score: 48, status: "warm",
     scoreReasons: [
       { reason: "Purchased once", points: 60 },
       { reason: "Viewed Recovery Complex twice", points: 15 },
       { reason: "Inactive 90+ days since order", points: -20 },
       { reason: "Opened last email", points: 5 },
     ] },
-  { id: "sub_03", name: "Sofia Marchetti", email: "sofia.marchetti@icloud.com", phone: "+44 7700 900 442", location: "Edinburgh, UK", consent: "subscribed", source: "Quiz funnel: Longevity Type", lawfulBasis: "Consent (double opt-in)", channels: fullChannels, confidence: 96, signup: "4 Nov 2025", tags: ["Repeat buyer", "Sleep stack"], lists: ["Newsletter", "Longevity"], orders: 6, revenue: 512.4, aov: 85.4, lastOrder: "1 Jul 2026", lastActivity: "5 hours ago", engagement: "high", score: 78, status: "hot",
+  { id: "sub_03", name: "Sofia Marchetti", email: "sofia.marchetti@icloud.com", phone: "+44 7700 900 442", location: "Edinburgh, UK", consent: "subscribed", source: "Quiz funnel: Longevity Type", lawfulBasis: "Consent (double opt-in)", channels: fullChannels, channelStates: statesFor(fullChannels), doNotContact: false, confidence: 96, signup: "4 Nov 2025", tags: ["Repeat buyer", "Sleep stack"], lists: ["Newsletter", "Longevity"], orders: 6, revenue: 512.4, aov: 85.4, lastOrder: "1 Jul 2026", lastActivity: "5 hours ago", engagement: "high", score: 78, status: "hot",
     scoreReasons: [
       { reason: "Completed Longevity Type quiz", points: 25 },
       { reason: "Repeat purchase (6 orders)", points: 40 },
@@ -75,7 +101,7 @@ export const subscribers: Subscriber[] = [
       { reason: "Opened 3 emails this month", points: 5 },
       { reason: "No consultation booked yet", points: -12 },
     ] },
-  { id: "sub_04", name: "Daniel Hughes", email: "dan.hughes88@gmail.com", location: "Cardiff, UK", consent: "subscribed", source: "Guide download: Metabolic Reset", lawfulBasis: "Consent (double opt-in)", channels: emailOnly, confidence: 88, signup: "19 Jun 2026", tags: ["Prospect", "Weight management"], lists: ["Newsletter"], orders: 0, revenue: 0, aov: 0, lastOrder: "Never", lastActivity: "3 days ago", engagement: "medium", score: 63, status: "ready",
+  { id: "sub_04", name: "Daniel Hughes", email: "dan.hughes88@gmail.com", location: "Cardiff, UK", consent: "subscribed", source: "Guide download: Metabolic Reset", lawfulBasis: "Consent (double opt-in)", channels: emailOnly, channelStates: statesFor(emailOnly), doNotContact: false, confidence: 88, signup: "19 Jun 2026", tags: ["Prospect", "Weight management"], lists: ["Newsletter"], orders: 0, revenue: 0, aov: 0, lastOrder: "Never", lastActivity: "3 days ago", engagement: "medium", score: 63, status: "ready",
     scoreReasons: [
       { reason: "Downloaded Metabolic Reset guide", points: 25 },
       { reason: "Searched \"GLP-1 support\" on site", points: 20 },
@@ -83,39 +109,39 @@ export const subscribers: Subscriber[] = [
       { reason: "Clicked consultation CTA, no booking", points: 10 },
       { reason: "No purchase yet", points: -7 },
     ] },
-  { id: "sub_05", name: "Priya Nair", email: "priya.nair@yahoo.co.uk", location: "Birmingham, UK", consent: "subscribed", source: "Checkout opt-in", lawfulBasis: "Consent (double opt-in)", channels: emailOnly, confidence: 95, signup: "2 Sep 2025", tags: ["Repeat buyer"], lists: ["Newsletter"], orders: 4, revenue: 367.2, aov: 91.8, lastOrder: "22 May 2026", lastActivity: "6 days ago", engagement: "medium", score: 55, status: "warm",
+  { id: "sub_05", name: "Priya Nair", email: "priya.nair@yahoo.co.uk", location: "Birmingham, UK", consent: "subscribed", source: "Checkout opt-in", lawfulBasis: "Consent (double opt-in)", channels: emailOnly, channelStates: statesFor(emailOnly), doNotContact: false, confidence: 95, signup: "2 Sep 2025", tags: ["Repeat buyer"], lists: ["Newsletter"], orders: 4, revenue: 367.2, aov: 91.8, lastOrder: "22 May 2026", lastActivity: "6 days ago", engagement: "medium", score: 55, status: "warm",
     scoreReasons: [
       { reason: "Repeat purchase (4 orders)", points: 40 },
       { reason: "Opened 2 emails this month", points: 10 },
       { reason: "56 days since last order", points: -10 },
       { reason: "Viewed Collagen restock page", points: 15 },
     ] },
-  { id: "sub_06", name: "Tom Bergström", email: "tom.bergstrom@gmail.com", location: "Bristol, UK", consent: "unsubscribed", source: "Checkout opt-in", lawfulBasis: "Consent withdrawn", channels: none, confidence: 92, signup: "14 Feb 2025", tags: ["Lapsed"], lists: [], orders: 2, revenue: 156, aov: 78, lastOrder: "3 Oct 2025", lastActivity: "4 months ago", engagement: "none", score: 0, status: "suppressed",
+  { id: "sub_06", name: "Tom Bergström", email: "tom.bergstrom@gmail.com", location: "Bristol, UK", consent: "unsubscribed", source: "Checkout opt-in", lawfulBasis: "Consent withdrawn", channels: none, channelStates: statesFor(none), doNotContact: false, confidence: 92, signup: "14 Feb 2025", tags: ["Lapsed"], lists: [], orders: 2, revenue: 156, aov: 78, lastOrder: "3 Oct 2025", lastActivity: "4 months ago", engagement: "none", score: 0, status: "suppressed",
     scoreReasons: [{ reason: "Unsubscribed", points: -100 }] },
-  { id: "sub_07", name: "Charlotte Webb", email: "charlie.webb@hotmail.com", phone: "+44 7833 118 220", location: "Leeds, UK", consent: "subscribed", source: "Embedded form", lawfulBasis: "Consent (double opt-in)", channels: fullChannels, confidence: 93, signup: "8 Apr 2026", tags: ["Cart abandoner"], lists: ["Newsletter"], orders: 1, revenue: 124.5, aov: 124.5, lastOrder: "11 Apr 2026", lastActivity: "12 hours ago", engagement: "high", score: 71, status: "hot",
+  { id: "sub_07", name: "Charlotte Webb", email: "charlie.webb@hotmail.com", phone: "+44 7833 118 220", location: "Leeds, UK", consent: "subscribed", source: "Embedded form", lawfulBasis: "Consent (double opt-in)", channels: fullChannels, channelStates: statesFor(fullChannels), doNotContact: false, confidence: 93, signup: "8 Apr 2026", tags: ["Cart abandoner"], lists: ["Newsletter"], orders: 1, revenue: 124.5, aov: 124.5, lastOrder: "11 Apr 2026", lastActivity: "12 hours ago", engagement: "high", score: 71, status: "hot",
     scoreReasons: [
       { reason: "Abandoned checkout yesterday", points: 35 },
       { reason: "Purchased once", points: 30 },
       { reason: "Clicked 2 emails this week", points: 20 },
       { reason: "No repeat in 90 days", points: -14 },
     ] },
-  { id: "sub_08", name: "Marcus Delaney", email: "m.delaney@protonmail.com", location: "Dublin, IE", consent: "subscribed", source: "Partner referral: FitLab Gyms", lawfulBasis: "Consent (referral opt-in)", channels: emailOnly, confidence: 84, signup: "30 May 2026", tags: ["First-time buyer", "Recovery"], lists: ["Newsletter"], orders: 1, revenue: 210, aov: 210, lastOrder: "30 May 2026", lastActivity: "2 days ago", engagement: "medium", score: 52, status: "warm",
+  { id: "sub_08", name: "Marcus Delaney", email: "m.delaney@protonmail.com", location: "Dublin, IE", consent: "subscribed", source: "Partner referral: FitLab Gyms", lawfulBasis: "Consent (referral opt-in)", channels: emailOnly, channelStates: statesFor(emailOnly), doNotContact: false, confidence: 84, signup: "30 May 2026", tags: ["First-time buyer", "Recovery"], lists: ["Newsletter"], orders: 1, revenue: 210, aov: 210, lastOrder: "30 May 2026", lastActivity: "2 days ago", engagement: "medium", score: 52, status: "warm",
     scoreReasons: [
       { reason: "Purchased Recovery Complex", points: 60 },
       { reason: "Partner-referred (FitLab)", points: 5 },
       { reason: "No email click in 3 weeks", points: -13 },
     ] },
-  { id: "sub_09", name: "Yuki Tanaka", email: "yuki.t@gmail.com", location: "London, UK", consent: "pending", source: "Popup (double opt-in)", lawfulBasis: "Consent pending confirmation", channels: none, confidence: 70, signup: "16 Jul 2026", tags: [], lists: ["Newsletter"], orders: 0, revenue: 0, aov: 0, lastOrder: "Never", lastActivity: "2 days ago", engagement: "low", score: 5, status: "cold",
+  { id: "sub_09", name: "Yuki Tanaka", email: "yuki.t@gmail.com", location: "London, UK", consent: "pending", source: "Popup (double opt-in)", lawfulBasis: "Consent pending confirmation", channels: none, channelStates: statesFor(none), doNotContact: false, confidence: 70, signup: "16 Jul 2026", tags: [], lists: ["Newsletter"], orders: 0, revenue: 0, aov: 0, lastOrder: "Never", lastActivity: "2 days ago", engagement: "low", score: 5, status: "cold",
     scoreReasons: [{ reason: "Signed up, not yet confirmed", points: 5 }] },
-  { id: "sub_10", name: "Grace Adeyemi", email: "grace.adeyemi@gmail.com", phone: "+44 7455 662 019", location: "Glasgow, UK", consent: "subscribed", source: "Checkout opt-in", lawfulBasis: "Consent (double opt-in)", channels: fullChannels, confidence: 99, signup: "21 Dec 2024", tags: ["VIP", "Longevity stack"], lists: ["Newsletter", "VIP Club"], orders: 22, revenue: 4106.75, aov: 186.67, lastOrder: "15 Jul 2026", lastActivity: "30 minutes ago", engagement: "high", score: 97, status: "VIP",
+  { id: "sub_10", name: "Grace Adeyemi", email: "grace.adeyemi@gmail.com", phone: "+44 7455 662 019", location: "Glasgow, UK", consent: "subscribed", source: "Checkout opt-in", lawfulBasis: "Consent (double opt-in)", channels: fullChannels, channelStates: statesFor(fullChannels), doNotContact: false, confidence: 99, signup: "21 Dec 2024", tags: ["VIP", "Longevity stack"], lists: ["Newsletter", "VIP Club"], orders: 22, revenue: 4106.75, aov: 186.67, lastOrder: "15 Jul 2026", lastActivity: "30 minutes ago", engagement: "high", score: 97, status: "VIP",
     scoreReasons: [
       { reason: "22 orders · £4,106 lifetime", points: 80 },
       { reason: "Booked longevity consultation", points: 50 },
       { reason: "Opens nearly every email", points: 8 },
     ] },
-  { id: "sub_11", name: "Oliver Kaminski", email: "olly.kaminski@gmail.com", location: "Newcastle, UK", consent: "suppressed", source: "Import: Mailchimp export (Mar 2025)", lawfulBasis: "Suppressed (hard bounce)", channels: none, confidence: 40, signup: "10 Jan 2025", tags: ["Hard bounce"], lists: [], orders: 0, revenue: 0, aov: 0, lastOrder: "Never", lastActivity: "6 months ago", engagement: "none", score: 0, status: "suppressed",
+  { id: "sub_11", name: "Oliver Kaminski", email: "olly.kaminski@gmail.com", location: "Newcastle, UK", consent: "suppressed", source: "Import: Mailchimp export (Mar 2025)", lawfulBasis: "Suppressed (hard bounce)", channels: none, channelStates: statesFor(none), doNotContact: false, confidence: 40, signup: "10 Jan 2025", tags: ["Hard bounce"], lists: [], orders: 0, revenue: 0, aov: 0, lastOrder: "Never", lastActivity: "6 months ago", engagement: "none", score: 0, status: "suppressed",
     scoreReasons: [{ reason: "Hard bounce", points: -40 }] },
-  { id: "sub_12", name: "Isabelle Fournier", email: "isa.fournier@gmail.com", location: "Brighton, UK", consent: "subscribed", source: "Quiz funnel: Longevity Type", lawfulBasis: "Consent (double opt-in)", channels: emailOnly, confidence: 90, signup: "3 Jul 2026", tags: ["Cart abandoner", "Weight management"], lists: ["Newsletter"], orders: 0, revenue: 0, aov: 0, lastOrder: "Never", lastActivity: "1 hour ago", engagement: "high", score: 68, status: "ready",
+  { id: "sub_12", name: "Isabelle Fournier", email: "isa.fournier@gmail.com", location: "Brighton, UK", consent: "subscribed", source: "Quiz funnel: Longevity Type", lawfulBasis: "Consent (double opt-in)", channels: emailOnly, channelStates: statesFor(emailOnly), doNotContact: false, confidence: 90, signup: "3 Jul 2026", tags: ["Cart abandoner", "Weight management"], lists: ["Newsletter"], orders: 0, revenue: 0, aov: 0, lastOrder: "Never", lastActivity: "1 hour ago", engagement: "high", score: 68, status: "ready",
     scoreReasons: [
       { reason: "Abandoned cart (Metabolic Support)", points: 30 },
       { reason: "Completed quiz: 'Metabolic' type", points: 25 },

@@ -6,6 +6,7 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/server/db";
 import { audit } from "@/lib/server/audit";
+import { recordConsent } from "@/lib/server/consent";
 import { verifyEmailAction } from "@/lib/server/email-render";
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ sendId: string }> }) {
@@ -29,15 +30,16 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ sendId: str
     await db.suppressionRecord.create({
       data: { workspaceId, email, reason: "unsubscribed", detail: `Unsubscribed from campaign "${send.campaign.name}"` },
     });
-    await db.consentRecord.create({
-      data: {
-        contactId: send.contactId,
-        channel: "email",
-        status: "withdrawn",
-        lawfulBasis: "Unsubscribe link",
-        evidence: `Campaign send ${sendId}`,
-        actor: "customer",
-      },
+    await recordConsent({
+      contactId: send.contactId,
+      workspaceId,
+      changes: [{ channel: "email", status: "withdrawn" }],
+      source: "Unsubscribe link",
+      actor: "customer",
+      evidence: `Campaign send ${sendId}`,
+      // Withdrawing is never a reactivation, but the flag keeps this write
+      // unconditional whatever state the mirror is in.
+      allowReactivate: true,
     });
     await audit(workspaceId, email, "consent.unsubscribed", `Via campaign "${send.campaign.name}"`);
   }

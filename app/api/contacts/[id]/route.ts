@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { recordConsent } from "@/lib/server/consent";
 import { z } from "zod";
 import { db } from "@/lib/server/db";
 import { audit } from "@/lib/server/audit";
@@ -40,8 +41,14 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
         update: { reason: "manual", detail: `Archived by ${actor} (staging)` },
       });
     }
-    await db.consentRecord.create({
-      data: { contactId: id, channel: "email", status: "suppressed", lawfulBasis: "Archived on staging", actor },
+    await recordConsent({
+      contactId: id,
+      workspaceId: contact.workspaceId,
+      changes: [{ channel: "email", status: "suppressed" }],
+      source: "Archived on staging",
+      actor,
+      allowReactivate: true, // suppressing is always allowed, never a grant
+      quiet: true, // the "Archived" timeline line below tells the story
     });
     await db.timelineItem.create({
       data: { contactId: id, type: "import", title: "Archived", detail: `Demo change by ${actor} · excluded from all sending` },

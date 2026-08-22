@@ -3,6 +3,7 @@
 // Confidence reflects how many hard identifiers were found. Approval is the
 // only path from an ExtractedRecord to a Contact.
 import { db } from "./db";
+import { recordConsent } from "./consent";
 import { audit } from "./audit";
 import { recomputeLeadScore } from "./scoring";
 
@@ -217,12 +218,14 @@ export async function approveRecord(recordId: string, actor: string, edited?: Pa
     });
     contactId = contact.id;
     // Intake gives NO marketing consent: everything lands pending.
-    await db.consentRecord.create({
-      data: {
-        contactId, channel: "email", status: "pending",
-        lawfulBasis: "No consent evidence · captured via Universal Inbox",
-        evidence: record.intake.title, actor,
-      },
+    await recordConsent({
+      contactId,
+      workspaceId: record.intake.workspaceId,
+      changes: [{ channel: "email", status: "pending" }],
+      source: "No consent evidence · captured via Universal Inbox",
+      actor,
+      evidence: record.intake.title,
+      quiet: true,
     });
   }
 

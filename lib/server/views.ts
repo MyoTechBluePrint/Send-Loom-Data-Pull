@@ -51,10 +51,21 @@ export async function getContactsView(): Promise<Subscriber[]> {
       email: c.email ?? (c.phone ? `phone-only · ${c.phone}` : "no contact route"),
       phone: c.phone ?? undefined,
       location: [c.city, c.country === "United Kingdom" ? "UK" : c.country === "Ireland" ? "IE" : c.country].filter(Boolean).join(", "),
-      consent: consentView[email?.status ?? "pending"],
+      consent: consentView[c.emailConsent === "unknown" || c.emailConsent === "declined" ? "pending" : c.emailConsent] ?? "pending",
       source: c.sources[0]?.source ?? "Unknown",
       lawfulBasis: email?.lawfulBasis ?? "Not recorded",
       channels: { email: chan("email"), sms: chan("sms"), whatsapp: chan("whatsapp"), phone: chan("phone"), adExport: chan("ad_export") },
+      // The mirror columns verbatim: what each channel is right now, plus
+      // the contact-level kill switch and the newest consent stamp.
+      channelStates: {
+        email: c.emailConsent as Subscriber["channelStates"]["email"],
+        sms: c.smsConsent as Subscriber["channelStates"]["sms"],
+        whatsapp: c.whatsappConsent as Subscriber["channelStates"]["whatsapp"],
+      },
+      doNotContact: c.doNotContact,
+      consentSource: c.consentSource ?? undefined,
+      consentAt: c.consentAt ? dateStr(c.consentAt) : undefined,
+      consentUpdatedBy: c.consentUpdatedBy ?? undefined,
       confidence: c.confidence,
       signup: dateStr(c.createdAt),
       tags: c.tags.map((t) => t.tag.name),
