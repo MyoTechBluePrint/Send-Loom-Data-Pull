@@ -198,6 +198,14 @@ async function main() {
   const { ensureWelcomeFlow } = await import("../lib/server/automations");
   await ensureWelcomeFlow();
 
+  // Launch hygiene: the temporary QA login used during the production
+  // verification sprint is permanently disabled on every boot. Idempotent,
+  // and it stays here as a guarantee rather than a one-off.
+  await db.user.updateMany({
+    where: { email: "qa.claude@sendloom.local" },
+    data: { disabled: true },
+  });
+
   await db.$disconnect();
 }
 
