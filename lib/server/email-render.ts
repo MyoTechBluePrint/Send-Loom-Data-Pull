@@ -15,7 +15,15 @@ import { issueCoupon } from "./promotions";
 import { createHmac } from "node:crypto";
 
 function origin(): string {
-  return process.env.APP_ORIGIN ?? "http://localhost:3009";
+  // Every absolute link in an email hangs off this: the unsubscribe URL,
+  // the tracking pixel, click redirects. Render injects its external URL, so
+  // production can never fall back to localhost even when APP_ORIGIN is
+  // unset. Localhost is dev-only, last.
+  return (
+    process.env.APP_ORIGIN ??
+    process.env.RENDER_EXTERNAL_URL ??
+    "http://localhost:3009"
+  );
 }
 
 export function brandTokens(brand: {
