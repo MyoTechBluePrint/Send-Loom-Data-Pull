@@ -53,9 +53,12 @@ export async function POST(req: NextRequest) {
   // Delivery confirmation closes the honesty loop: "delivered" is only ever
   // written here, on the provider's own word, matched by the message id it
   // gave us at acceptance.
+  const messageId = (event.data as { email_id?: string } | undefined)?.email_id;
+
   if (event.type === "email.delivered") {
-    const messageId = (event.data as { email_id?: string } | undefined)?.email_id;
     if (messageId) {
+      // Idempotent by construction: only a row still in "sent" moves, so a
+      // replayed webhook changes nothing the second time.
       const updated = await db.campaignSend.updateMany({
         where: { providerMessageId: messageId, status: "sent" },
         data: { status: "delivered" },
@@ -63,6 +66,38 @@ export async function POST(req: NextRequest) {
       return Response.json({ ok: true, delivered: updated.count });
     }
     return Response.json({ ok: true, ignored: "no email_id" });
+  }
+
+  // Engagement and failure events, matched on the provider's own id and
+  // written only when the field is still empty, so replays stay harmless.
+  if (event.type === "email.opened" && messageId) {
+    const updated = await db.campaignSend.updateMany({
+      where: { providerMessageId: messageId, openedAt: null },
+      data: { openedAt: new Date() },
+    });
+    return Response.json({ ok: true, opened: updated.count });
+  }
+  if (event.type === "email.clicked" && messageId) {
+    await db.campaignSend.updateMany({
+      where: { providerMessageId: messageId, openedAt: null },
+      data: { openedAt: new Date() },
+    });
+    const updated = await db.campaignSend.updateMany({
+      where: { providerMessageId: messageId, clickedAt: null },
+      data: { clickedAt: new Date() },
+    });
+    return Response.json({ ok: true, clicked: updated.count });
+  }
+  if (event.type === "email.failed" && messageId) {
+    const updated = await db.campaignSend.updateMany({
+      where: { providerMessageId: messageId, status: { in: ["sent", "queued"] } },
+      data: { status: "failed" },
+    });
+    return Response.json({ ok: true, failed: updated.count });
+  }
+  if (event.type === "email.delivery_delayed") {
+    // Delays resolve themselves into delivered or bounced; noted, not acted on.
+    return Response.json({ ok: true, noted: "delayed" });
   }
 
   const kind = event.type === "email.bounced" ? "bounced" : event.type === "email.complained" ? "complained" : null;
