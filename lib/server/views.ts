@@ -159,7 +159,14 @@ export async function getCampaignsView(): Promise<Campaign[]> {
     segmentName.set(s.name, s.name);
   }
   return campaigns.map((c) => {
-    const delivered = c.sends.filter((s) => s.status === "sent").length;
+    // The denominator must not shrink as the provider's delivery webhooks
+    // flip rows sent -> delivered, or a fully delivered campaign reads 0%
+    // opens on this list while the detail page shows the truth. Same status
+    // set the detail page counts, plus the engagement statuses a delivered
+    // send can move on to.
+    const delivered = c.sends.filter((s) =>
+      ["sent", "delivered", "bounced", "complained"].includes(s.status)
+    ).length;
     const opened = c.sends.filter((s) => s.openedAt).length;
     const clicked = c.sends.filter((s) => s.clickedAt).length;
     return {
