@@ -37,6 +37,33 @@ export const SAFETY = {
   minSampleForRates: 50,    // do not judge rates on tiny samples
 };
 
+// Row claiming. Two runners can overlap (a second server instance during a
+// deploy, the admin run button beside the in-process ticker), and both may
+// read the same queued batch. Before a row goes to the provider it is flipped
+// queued -> "sending" with a conditional update; only the runner whose update
+// counted owns the row, everyone else skips it. recordSendOutcome, or the
+// failure handling below, moves the row out of "sending" again.
+//
+// While a row is claimed, the claim time rides in providerMessageId as
+// "claim_<epoch ms>". The schema is frozen (no new columns), and that column
+// is free until the outcome overwrites it with the provider's real reference.
+// Real provider ids ("re_…", "dev_…") can never look like a stamp, so the
+// delivery webhook's providerMessageId lookups are unaffected.
+export const CLAIM_STAMP_PREFIX = "claim_";
+/** A claim older than this is a corpse from a dead process, not a send in
+ *  flight: no provider call outlives its 10s timeout, let alone this. The
+ *  retry sweep fails such rows so their campaigns can finish honestly. */
+export const STRANDED_SENDING_MS = 15 * 60_000;
+
+export const claimStamp = (at: Date) => `${CLAIM_STAMP_PREFIX}${at.getTime()}`;
+
+/** Epoch ms a "sending" row was claimed, or null when the stamp is unreadable. */
+export function claimedAtFromStamp(stamp: string | null): number | null {
+  if (!stamp?.startsWith(CLAIM_STAMP_PREFIX)) return null;
+  const at = Number(stamp.slice(CLAIM_STAMP_PREFIX.length));
+  return Number.isFinite(at) ? at : null;
+}
+
 export type SmartSendProgress = {
   state: string | null;
   sent: number;
@@ -265,6 +292,11 @@ export async function runCampaignBatch(campaignId: string, now = new Date()): Pr
   });
 
   if (batch.length === 0) {
+    // Rows still parked in "sending" belong to another runner mid-flight (or
+    // to a dead one, until the stranded sweep fails them). Completing now
+    // would stamp sentAt while emails may still be leaving; wait instead.
+    const inFlight = await db.campaignSend.count({ where: { campaignId, status: "sending" } });
+    if (inFlight > 0) return "skipped";
     await db.campaign.update({
       where: { id: campaign.id },
       data: { status: "sent", sentAt: campaign.sentAt ?? new Date(), sendState: "complete", nextBatchAt: null, isDemo: false },
@@ -284,6 +316,15 @@ export async function runCampaignBatch(campaignId: string, now = new Date()): Pr
   let sent = 0;
 
   for (const row of batch) {
+    // Claim the row before doing anything with it. An overlapping runner has
+    // read the same batch; whoever loses this conditional update walks away,
+    // which is what makes a double-send impossible however many ticks land.
+    const claim = await db.campaignSend.updateMany({
+      where: { id: row.id, status: "queued" },
+      data: { status: "sending", providerMessageId: claimStamp(now) },
+    });
+    if (claim.count === 0) continue;
+
     const email = row.contact.email;
     // Same gate as everywhere else: the mirror columns plus Do Not Contact,
     // via the shared helper, so a mid-send unsubscribe or DNC flip is caught
@@ -296,7 +337,8 @@ export async function runCampaignBatch(campaignId: string, now = new Date()): Pr
       ? eligibleForChannel(gate, (campaign.channel ?? "email") as Channel, suppressions)
       : { eligible: false as const };
     if (!email || !check.eligible) {
-      await db.campaignSend.update({ where: { id: row.id }, data: { status: "suppressed" } });
+      // The claim stamp goes with the claim: this row is not in flight.
+      await db.campaignSend.update({ where: { id: row.id }, data: { status: "suppressed", providerMessageId: null } });
       continue;
     }
 
@@ -333,7 +375,7 @@ export async function runCampaignBatch(campaignId: string, now = new Date()): Pr
       const status = await recordSendOutcome(row.id, result);
       if (status !== "failed") sent++;
     } catch {
-      await db.campaignSend.update({ where: { id: row.id }, data: { status: "failed" } });
+      await db.campaignSend.update({ where: { id: row.id }, data: { status: "failed", providerMessageId: null } });
     }
   }
 

@@ -257,6 +257,80 @@ async function main() {
   const resent = await sendCampaign(camp.id, "test-script");
   check("double-send blocked", resent.ok === false);
 
+  console.log("Overlap-safe delivery");
+  {
+    const { runCampaignBatch } = await import("../lib/server/smart-send");
+    const { retryFailedSends } = await import("../lib/server/automations");
+
+    // One consenting contact, and a factory for running gradual campaigns.
+    const racer = await db.contact.create({
+      data: { workspaceId: ws.id, email: `race.${STAMP}@example.com`, firstName: "Race", emailConsent: "granted" },
+    });
+    const gradual = (name: string) => db.campaign.create({
+      data: {
+        workspaceId: ws.id, name, subject: "Overlap", status: "sending",
+        content: "<p>Overlap test body</p>", sendMode: "gradual", sendDurationMins: 60,
+        sendBatchSize: 100, sendState: "running", nextBatchAt: new Date(Date.now() - 1000),
+        audienceSnapshot: 1,
+      },
+    });
+
+    // A queued row claimed once sends once: run the batch twice, count rows.
+    const grad = await gradual(`Overlap send ${STAMP}`);
+    await db.campaignSend.create({ data: { campaignId: grad.id, contactId: racer.id, status: "queued" } });
+    const firstRun = await runCampaignBatch(grad.id);
+    // The second runner arrives after the batch interval (injected clock):
+    // nothing is left to claim, so it completes without delivering again.
+    const secondRun = await runCampaignBatch(grad.id, new Date(Date.now() + 2 * 3600_000));
+    const rows = await db.campaignSend.findMany({ where: { campaignId: grad.id } });
+    check("queued row claimed and delivered once", firstRun === "continue" && rows.length === 1 && rows[0].status === "simulated", `${firstRun}/${rows.length}`);
+    check("second run re-sends nothing", secondRun === "done" && rows[0].attempts === 1, `${secondRun}, attempts ${rows[0].attempts}`);
+
+    // A row an overlapping runner has already claimed is skipped untouched,
+    // and the campaign is not completed out from under the claim holder.
+    const held = await gradual(`Overlap claimed ${STAMP}`);
+    const heldRow = await db.campaignSend.create({ data: { campaignId: held.id, contactId: racer.id, status: "queued" } });
+    await db.campaignSend.update({ where: { id: heldRow.id }, data: { status: "sending", providerMessageId: `claim_${Date.now()}` } });
+    const heldRun = await runCampaignBatch(held.id);
+    const heldAfter = await db.campaignSend.findUniqueOrThrow({ where: { id: heldRow.id } });
+    const heldCampaign = await db.campaign.findUniqueOrThrow({ where: { id: held.id } });
+    check("claimed row skipped by a second runner", heldRun === "skipped" && heldAfter.status === "sending" && heldAfter.attempts === 0);
+    check("campaign not completed while a claim is in flight", heldCampaign.sendState === "running");
+
+    // The stranded sweep: a fresh claim survives, a stale one becomes failed.
+    await retryFailedSends();
+    const fresh = await db.campaignSend.findUniqueOrThrow({ where: { id: heldRow.id } });
+    check("fresh claim untouched by the retry sweep", fresh.status === "sending");
+    await db.campaignSend.update({ where: { id: heldRow.id }, data: { providerMessageId: `claim_${Date.now() - 16 * 60_000}` } });
+    await retryFailedSends();
+    const recovered = await db.campaignSend.findUniqueOrThrow({ where: { id: heldRow.id } });
+    check("stranded claim recovered to failed", recovered.status === "failed" && recovered.attempts === 1, `${recovered.status}/${recovered.attempts}`);
+
+    // The automation retry reset is a claim too: overlapping sweeps must
+    // redeliver a failed automation send exactly once.
+    const auto = await db.automation.create({
+      data: { workspaceId: ws.id, name: `Overlap retry ${STAMP}`, trigger: "Test", triggerEvent: "popup_submitted", status: "live" },
+    });
+    const shadow = await db.campaign.create({
+      data: {
+        workspaceId: ws.id, name: `Overlap retry shadow ${STAMP}`, subject: "Retry",
+        status: "automation", channel: "email", audienceType: "automation", audienceRef: auto.id,
+      },
+    });
+    await db.automationNode.create({
+      data: {
+        automationId: auto.id, kind: "email", label: "Retry email", position: 1,
+        config: JSON.stringify({ subject: "Retry", html: "<p>Retry body</p>", campaignId: shadow.id }),
+      },
+    });
+    const failedSend = await db.campaignSend.create({
+      data: { campaignId: shadow.id, contactId: racer.id, status: "failed", attempts: 1 },
+    });
+    await Promise.all([retryFailedSends(), retryFailedSends()]);
+    const retriedRow = await db.campaignSend.findUniqueOrThrow({ where: { id: failedSend.id } });
+    check("overlapping retry sweeps redeliver once", retriedRow.attempts === 2 && retriedRow.status === "simulated", `${retriedRow.status}/${retriedRow.attempts}`);
+  }
+
   console.log("Auth rate limiting");
   const key = `test:${STAMP}`;
   let allowed = 0;

@@ -3,13 +3,13 @@
 //
 // Authenticated by a shared secret, not a session, so it can be called by a
 // scheduler. Safe to call as often as you like: every transition and every
-// notification is guarded to happen once.
+// notification is guarded to happen once. The tick itself lives in
+// lib/server/lifecycle.ts, where the in-process ticker registered at boot
+// runs the same work every minute; this route remains the manual override.
 //
 //   curl -X POST https://…/api/billing/lifecycle -H "x-billing-cron-key: …"
 import { NextRequest } from "next/server";
-import { advanceAll } from "@/lib/server/billing/lifecycle";
-import { runDueBatches } from "@/lib/server/smart-send";
-import { advanceDueRuns, retryFailedSends, sweepWinback } from "@/lib/server/automations";
+import { runLifecycleTick } from "@/lib/server/lifecycle";
 import { currentUser, can } from "@/lib/server/permissions";
 
 export async function POST(req: NextRequest) {
@@ -27,17 +27,6 @@ export async function POST(req: NextRequest) {
     actor = user.email;
   }
 
-  const actions = await advanceAll({ origin: process.env.APP_ORIGIN ?? req.nextUrl.origin });
-  // The same tick drives smart-send batches: one cron seam for the platform.
-  const batches = await runDueBatches();
-  const automationRuns = await advanceDueRuns();
-  const winbackEnrolled = await sweepWinback();
-  const retriedSends = await retryFailedSends();
-  return Response.json({
-    ok: true,
-    ranBy: actor,
-    changed: actions.length,
-    actions,
-    smartSendBatches: batches, automationRuns, winbackEnrolled, retriedSends,
-  });
+  const summary = await runLifecycleTick({ origin: process.env.APP_ORIGIN ?? req.nextUrl.origin });
+  return Response.json({ ok: true, ranBy: actor, ...summary });
 }

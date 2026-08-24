@@ -17,6 +17,7 @@ import { activeProvider, recordSendOutcome } from "./sending";
 import { eligibleForChannel } from "./consent";
 import { renderForRecipient } from "./email-render";
 import { newBlockId, type EmailBlock } from "./email-blocks";
+import { claimedAtFromStamp, STRANDED_SENDING_MS } from "./smart-send";
 
 export const TRIGGER_EVENTS = [
   { value: "popup_submitted", label: "Popup or form signup" },
@@ -99,6 +100,28 @@ export async function enrolOnEvent(
  * REQUIRED card instead of the system quietly looping forever.
  */
 export async function retryFailedSends(): Promise<number> {
+  // First, recover rows a dead process left claimed. The batch runner flips
+  // queued -> "sending" before handing a row to the provider; if the process
+  // dies there, nothing else ever moves the row on, and its campaign can
+  // never finish. A claim past the stranded threshold (or one whose stamp is
+  // unreadable, which proves nothing about freshness) becomes an honest
+  // failure with the attempt counted. The conditional update means a runner
+  // that is somehow still alive keeps its row.
+  const strandedBefore = Date.now() - STRANDED_SENDING_MS;
+  const claimed = await db.campaignSend.findMany({
+    where: { status: "sending" },
+    select: { id: true, providerMessageId: true },
+    take: 200,
+  });
+  for (const row of claimed) {
+    const at = claimedAtFromStamp(row.providerMessageId);
+    if (at !== null && at > strandedBefore) continue; // genuinely in flight
+    await db.campaignSend.updateMany({
+      where: { id: row.id, status: "sending" },
+      data: { status: "failed", attempts: { increment: 1 }, providerMessageId: null },
+    });
+  }
+
   const failed = await db.campaignSend.findMany({
     where: {
       status: "failed",
@@ -125,8 +148,15 @@ export async function retryFailedSends(): Promise<number> {
     });
     if (!node) continue;
     // Reset to queued and walk the delivery again against the same row, so
-    // the attempts counter and the never-twice constraint both hold.
-    await db.campaignSend.update({ where: { id: send.id }, data: { status: "queued" } });
+    // the attempts counter and the never-twice constraint both hold. The
+    // reset is conditional because it is also the claim: two overlapping
+    // ticks read the same failed rows, and only the one whose update counted
+    // may redeliver, or the contact would get the email twice.
+    const reset = await db.campaignSend.updateMany({
+      where: { id: send.id, status: "failed" },
+      data: { status: "queued" },
+    });
+    if (reset.count === 0) continue;
     await redeliverExisting(automation, node, send.contact, send.id);
     retried += 1;
   }

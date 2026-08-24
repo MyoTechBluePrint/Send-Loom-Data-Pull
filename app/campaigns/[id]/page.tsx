@@ -7,6 +7,7 @@ import { db } from "@/lib/server/db";
 import { audienceBreakdown } from "@/lib/server/sending";
 import type { Channel } from "@/lib/server/consent";
 import { CampaignEmailPanel } from "@/components/campaign-email-panel";
+import { CampaignAudiencePanel } from "@/components/campaign-audience-panel";
 import { SmartSendPanel } from "@/components/smart-send-panel";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +19,19 @@ export default async function CampaignReport({ params }: { params: Promise<{ id:
     include: { sends: { include: { contact: true }, orderBy: { createdAt: "desc" } } },
   });
   if (!c) notFound();
+
+  // The picker's option list, and the name shown for the stored ref. The ref
+  // can be a segment id or a legacy name; display resolves either, exactly
+  // as resolveAudience does at send time.
+  const segments = await db.segment.findMany({
+    where: { workspaceId: c.workspaceId },
+    select: { id: true, name: true, count: true },
+    orderBy: { name: "asc" },
+  });
+  const audienceName =
+    c.audienceType === "segment" && c.audienceRef
+      ? segments.find((s) => s.id === c.audienceRef || s.name === c.audienceRef)?.name ?? c.audienceRef
+      : c.audienceRef ?? "All contacts";
 
   // The audience arithmetic, from the same gate the send itself uses, so
   // what this page promises is exactly what a send would do. Unsent
@@ -69,7 +83,7 @@ export default async function CampaignReport({ params }: { params: Promise<{ id:
   return (
     <Shell
       title={c.name}
-      subtitle={`${c.subject ? `“${c.subject}” · ` : ""}${c.audienceRef ?? "All contacts"}${c.sentAt ? ` · ${c.sentAt.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}` : ""}`}
+      subtitle={`${c.subject ? `“${c.subject}” · ` : ""}${audienceName}${c.sentAt ? ` · ${c.sentAt.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}` : ""}`}
       actions={<GhostButton>Duplicate</GhostButton>}
     >
       <div className="flex flex-wrap items-center gap-3">
@@ -87,6 +101,10 @@ export default async function CampaignReport({ params }: { params: Promise<{ id:
       </div>
 
       <SmartSendPanel campaignId={c.id} sent={c.status === "sent"} />
+
+      {c.status === "draft" && (
+        <CampaignAudiencePanel campaignId={c.id} audienceType={c.audienceType} audienceRef={c.audienceRef} segments={segments} />
+      )}
 
       {breakdown && (
         <Card className="mt-3">

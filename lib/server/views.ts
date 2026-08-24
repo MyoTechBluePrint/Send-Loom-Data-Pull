@@ -150,6 +150,14 @@ export async function getCampaignsView(): Promise<Campaign[]> {
     include: { sends: true },
     orderBy: [{ status: "asc" }, { createdAt: "desc" }],
   });
+  // Segment audiences are stored as the segment's id (or, for older drafts,
+  // its name); the list shows the name either way.
+  const segs = await db.segment.findMany({ where: { workspaceId: wsId }, select: { id: true, name: true } });
+  const segmentName = new Map<string, string>();
+  for (const s of segs) {
+    segmentName.set(s.id, s.name);
+    segmentName.set(s.name, s.name);
+  }
   return campaigns.map((c) => {
     const delivered = c.sends.filter((s) => s.status === "sent").length;
     const opened = c.sends.filter((s) => s.openedAt).length;
@@ -157,7 +165,7 @@ export async function getCampaignsView(): Promise<Campaign[]> {
     return {
       id: c.id, name: c.name, subject: c.subject ?? "",
       status: c.status as Campaign["status"],
-      audience: c.audienceRef ?? "All contacts",
+      audience: (c.audienceType === "segment" && c.audienceRef ? segmentName.get(c.audienceRef) : undefined) ?? c.audienceRef ?? "All contacts",
       recipients: c.audienceSnapshot,
       sentAt: c.sentAt ? dateStr(c.sentAt) : c.scheduledAt ? dateStr(c.scheduledAt) : "Not scheduled",
       openRate: c.isDemo ? c.openRate : delivered ? Math.round((opened / delivered) * 1000) / 10 : 0,
