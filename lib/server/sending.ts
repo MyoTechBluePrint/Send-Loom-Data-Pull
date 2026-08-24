@@ -304,6 +304,13 @@ export async function sendCampaign(campaignId: string, actor: string) {
   // onto the campaign so history is immune to later edits.
   const blocks = parseBlocks(campaign.content);
   let resolvedBlocks: EmailBlock[] | null = null;
+  if (!blocks.length && !campaign.content?.trim()) {
+    // No blocks and no legacy HTML. The `<p>${name}</p>` fallback below is
+    // for old raw-HTML campaigns, not for empty ones: the seeded template
+    // rows have no content, and sending one would blast a placeholder with
+    // no unsubscribe link to every eligible contact.
+    return { ok: false as const, error: "This campaign has no email content yet. Open the email editor and build it before sending." };
+  }
   if (blocks.length) {
     const errors = validateBlocks(blocks).filter((i) => i.level === "error");
     if (errors.length) {

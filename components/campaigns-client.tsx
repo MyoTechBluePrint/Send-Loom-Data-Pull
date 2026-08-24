@@ -167,7 +167,11 @@ export function CampaignsClient({ campaigns }: { campaigns: Campaign[] }) {
           </tbody>
         </table></div>
         <p className="border-t border-line px-4 py-3 text-xs text-ink-3">
-          "Send" uses the active provider. Without SES credentials that's the <b>dev transport</b>: sends are recorded and tracked (opens/clicks feed lead scores) but no real email leaves the platform.
+          <b>Sending is live.</b> "Send" delivers real email to every eligible
+          contact through the workspace's provider, after consent, suppression
+          and content checks. The confirm step shows exactly who will receive
+          it; rows sent before the provider was armed were simulated and never
+          reached an inbox, which is why their opens read 0%.
         </p>
       </Card>
     </Shell>

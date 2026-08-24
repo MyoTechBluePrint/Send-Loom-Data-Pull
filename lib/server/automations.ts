@@ -314,6 +314,35 @@ async function redeliverExisting(
   sendId: string,
 ) {
   if (!contact.email) return;
+
+  // The gate runs HERE, not only at first delivery. This function is also
+  // the retry path, and a contact can unsubscribe, complain or be flagged
+  // Do Not Contact in the hours between a failed attempt and the next cron
+  // beat. Consent is checked at the moment an email actually leaves, every
+  // time one actually leaves — the same fresh read the first attempt gets.
+  const fresh = await db.contact.findUnique({
+    where: { id: contact.id },
+    select: {
+      email: true, phone: true,
+      emailConsent: true, smsConsent: true, whatsappConsent: true, doNotContact: true,
+    },
+  });
+  if (!fresh) return;
+  const suppressed = new Set(
+    (
+      await db.suppressionRecord.findMany({
+        where: { workspaceId: automation.workspaceId },
+        select: { email: true },
+      })
+    ).map((s) => s.email.toLowerCase()),
+  );
+  if (!eligibleForChannel(fresh, "email", suppressed).eligible) {
+    // Truthfully parked, never retried: the row leaves the "failed" pool so
+    // retryFailedSends stops picking it up.
+    await db.campaignSend.update({ where: { id: sendId }, data: { status: "suppressed" } });
+    return;
+  }
+
   const config = parseConfig<EmailNodeConfig>(node.config);
   const campaign = await shadowCampaign(automation, node);
   try {

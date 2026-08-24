@@ -72,6 +72,12 @@ export async function startSmartSend(campaignId: string, actor: string, opts: {
   if (blocks.length) {
     const errors = validateBlocks(blocks).filter((i) => i.level === "error");
     if (errors.length) return { ok: false, error: `The email cannot be sent yet: ${errors[0].message}` };
+  } else if (!campaign.content?.trim()) {
+    // No blocks and no legacy HTML either. Every validation above is
+    // skipped for empty content, so without this line "send" on a blank
+    // template row would deliver the placeholder body — no unsubscribe
+    // link, no message — to the whole eligible list.
+    return { ok: false, error: "This campaign has no email content yet. Open the email editor and build it before sending." };
   }
 
   const { eligible } = await resolveAudience(campaign.workspaceId, campaign.audienceType, campaign.audienceRef);

@@ -231,8 +231,19 @@ async function main() {
   await db.suppressionRecord.create({
     data: { workspaceId: ws.id, email: `held.${STAMP}@example.com`, reason: "unsubscribed" },
   });
+  // A campaign with no content must be refused outright: the fallback body
+  // would otherwise go to the whole eligible list with no unsubscribe link.
+  const blank = await db.campaign.create({
+    data: { workspaceId: ws.id, name: `Blank test ${STAMP}`, subject: "Test", status: "draft" },
+  });
+  const blankResult = await sendCampaign(blank.id, "test-script");
+  check("empty campaign refused", blankResult.ok === false);
+
   const camp = await db.campaign.create({
-    data: { workspaceId: ws.id, name: `Send test ${STAMP}`, subject: "Test", status: "draft" },
+    data: {
+      workspaceId: ws.id, name: `Send test ${STAMP}`, subject: "Test", status: "draft",
+      content: "<p>Flow test body</p>",
+    },
   });
   const sendResult = await sendCampaign(camp.id, "test-script");
   check("send succeeded via provider", sendResult.ok === true);
