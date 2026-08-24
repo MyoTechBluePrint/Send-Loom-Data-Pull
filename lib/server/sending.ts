@@ -42,6 +42,8 @@ export async function deliverToContact(
 
   try {
     let html: string;
+    let text: string | undefined;
+    let unsubscribeUrl: string | undefined;
     if (resolvedBlocks?.length) {
       const full = await db.contact.findUnique({ where: { id: contact.id }, select: { firstName: true, lastName: true } });
       const rendered = await renderForRecipient({
@@ -53,7 +55,12 @@ export async function deliverToContact(
         brandId: campaign.brandId,
       });
       html = rendered.html;
+      text = rendered.textBody;
+      unsubscribeUrl = rendered.unsubscribeUrl;
     } else {
+      // Legacy raw-HTML campaigns have no per-send unsubscribe URL to offer,
+      // so they carry no one-click headers. Block-based content, which is
+      // everything the editor produces, always does.
       html = campaign.content ?? `<p>${campaign.name}</p>`;
     }
 
@@ -65,6 +72,8 @@ export async function deliverToContact(
       to: contact.email,
       subject: campaign.subject ?? campaign.name,
       html,
+      text,
+      unsubscribeUrl,
       campaignSendId: send.id,
       from: brand?.senderEmail ? `${brand.senderName ?? "SendLoom"} <${brand.senderEmail}>` : undefined,
       replyTo: brand?.replyToEmail ?? undefined,
@@ -94,6 +103,12 @@ export type OutboundEmail = {
    *  that cannot override the from address ignore it. */
   from?: string;
   replyTo?: string;
+  /** Plain-text alternative. Spam filters score multipart messages better
+   *  than HTML-only ones, and text-mode clients get real words. */
+  text?: string;
+  /** Per-send unsubscribe URL, carried as List-Unsubscribe headers. Gmail
+   *  and Yahoo require the one-click pair from bulk senders. */
+  unsubscribeUrl?: string;
 };
 
 export type SendResult = { providerId: string; status: "sent" | "failed" | "simulated"; detail?: string };
@@ -157,7 +172,16 @@ class ResendProvider implements EmailProvider {
         to: msg.to,
         subject: msg.subject,
         html: msg.html,
+        ...(msg.text ? { text: msg.text } : {}),
         ...(msg.replyTo ? { reply_to: msg.replyTo } : {}),
+        ...(msg.unsubscribeUrl
+          ? {
+              headers: {
+                "List-Unsubscribe": `<${msg.unsubscribeUrl}>`,
+                "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+              },
+            }
+          : {}),
       }),
       signal: AbortSignal.timeout(10_000),
     });

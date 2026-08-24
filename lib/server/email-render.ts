@@ -200,7 +200,7 @@ export async function renderForRecipient(args: {
   contact: { id: string; email: string; firstName?: string | null; lastName?: string | null };
   blocks: EmailBlock[]; // pre-resolved (feeds already concrete)
   brandId?: string | null;
-}): Promise<{ html: string; textBody: string }> {
+}): Promise<{ html: string; textBody: string; unsubscribeUrl: string }> {
   const brand = args.brandId ? await db.brand.findFirst({ where: { id: args.brandId, workspaceId: args.workspaceId } }) : null;
 
   const coupons: RenderContext["coupons"] = new Map();
@@ -245,5 +245,8 @@ export async function renderForRecipient(args: {
       ...couponVars,
     }),
   };
-  return renderEmail(args.blocks, ctx);
+  // The unsubscribe URL travels beside the body so the provider can carry it
+  // as List-Unsubscribe headers. Gmail and Yahoo require the one-click header
+  // pair from bulk senders; the footer link alone no longer satisfies them.
+  return { ...renderEmail(args.blocks, ctx), unsubscribeUrl: ctx.urls.unsubscribe };
 }

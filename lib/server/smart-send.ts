@@ -319,9 +319,12 @@ export async function runCampaignBatch(campaignId: string, now = new Date()): Pr
     // Claim the row before doing anything with it. An overlapping runner has
     // read the same batch; whoever loses this conditional update walks away,
     // which is what makes a double-send impossible however many ticks land.
+    // Stamped at the moment of THIS claim, not the batch's start: a big
+    // batch can outlive the stranded threshold, and early-batch time on a
+    // late-batch row would get a live send swept as a corpse.
     const claim = await db.campaignSend.updateMany({
       where: { id: row.id, status: "queued" },
-      data: { status: "sending", providerMessageId: claimStamp(now) },
+      data: { status: "sending", providerMessageId: claimStamp(new Date()) },
     });
     if (claim.count === 0) continue;
 

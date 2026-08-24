@@ -54,3 +54,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ sendId: str
     { headers: { "Content-Type": "text/html; charset=utf-8" } }
   );
 }
+
+// RFC 8058 one-click: mailbox providers POST to the List-Unsubscribe URL with
+// no human involved, so the response page is irrelevant but the effect must
+// be identical. Same signed URL, same handler.
+export const POST = GET;

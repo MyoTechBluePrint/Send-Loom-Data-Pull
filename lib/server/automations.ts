@@ -17,7 +17,7 @@ import { activeProvider, recordSendOutcome } from "./sending";
 import { eligibleForChannel } from "./consent";
 import { renderForRecipient } from "./email-render";
 import { newBlockId, type EmailBlock } from "./email-blocks";
-import { claimedAtFromStamp, STRANDED_SENDING_MS } from "./smart-send";
+import { claimStamp, claimedAtFromStamp, STRANDED_SENDING_MS } from "./smart-send";
 
 export const TRIGGER_EVENTS = [
   { value: "popup_submitted", label: "Popup or form signup" },
@@ -122,6 +122,28 @@ export async function retryFailedSends(): Promise<number> {
     });
   }
 
+  // Automation rows stranded in "queued" are the other corpse: created, or
+  // reset by an earlier sweep, and the process died before delivery ran.
+  // Campaign gradual queues wait in "queued" legitimately, so this is scoped
+  // to automation shadow campaigns, where queued always means "delivery
+  // imminent". Age comes from the reset's claim stamp, or from createdAt for
+  // rows that died between creation and first delivery.
+  const strandedQueued = await db.campaignSend.findMany({
+    where: { status: "queued", campaign: { audienceType: "automation" } },
+    select: { id: true, providerMessageId: true, createdAt: true },
+    take: 200,
+  });
+  for (const row of strandedQueued) {
+    const at =
+      claimedAtFromStamp(row.providerMessageId) ??
+      (row.providerMessageId == null ? row.createdAt.getTime() : null);
+    if (at !== null && at > strandedBefore) continue; // genuinely imminent
+    await db.campaignSend.updateMany({
+      where: { id: row.id, status: "queued" },
+      data: { status: "failed", attempts: { increment: 1 }, providerMessageId: null },
+    });
+  }
+
   const failed = await db.campaignSend.findMany({
     where: {
       status: "failed",
@@ -154,7 +176,7 @@ export async function retryFailedSends(): Promise<number> {
     // may redeliver, or the contact would get the email twice.
     const reset = await db.campaignSend.updateMany({
       where: { id: send.id, status: "failed" },
-      data: { status: "queued" },
+      data: { status: "queued", providerMessageId: claimStamp(new Date()) },
     });
     if (reset.count === 0) continue;
     await redeliverExisting(automation, node, send.contact, send.id);
@@ -376,7 +398,7 @@ async function redeliverExisting(
   const config = parseConfig<EmailNodeConfig>(node.config);
   const campaign = await shadowCampaign(automation, node);
   try {
-    const { html, textBody } = await renderForRecipient({
+    const { html, textBody, unsubscribeUrl } = await renderForRecipient({
       workspaceId: automation.workspaceId,
       campaignId: campaign.id,
       sendId,
@@ -389,11 +411,12 @@ async function redeliverExisting(
       blocks: blocksFor(node),
     });
     const provider = activeProvider();
-    void textBody; // providers take html; the text part rides inside it
     const result = await provider.send({
       to: contact.email,
       subject: config.subject?.trim() || node.label,
       html,
+      text: textBody,
+      unsubscribeUrl,
       campaignSendId: sendId,
     });
     const status = await recordSendOutcome(sendId, result);

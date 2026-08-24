@@ -306,9 +306,13 @@ export async function dispatchPlatformEvent(workspaceId: string, eventType: stri
 // Retry sweep: called opportunistically from platform routes and the test
 // suite. A real worker/cron owns this in a scaled deployment.
 export async function retryDueWebhooks(): Promise<number> {
+  // Oldest due first, and enough of them. Unordered take-20 let a backlog
+  // starve newer deliveries indefinitely; every row now gets its retry in
+  // due order, and each attempt walks it towards success or dead.
   const due = await db.webhookDelivery.findMany({
     where: { status: "failed", nextRetryAt: { lte: new Date() } },
-    take: 20,
+    orderBy: { nextRetryAt: "asc" },
+    take: 100,
   });
   for (const d of due) await attemptDelivery(d.id).catch(() => {});
   return due.length;
