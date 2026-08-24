@@ -20,9 +20,14 @@ interface NodeDraft {
   label: string;
   detail?: string | null;
   config: Record<string, unknown>;
+  /** Whether this step's shadow campaign holds designed blocks, which then send. */
+  designed?: boolean;
 }
 
 interface TriggerOption { value: string; label: string }
+
+interface DesignSource { id: string; name: string }
+interface DesignSources { campaigns: DesignSource[]; templates: DesignSource[] }
 
 export function WorkflowEditor({ automationId }: { automationId: string }) {
   const router = useRouter();
@@ -40,6 +45,8 @@ export function WorkflowEditor({ automationId }: { automationId: string }) {
   const [preview, setPreview] = useState<{ html: string; subject: string } | null>(null);
   const [testResult, setTestResult] = useState<string | null>(null);
   const [confirmTest, setConfirmTest] = useState<NodeDraft | null>(null);
+  const [sources, setSources] = useState<DesignSources>({ campaigns: [], templates: [] });
+  const [confirmAdopt, setConfirmAdopt] = useState<{ at: number; kind: "campaign" | "template"; id: string; name: string } | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -52,6 +59,7 @@ export function WorkflowEditor({ automationId }: { automationId: string }) {
       setTriggerEvent(a.triggerEvent);
       setAllowReentry(a.allowReentry);
       setTriggerOptions(json.triggerEvents);
+      setSources(json.sources ?? { campaigns: [], templates: [] });
       setNodes(
         (a.nodes as NodeDraft[]).length
           ? (a.nodes as NodeDraft[])
@@ -63,7 +71,7 @@ export function WorkflowEditor({ automationId }: { automationId: string }) {
 
   const say = (text: string) => { setFlash(text); setTimeout(() => setFlash(null), 3000); };
 
-  const save = async (): Promise<boolean> => {
+  const save = async (): Promise<NodeDraft[] | null> => {
     setBusy("save"); setProblem(null);
     try {
       const body = {
@@ -80,10 +88,64 @@ export function WorkflowEditor({ automationId }: { automationId: string }) {
           body: JSON.stringify({ name, triggerEvent, allowReentry }),
         }),
       ]);
-      const okay = (await nodesRes.json()).ok && (await metaRes.json()).ok;
-      if (okay) { say("Saved."); router.refresh(); return true; }
+      const nodesJson = await nodesRes.json();
+      const metaJson = await metaRes.json();
+      if (nodesJson.ok && metaJson.ok) {
+        // The server hands the saved steps back with their ids and shadow
+        // campaign ids: a brand-new step becomes openable in the full editor
+        // immediately, and a re-save cannot recreate it as a fresh row.
+        const fresh: NodeDraft[] = Array.isArray(nodesJson.nodes) ? nodesJson.nodes : nodes;
+        setNodes(fresh);
+        say("Saved.");
+        router.refresh();
+        return fresh;
+      }
       setProblem("Save failed. Nothing was lost; try again.");
-      return false;
+      return null;
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  // The full editor lives at the step's shadow campaign, which exists once
+  // the workflow has been saved. Save first so an unsaved new step gets its
+  // campaign, then go.
+  const openFullEditor = async (at: number) => {
+    const fresh = await save();
+    if (!fresh) return;
+    const campaignId = fresh[at]?.config?.campaignId;
+    if (typeof campaignId === "string" && campaignId) {
+      router.push(`/campaigns/${campaignId}/email`);
+    } else {
+      setProblem("This step could not be opened in the full editor. Save the workflow and try again.");
+    }
+  };
+
+  // Copy an existing design onto this step's shadow campaign, after the
+  // explicit confirm (it overwrites whatever design the step already has).
+  const adopt = async () => {
+    const target = confirmAdopt;
+    if (!target) return;
+    const fresh = await save();
+    if (!fresh) { setConfirmAdopt(null); return; }
+    const nodeId = fresh[target.at]?.id;
+    if (!nodeId) { setProblem("Save the workflow, then try copying again."); setConfirmAdopt(null); return; }
+    setBusy("adopt");
+    try {
+      const res = await fetch(`/api/automations/${automationId}`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "adopt_content", nodeId, source: { kind: target.kind, id: target.id } }),
+      });
+      const json = await res.json();
+      if (json.ok) {
+        setNodes((ns) => ns.map((n, i) =>
+          i === target.at ? { ...n, designed: true, config: { ...n.config, campaignId: json.campaignId } } : n,
+        ));
+        say("Design copied. This step now sends the designed email.");
+      } else {
+        setProblem(json.error ?? "Could not copy that design.");
+      }
+      setConfirmAdopt(null);
     } finally {
       setBusy(null);
     }
@@ -213,7 +275,7 @@ export function WorkflowEditor({ automationId }: { automationId: string }) {
                   try {
                     const res = await fetch(`/api/automations/${automationId}/test-send`, {
                       method: "POST", headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ subject: confirmTest.config.subject, previewText: confirmTest.config.previewText, html: confirmTest.config.html }),
+                      body: JSON.stringify({ subject: confirmTest.config.subject, previewText: confirmTest.config.previewText, html: confirmTest.config.html, nodeId: confirmTest.id }),
                     });
                     const json = await res.json();
                     setTestResult(
@@ -231,6 +293,29 @@ export function WorkflowEditor({ automationId }: { automationId: string }) {
                 className="rounded-lg bg-brand px-3.5 py-2 text-[13px] font-semibold text-white hover:bg-[#5b21b6] disabled:opacity-50"
               >
                 {busy === "test" ? "Sending…" : "Send test to me"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmAdopt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setConfirmAdopt(null)}>
+          <div onClick={(e) => e.stopPropagation()} className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl">
+            <h2 className="text-base font-semibold">Copy this design onto the step?</h2>
+            <p className="mt-2 text-[13px] leading-relaxed text-ink-2">
+              The design from <b>{confirmAdopt.name}</b> will be copied onto this step,
+              replacing anything already designed for it. The step&apos;s subject and
+              preview text are kept, and the designed email becomes what sends.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button onClick={() => setConfirmAdopt(null)} className="rounded-lg border border-line px-3.5 py-2 text-[13px] font-semibold text-ink-2 hover:bg-[#f0efec]">Cancel</button>
+              <button
+                disabled={busy !== null}
+                onClick={() => void adopt()}
+                className="rounded-lg bg-gradient-to-b from-[#7c3aed] to-[#5b21b6] px-3.5 py-2 text-[13px] font-semibold text-white disabled:opacity-50"
+              >
+                {busy === "adopt" ? "Copying…" : "Copy design"}
               </button>
             </div>
           </div>
@@ -278,12 +363,15 @@ export function WorkflowEditor({ automationId }: { automationId: string }) {
                 onPreview={async () => {
                   const res = await fetch(`/api/automations/${automationId}/preview`, {
                     method: "POST", headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ subject: n.config.subject, previewText: n.config.previewText, html: n.config.html }),
+                    body: JSON.stringify({ subject: n.config.subject, previewText: n.config.previewText, html: n.config.html, nodeId: n.id }),
                   });
                   const json = await res.json();
                   if (json.ok) setPreview({ html: json.html, subject: String(n.config.subject ?? n.label) });
                 }}
                 onTest={() => setConfirmTest(n)}
+                onOpenEditor={() => void openFullEditor(at)}
+                onAdopt={(kind, source) => setConfirmAdopt({ at, kind, id: source.id, name: source.name })}
+                sources={sources}
                 onDuplicate={() =>
                   setNodes((ns) => {
                     const copy: NodeDraft = { kind: n.kind, label: `${n.label} (copy)`, detail: n.detail, config: { ...n.config } };
@@ -350,6 +438,7 @@ export function WorkflowEditor({ automationId }: { automationId: string }) {
 function StepCard({
   node, first, last, triggerOptions, triggerEvent,
   onTrigger, onChange, onConfig, onMove, onRemove, onPreview, onTest, onDuplicate,
+  onOpenEditor, onAdopt, sources,
 }: {
   node: NodeDraft;
   first: boolean;
@@ -364,6 +453,9 @@ function StepCard({
   onPreview: () => void;
   onTest: () => void;
   onDuplicate: () => void;
+  onOpenEditor: () => void;
+  onAdopt: (kind: "campaign" | "template", source: DesignSource) => void;
+  sources: DesignSources;
 }) {
   const chrome: Record<string, { border: string; chip: string; icon: string; word: string }> = {
     trigger: { border: "border-violet-300", chip: "bg-violet-100 text-violet-700", icon: "⚡", word: "Trigger" },
@@ -459,6 +551,57 @@ function StepCard({
             <p className="mt-1 text-[11px] text-ink-3">
               Plain sentences or simple HTML. Your brand logo and the legally
               required unsubscribe footer are added automatically.
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-line bg-[#faf9f7] px-3 py-2.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`rounded-full px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide ${node.designed ? "bg-blue-50 text-blue-700" : "bg-zinc-100 text-zinc-600"}`}>
+                {node.designed ? "Designed email sends" : "Simple text sends"}
+              </span>
+              <button
+                onClick={onOpenEditor}
+                className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs font-semibold text-brand hover:border-brand"
+              >
+                Open full email editor
+              </button>
+              <select
+                value=""
+                onChange={(e) => {
+                  const [kind, sourceId] = e.target.value.split(":");
+                  const list = kind === "campaign" ? sources.campaigns : sources.templates;
+                  const src = list.find((s) => s.id === sourceId);
+                  if (src && (kind === "campaign" || kind === "template")) onAdopt(kind, src);
+                  e.target.value = "";
+                }}
+                disabled={!sources.campaigns.length && !sources.templates.length}
+                className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs font-semibold text-ink-2 outline-none focus:border-brand disabled:opacity-50"
+              >
+                <option value="">
+                  {sources.campaigns.length || sources.templates.length
+                    ? "Start from an existing email…"
+                    : "No designed emails to copy yet"}
+                </option>
+                {sources.campaigns.length > 0 && (
+                  <optgroup label="Campaigns">
+                    {sources.campaigns.map((s) => (
+                      <option key={s.id} value={`campaign:${s.id}`}>{s.name}</option>
+                    ))}
+                  </optgroup>
+                )}
+                {sources.templates.length > 0 && (
+                  <optgroup label="Templates">
+                    {sources.templates.map((s) => (
+                      <option key={s.id} value={`template:${s.id}`}>{s.name}</option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+            </div>
+            <p className="mt-1.5 text-[11px] leading-relaxed text-ink-3">
+              {node.designed
+                ? "A designed email is attached to this step and is what will send. The subject and preview text above still apply; the simple content box is kept but ignored while the design exists."
+                : "This step sends the simple content above, dressed with your logo and footer. Open the full editor to design a richer email for this step."}
             </p>
           </div>
         </div>

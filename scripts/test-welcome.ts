@@ -2,7 +2,12 @@
 // person submits the popup on the storefront. Run: npx tsx scripts/test-welcome.ts
 
 import { db } from "../lib/server/db";
-import { ensureWelcomeFlow } from "../lib/server/automations";
+import {
+  ensureWelcomeFlow,
+  ensureShadowCampaigns,
+  adoptShadowContent,
+  blocksFor,
+} from "../lib/server/automations";
 import { eventIngestionService } from "../lib/server/events";
 
 let passed = 0, failed = 0;
@@ -92,6 +97,76 @@ async function main() {
   check("machine grant held against the opt-out", optOutContact?.emailConsent === "withdrawn");
   const optOutSend = await db.campaignSend.findFirst({ where: { contactId: optOutContact!.id } });
   check("no email left for them", !optOutSend);
+
+  console.log("\n5 · the full email editor connects to email steps");
+  const ws = flow!.workspaceId;
+  const auto = await db.automation.create({
+    data: { workspaceId: ws, name: `Editor link ${STAMP}`, trigger: "Test", status: "draft" },
+  });
+  const node = await db.automationNode.create({
+    data: {
+      automationId: auto.id, kind: "email", label: "Design test", position: 1,
+      config: JSON.stringify({ subject: "Hi", html: "<p>Simple text body</p>" }),
+    },
+  });
+
+  // (a) Saving a workflow creates the shadow campaign up front, idempotently.
+  const shadowIds = await ensureShadowCampaigns(auto.id);
+  const shadowId = shadowIds.get(node.id);
+  check("shadow campaign created on save", Boolean(shadowId));
+  const savedConfig = JSON.parse((await db.automationNode.findUniqueOrThrow({ where: { id: node.id } })).config ?? "{}");
+  check("campaign id persisted on the node", savedConfig.campaignId === shadowId);
+  const shadowRow = await db.campaign.findUniqueOrThrow({ where: { id: shadowId! } });
+  check("shadow campaign is automation-typed", shadowRow.audienceType === "automation" && shadowRow.audienceRef === auto.id);
+  const again = await ensureShadowCampaigns(auto.id);
+  check("second save mints no new campaign", again.get(node.id) === shadowId);
+
+  // (b) Designed blocks win over config.html at render time.
+  const designedJson = JSON.stringify([
+    { id: "d1", type: "heading", text: "Designed content", level: 1 },
+    { id: "d2", type: "footer" },
+  ]);
+  const nodeShape = { label: "Design test", config: JSON.stringify({ html: "<p>Simple text body</p>", previewText: "pv-line" }) };
+  const designed = blocksFor(nodeShape, designedJson);
+  check(
+    "designed blocks win over config.html",
+    designed.some((b) => b.type === "heading" && b.text === "Designed content") &&
+      !designed.some((b) => b.type === "text" && b.html.includes("Simple text body")),
+  );
+  check("preview text preheader kept with a design", designed.some((b) => b.type === "text" && b.html.includes("pv-line")));
+  check("footer guaranteed on a designed email", designed.some((b) => b.type === "footer"));
+  const fallback = blocksFor(nodeShape, null);
+  check("no design falls back to the simple text", fallback.some((b) => b.type === "text" && b.html.includes("Simple text body")));
+
+  // (c) Adopting an existing campaign's design copies it onto the shadow.
+  const sourceCampaign = await db.campaign.create({
+    data: {
+      workspaceId: ws, name: `Design source ${STAMP}`, subject: "S", status: "draft",
+      content: JSON.stringify([
+        { id: "s1", type: "heading", text: "Adopted design", level: 1 },
+        { id: "s2", type: "footer" },
+      ]),
+    },
+  });
+  const adopted = await adoptShadowContent({
+    workspaceId: ws, automationId: auto.id, nodeId: node.id,
+    source: { kind: "campaign", id: sourceCampaign.id },
+  });
+  check("adopt lands on the step's shadow campaign", adopted.ok && adopted.campaignId === shadowId);
+  const shadowAfter = await db.campaign.findUniqueOrThrow({ where: { id: shadowId! } });
+  const copied = JSON.parse(shadowAfter.content ?? "[]") as { id: string; type: string; text?: string }[];
+  check("content copied onto the shadow campaign", copied.some((b) => b.type === "heading" && b.text === "Adopted design"));
+  check("copy is a snapshot with fresh block ids", copied.every((b) => b.id !== "s1" && b.id !== "s2"));
+  const emptySource = await db.campaign.create({
+    data: { workspaceId: ws, name: `Empty source ${STAMP}`, subject: "E", status: "draft" },
+  });
+  const refused = await adoptShadowContent({
+    workspaceId: ws, automationId: auto.id, nodeId: node.id,
+    source: { kind: "campaign", id: emptySource.id },
+  });
+  check("source without designed content refused", refused.ok === false);
+  const shadowStill = await db.campaign.findUniqueOrThrow({ where: { id: shadowId! } });
+  check("refusal leaves the design untouched", (shadowStill.content ?? "").includes("Adopted design"));
 
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed) process.exit(1);

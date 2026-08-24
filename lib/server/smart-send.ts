@@ -93,6 +93,12 @@ export async function startSmartSend(campaignId: string, actor: string, opts: {
   if (campaign.status === "sent" || campaign.status === "sending") {
     return { ok: false, error: "Campaign already sent or sending." };
   }
+  // Same refusal as sendCampaign: an automation's shadow campaign resolves
+  // its audience to the whole workspace, so batching it would just be the
+  // full-list blast in slow motion.
+  if (campaign.audienceType === "automation" || campaign.status === "automation") {
+    return { ok: false, error: "This email belongs to an automation. It sends through its workflow, one contact at a time." };
+  }
 
   // Content gate: same rule as immediate sending.
   const blocks = parseBlocks(campaign.content);

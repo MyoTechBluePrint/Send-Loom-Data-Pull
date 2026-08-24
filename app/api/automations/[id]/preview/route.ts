@@ -1,14 +1,16 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { currentUser } from "@/lib/server/permissions";
-import { renderForRecipient } from "@/lib/server/email-render";
+import { renderForRecipient, resolveFeeds } from "@/lib/server/email-render";
 import { db } from "@/lib/server/db";
 import { demoWorkspaceId } from "@/lib/server/views";
-import { newBlockId, type EmailBlock } from "@/lib/server/email-blocks";
+import { blocksFor, designedContentFor } from "@/lib/server/automations";
 
 // What the email will look like, rendered by the same pipeline that sends
 // it, with a placeholder recipient. Preview and delivery can never drift
-// apart because they are the same function.
+// apart because they are the same function: blocksFor decides here exactly
+// as it does at send time, so a step with a designed shadow campaign
+// previews the designed email, not the simple text.
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +18,7 @@ const Body = z.object({
   subject: z.string().max(200).optional(),
   previewText: z.string().max(200).optional(),
   html: z.string().max(20000).optional(),
+  nodeId: z.string().max(60).optional(),
 });
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -29,15 +32,17 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return Response.json({ ok: false }, { status: 400 });
 
-  const preheader = parsed.data.previewText?.trim()
-    ? `<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">${parsed.data.previewText.trim()}</div>`
-    : "";
-  const blocks: EmailBlock[] = [
-    ...(preheader ? [{ id: newBlockId(), type: "text" as const, html: preheader }] : []),
-    { id: newBlockId(), type: "logo" as const },
-    { id: newBlockId(), type: "text" as const, html: parsed.data.html?.trim() || "<p>Thanks for signing up. We'll be in touch.</p>" },
-    { id: newBlockId(), type: "footer" as const },
-  ];
+  const designed = await designedContentFor(automation.id, parsed.data.nodeId);
+  // Feeds resolve exactly as at delivery, so a preview with a dynamic
+  // product block shows the same catalogue the send would.
+  const blocks = await resolveFeeds(
+    blocksFor(
+      { label: "Preview", config: JSON.stringify({ html: parsed.data.html, previewText: parsed.data.previewText }) },
+      designed.content,
+    ),
+    workspaceId,
+    null,
+  );
 
   const { html } = await renderForRecipient({
     workspaceId,
@@ -45,6 +50,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     sendId: "preview",
     contact: { id: "preview", email: user.email, firstName: "Preview", lastName: null },
     blocks,
+    brandId: designed.brandId,
   });
-  return Response.json({ ok: true, html, subject: parsed.data.subject ?? "" });
+  return Response.json({ ok: true, html, subject: parsed.data.subject ?? "", designed: Boolean(designed.content) });
 }

@@ -289,6 +289,12 @@ export async function sendCampaign(campaignId: string, actor: string) {
   if (campaign.status === "sent" || campaign.status === "sending") {
     return { ok: false as const, error: "Campaign already sent." };
   }
+  // An automation's shadow campaign is that workflow's email, not a one-off:
+  // its audienceRef is an automation id, which resolveAudience would read as
+  // "everyone", turning one press into a full-list blast of a welcome email.
+  if (campaign.audienceType === "automation" || campaign.status === "automation") {
+    return { ok: false as const, error: "This email belongs to an automation. It sends through its workflow, one contact at a time." };
+  }
 
   const channel = (campaign.channel ?? "email") as Channel;
   if (channel !== "email") {

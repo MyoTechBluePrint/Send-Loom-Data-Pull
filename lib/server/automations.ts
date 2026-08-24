@@ -15,8 +15,8 @@ import { db } from "./db";
 import { audit } from "./audit";
 import { activeProvider, recordSendOutcome } from "./sending";
 import { eligibleForChannel } from "./consent";
-import { renderForRecipient } from "./email-render";
-import { newBlockId, type EmailBlock } from "./email-blocks";
+import { renderForRecipient, resolveFeeds } from "./email-render";
+import { newBlockId, parseBlocks, type EmailBlock } from "./email-blocks";
 import { claimStamp, claimedAtFromStamp, STRANDED_SENDING_MS } from "./smart-send";
 
 export const TRIGGER_EVENTS = [
@@ -275,13 +275,18 @@ export async function advanceRun(runId: string) {
 }
 
 /** The shadow campaign that gives an email node its send machinery. */
-async function shadowCampaign(
+export async function shadowCampaign(
   automation: { id: string; workspaceId: string; name: string },
   node: { id: string; label: string; config: string | null },
 ) {
   const config = parseConfig<EmailNodeConfig>(node.config);
   if (config.campaignId) {
-    const existing = await db.campaign.findUnique({ where: { id: config.campaignId } });
+    // Scoped to the automation's workspace: node configs arrive from the
+    // editor as free-form JSON, so a campaignId in one is an untrusted
+    // reference until the workspace check says otherwise.
+    const existing = await db.campaign.findFirst({
+      where: { id: config.campaignId, workspaceId: automation.workspaceId },
+    });
     if (existing) return existing;
   }
   const campaign = await db.campaign.create({
@@ -302,20 +307,137 @@ async function shadowCampaign(
   return campaign;
 }
 
-function blocksFor(node: { label: string; config: string | null }): EmailBlock[] {
+/**
+ * What an email node sends. A step whose shadow campaign holds designed
+ * blocks (the full email editor's work) sends those; otherwise the simple
+ * subject/text fields are dressed in the logo+text+footer composition. The
+ * step's preview text applies either way, and a footer is guaranteed either
+ * way: a designed email must never leave without its unsubscribe link.
+ */
+export function blocksFor(
+  node: { label: string; config: string | null },
+  designedContent?: string | null,
+): EmailBlock[] {
   const config = parseConfig<EmailNodeConfig>(node.config);
-  const html = config.html?.trim() || "<p>Thanks for signing up. We'll be in touch.</p>";
   // The preheader is the line inboxes show after the subject. Hidden in the
   // body itself, which is the only place email clients read it from.
   const preheader = config.previewText?.trim()
     ? `<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">${config.previewText.trim()}</div>`
     : "";
+  const preheaderBlocks: EmailBlock[] = preheader
+    ? [{ id: newBlockId(), type: "text" as const, html: preheader }]
+    : [];
+
+  const designed = parseBlocks(designedContent ?? null);
+  if (designed.length) {
+    const withFooter = designed.some((b) => b.type === "footer")
+      ? designed
+      : [...designed, { id: newBlockId(), type: "footer" as const }];
+    return [...preheaderBlocks, ...withFooter];
+  }
+
+  const html = config.html?.trim() || "<p>Thanks for signing up. We'll be in touch.</p>";
   return [
-    ...(preheader ? [{ id: newBlockId(), type: "text" as const, html: preheader }] : []),
+    ...preheaderBlocks,
     { id: newBlockId(), type: "logo" as const },
     { id: newBlockId(), type: "text" as const, html },
     { id: newBlockId(), type: "footer" as const },
   ];
+}
+
+/**
+ * The shadow campaign's designed content for one node, if any. Used by the
+ * preview and test-send routes so what they show is what would send.
+ */
+export async function designedContentFor(
+  automationId: string,
+  nodeId: string | undefined,
+): Promise<{ content: string | null; brandId: string | null }> {
+  const none = { content: null, brandId: null };
+  if (!nodeId) return none;
+  const node = await db.automationNode.findFirst({
+    where: { id: nodeId, automationId },
+    select: { config: true, automation: { select: { workspaceId: true } } },
+  });
+  if (!node) return none;
+  const config = parseConfig<EmailNodeConfig>(node.config);
+  if (typeof config.campaignId !== "string" || !config.campaignId) return none;
+  // Same untrusted-reference rule as shadowCampaign: a campaignId written
+  // into a node config only counts if it lives in this workspace. The brand
+  // travels with the content, or previews render in the wrong identity.
+  const shadow = await db.campaign.findFirst({
+    where: { id: config.campaignId, workspaceId: node.automation.workspaceId },
+    select: { content: true, brandId: true },
+  });
+  return shadow ? { content: shadow.content, brandId: shadow.brandId } : none;
+}
+
+/**
+ * Shadow campaigns exist from the moment a workflow is saved, not lazily at
+ * first send: the full email editor needs a campaign to design against long
+ * before any contact walks the flow. Called from the workflow save path;
+ * idempotent per node, and the send path still calls shadowCampaign itself
+ * so workflows saved before this existed keep working.
+ */
+export async function ensureShadowCampaigns(automationId: string): Promise<Map<string, string>> {
+  const ids = new Map<string, string>();
+  const automation = await db.automation.findUnique({
+    where: { id: automationId },
+    include: { nodes: { orderBy: { position: "asc" } } },
+  });
+  if (!automation) return ids;
+  for (const node of automation.nodes) {
+    if (node.kind !== "email") continue;
+    const campaign = await shadowCampaign(automation, node);
+    ids.set(node.id, campaign.id);
+  }
+  return ids;
+}
+
+/**
+ * Copy a designed email from a campaign or template onto an email node's
+ * shadow campaign. The copy is a snapshot with fresh block ids: editing the
+ * source later never changes what this step sends. It overwrites any design
+ * the step already had, which is why the UI confirms before calling; a
+ * source without designed blocks is refused rather than blanking the step.
+ */
+export async function adoptShadowContent(opts: {
+  workspaceId: string;
+  automationId: string;
+  nodeId: string;
+  source: { kind: "campaign" | "template"; id: string };
+}): Promise<{ ok: true; campaignId: string; sourceName: string } | { ok: false; error: string }> {
+  const automation = await db.automation.findFirst({
+    where: { id: opts.automationId, workspaceId: opts.workspaceId },
+    select: { id: true, workspaceId: true, name: true },
+  });
+  if (!automation) return { ok: false, error: "Workflow not found." };
+  const node = await db.automationNode.findFirst({
+    where: { id: opts.nodeId, automationId: automation.id },
+  });
+  if (!node || node.kind !== "email") return { ok: false, error: "That email step no longer exists. Save the workflow and try again." };
+
+  const source =
+    opts.source.kind === "campaign"
+      ? await db.campaign.findFirst({
+          where: { id: opts.source.id, workspaceId: opts.workspaceId },
+          select: { name: true, content: true },
+        })
+      : await db.emailTemplate.findFirst({
+          where: { id: opts.source.id, workspaceId: opts.workspaceId },
+          select: { name: true, content: true },
+        });
+  if (!source) return { ok: false, error: "That email could not be found." };
+  const blocks = parseBlocks(source.content);
+  if (!blocks.length) return { ok: false, error: "That email has no designed content to copy." };
+
+  const campaign = await shadowCampaign(automation, node);
+  const copied = blocks.map((b) => ({ ...b, id: newBlockId() }));
+  await db.campaign.update({
+    where: { id: campaign.id },
+    data: { content: JSON.stringify(copied), contentDirty: false },
+  });
+  return { ok: true, campaignId: campaign.id, sourceName: source.name };
 }
 
 async function deliverEmailNode(
@@ -398,6 +520,16 @@ async function redeliverExisting(
   const config = parseConfig<EmailNodeConfig>(node.config);
   const campaign = await shadowCampaign(automation, node);
   try {
+    // The shadow campaign's designed blocks win over the simple text: the
+    // full editor's work is what actually sends. Feeds resolve here, at
+    // delivery, because renderForRecipient expects concrete products, and an
+    // automation email SHOULD show the catalogue as it stands each time it
+    // fires rather than as it stood when the workflow was drawn.
+    const blocks = await resolveFeeds(
+      blocksFor(node, campaign.content),
+      automation.workspaceId,
+      null,
+    );
     const { html, textBody, unsubscribeUrl } = await renderForRecipient({
       workspaceId: automation.workspaceId,
       campaignId: campaign.id,
@@ -408,7 +540,10 @@ async function redeliverExisting(
         firstName: contact.firstName,
         lastName: contact.lastName,
       },
-      blocks: blocksFor(node),
+      blocks,
+      // The brand the designer chose in the full editor travels with the
+      // send; without it the email renders in default purple, not MyoTech.
+      brandId: campaign.brandId,
     });
     const provider = activeProvider();
     const result = await provider.send({

@@ -37,6 +37,11 @@ const BLOCK_MENU: { type: string; label: string; make: () => Partial<Block> }[] 
   { type: "footer", label: "Footer + unsubscribe", make: () => ({}) },
 ];
 
+// What a column half may hold. Columns never nest; footers, dynamic feeds and
+// saved elements stay top-level where the send path resolves them.
+const COLUMN_TYPES = ["heading", "text", "image", "button", "divider", "spacer", "product", "product_grid", "coupon"];
+const COLUMN_MENU = BLOCK_MENU.filter((m) => COLUMN_TYPES.includes(m.type));
+
 let seq = 0;
 const newId = () => `b${Date.now().toString(36)}${(seq++).toString(36)}`;
 
@@ -123,29 +128,44 @@ export function EmailEditor(props: {
     return () => clearTimeout(t);
   }, [blocks, brandId, props.previewUrl]);
 
+  // The style block is email-level settings, never part of the drag order:
+  // every list operation works on the visible blocks and the style block is
+  // re-attached at the end of the array.
+  const styleBlock = useMemo(() => blocks.find((b) => b.type === "style") ?? null, [blocks]);
+  const visibleBlocks = useMemo(() => blocks.filter((b) => b.type !== "style"), [blocks]);
+  const applyVisible = useCallback(
+    (next: Block[]) => apply(styleBlock ? [...next, styleBlock] : next),
+    [apply, styleBlock]
+  );
+  const setEmailStyle = (patch: { backgroundColor?: string; cardColor?: string }) => {
+    const merged = { ...(styleBlock ?? { id: newId(), type: "style" }), ...patch } as Block;
+    const keep = Boolean(merged.backgroundColor || merged.cardColor);
+    apply(keep ? [...visibleBlocks, merged] : visibleBlocks);
+  };
+
   const move = (id: string, dir: -1 | 1) => {
-    const i = blocks.findIndex((b) => b.id === id);
+    const i = visibleBlocks.findIndex((b) => b.id === id);
     const j = i + dir;
-    if (i < 0 || j < 0 || j >= blocks.length) return;
-    const next = [...blocks];
+    if (i < 0 || j < 0 || j >= visibleBlocks.length) return;
+    const next = [...visibleBlocks];
     [next[i], next[j]] = [next[j], next[i]];
-    apply(next);
+    applyVisible(next);
   };
   const duplicate = (id: string) => {
-    const i = blocks.findIndex((b) => b.id === id);
+    const i = visibleBlocks.findIndex((b) => b.id === id);
     if (i < 0) return;
-    const copy = { ...blocks[i], id: newId() };
-    apply([...blocks.slice(0, i + 1), copy, ...blocks.slice(i + 1)]);
+    const copy = { ...visibleBlocks[i], id: newId() };
+    applyVisible([...visibleBlocks.slice(0, i + 1), copy, ...visibleBlocks.slice(i + 1)]);
   };
-  const remove = (id: string) => apply(blocks.filter((b) => b.id !== id));
+  const remove = (id: string) => applyVisible(visibleBlocks.filter((b) => b.id !== id));
   const add = (item: (typeof BLOCK_MENU)[number]) => {
     const block = { id: newId(), type: item.type, ...item.make() } as Block;
     // Footer stays last.
-    const fi = blocks.findIndex((b) => b.type === "footer");
+    const fi = visibleBlocks.findIndex((b) => b.type === "footer");
     const next = fi >= 0 && item.type !== "footer"
-      ? [...blocks.slice(0, fi), block, ...blocks.slice(fi)]
-      : [...blocks, block];
-    apply(next);
+      ? [...visibleBlocks.slice(0, fi), block, ...visibleBlocks.slice(fi)]
+      : [...visibleBlocks, block];
+    applyVisible(next);
     setSelected(block.id);
   };
   const update = (id: string, patch: Record<string, unknown>) => {
@@ -158,12 +178,12 @@ export function EmailEditor(props: {
     const block = { id: newId(), type: "image", url, alt } as Block;
     let next: Block[];
     if (at === undefined) {
-      const fi = blocks.findIndex((b) => b.type === "footer");
-      next = fi >= 0 ? [...blocks.slice(0, fi), block, ...blocks.slice(fi)] : [...blocks, block];
+      const fi = visibleBlocks.findIndex((b) => b.type === "footer");
+      next = fi >= 0 ? [...visibleBlocks.slice(0, fi), block, ...visibleBlocks.slice(fi)] : [...visibleBlocks, block];
     } else {
-      next = [...blocks.slice(0, at), block, ...blocks.slice(at)];
+      next = [...visibleBlocks.slice(0, at), block, ...visibleBlocks.slice(at)];
     }
-    apply(next);
+    applyVisible(next);
     setSelected(block.id);
   };
 
@@ -223,6 +243,41 @@ export function EmailEditor(props: {
               {props.brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
           </label>
+          {/* Email-level colours live in the content as a style block but are
+              edited here, never in the block list. */}
+          <div className="mt-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">Email style</span>
+            <div className="mt-1 space-y-1.5">
+              {([
+                { key: "backgroundColor" as const, label: "Background", fallback: "#faf9f7" },
+                { key: "cardColor" as const, label: "Card", fallback: "#ffffff" },
+              ]).map(({ key, label: lab, fallback }) => {
+                const value = typeof styleBlock?.[key] === "string" ? (styleBlock[key] as string) : undefined;
+                return (
+                  <div key={key} className="flex items-center gap-2">
+                    <input
+                      type="color" value={value ?? fallback} disabled={props.readOnly}
+                      onChange={(e) => setEmailStyle({ [key]: e.target.value })}
+                      className="h-7 w-9 shrink-0 cursor-pointer rounded border border-line bg-surface p-0.5"
+                      title={`${lab} colour`}
+                    />
+                    <span className="flex-1 text-[12px]">{lab}</span>
+                    {value ? (
+                      <button
+                        type="button" disabled={props.readOnly}
+                        onClick={() => setEmailStyle({ [key]: undefined })}
+                        className="rounded border border-line px-2 py-0.5 text-[10px] font-semibold text-ink-2 hover:border-brand hover:text-brand"
+                      >
+                        Reset
+                      </button>
+                    ) : (
+                      <span className="text-[10px] text-ink-3">Brand default</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
 
         <div className="rounded-xl border border-line bg-surface">
@@ -234,7 +289,7 @@ export function EmailEditor(props: {
             </div>
           </div>
           <ul className="max-h-[380px] overflow-y-auto p-2">
-            {blocks.map((b) => (
+            {visibleBlocks.map((b) => (
               <li
                 key={b.id}
                 draggable={!props.readOnly}
@@ -245,7 +300,7 @@ export function EmailEditor(props: {
                   const from = dragFrom.current;
                   dragFrom.current = null;
                   if (!from || from === b.id) return;
-                  const j = blocks.findIndex((x) => x.id === b.id);
+                  const j = visibleBlocks.findIndex((x) => x.id === b.id);
                   if (j < 0) return;
                   // Dragged from the assets panel: insert an image block here.
                   if (from.startsWith("asset:")) {
@@ -255,12 +310,12 @@ export function EmailEditor(props: {
                     } catch { /* malformed payload, ignore */ }
                     return;
                   }
-                  const i = blocks.findIndex((x) => x.id === from);
+                  const i = visibleBlocks.findIndex((x) => x.id === from);
                   if (i < 0) return;
-                  const next = [...blocks];
+                  const next = [...visibleBlocks];
                   const [moved] = next.splice(i, 1);
                   next.splice(j, 0, moved);
-                  apply(next);
+                  applyVisible(next);
                 }}
                 className={`group mb-1 flex cursor-grab items-center gap-1 rounded-lg border px-2 py-1.5 text-[12px] active:cursor-grabbing ${
                   selected === b.id ? "border-brand bg-brand-soft" : "border-line bg-surface"
@@ -545,6 +600,76 @@ function Picker({ label: l, value, options, onChange, emptyHint }: {
   );
 }
 
+/**
+ * One column half: either a legacy HTML string or a list of real blocks with
+ * the same per-block controls as the top level. Deleting every nested block
+ * returns the side to plain HTML.
+ */
+function ColumnSide(props: {
+  title: string;
+  legacyHtml: string;
+  nested: Block[];
+  resources: EditorResources;
+  onLegacyChange: (html: string) => void;
+  onNestedChange: (list: Block[]) => void;
+}) {
+  const input = "mt-1 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[13px] outline-none focus:border-brand";
+  const { nested } = props;
+  const setNested = props.onNestedChange;
+  const moveNested = (i: number, dir: -1 | 1) => {
+    const j = i + dir;
+    if (j < 0 || j >= nested.length) return;
+    const next = [...nested];
+    [next[i], next[j]] = [next[j], next[i]];
+    setNested(next);
+  };
+  return (
+    <div className="mt-2 rounded-lg border border-line p-2">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">{props.title}</p>
+      {nested.length === 0 ? (<>
+        <textarea rows={3} className={input} value={props.legacyHtml} onChange={(e) => props.onLegacyChange(e.target.value)} />
+        <button
+          type="button"
+          onClick={() => setNested([{ id: newId(), type: "text", html: props.legacyHtml || "<p>Write something…</p>" } as Block])}
+          className="mt-1.5 w-full rounded-lg border border-dashed border-line px-2 py-1 text-[11px] font-semibold text-brand hover:border-brand"
+        >
+          Use blocks in this column
+        </button>
+      </>) : (<>
+        {nested.map((nb, i) => (
+          <details key={nb.id} className="mt-1 rounded-lg border border-line bg-surface">
+            <summary className="flex cursor-pointer items-center gap-1 px-2 py-1 text-[11px] font-medium">
+              <span className="flex-1 capitalize">{String(nb.type).replace(/_/g, " ")}</span>
+              <button type="button" title="Up" onClick={(e) => { e.preventDefault(); e.stopPropagation(); moveNested(i, -1); }} className="rounded px-1 hover:bg-black/5">↑</button>
+              <button type="button" title="Down" onClick={(e) => { e.preventDefault(); e.stopPropagation(); moveNested(i, 1); }} className="rounded px-1 hover:bg-black/5">↓</button>
+              <button type="button" title="Delete" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setNested(nested.filter((_, n) => n !== i)); }} className="rounded px-1 text-red-600 hover:bg-red-50">✕</button>
+            </summary>
+            <div className="border-t border-line px-2 pb-2">
+              <BlockProps
+                block={nb}
+                onChange={(patch) => setNested(nested.map((x, n) => (n === i ? { ...x, ...patch } : x)))}
+                resources={props.resources}
+              />
+            </div>
+          </details>
+        ))}
+        <select
+          className={input}
+          value=""
+          onChange={(e) => {
+            const item = COLUMN_MENU.find((m) => m.type === e.target.value);
+            if (item) setNested([...nested, { id: newId(), type: item.type, ...item.make() } as Block]);
+          }}
+        >
+          <option value="">+ Add block here…</option>
+          {COLUMN_MENU.map((m) => <option key={m.type} value={m.type}>{m.label}</option>)}
+        </select>
+        <p className="mt-1 text-[10px] text-ink-3">Delete every block to go back to simple HTML.</p>
+      </>)}
+    </div>
+  );
+}
+
 /** Property inputs per block type. Small on purpose: fields, not a canvas. */
 function BlockProps({ block, onChange, resources }: { block: Block; onChange: (patch: Record<string, unknown>) => void; resources: EditorResources }) {
   const input = "mt-1 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[13px] outline-none focus:border-brand";
@@ -603,18 +728,28 @@ function BlockProps({ block, onChange, resources }: { block: Block; onChange: (p
         </select>
       </div>);
     case "text":
+      return (<div>
+        <span className={label}>Content</span>
+        {toolbar("html")}
+        <textarea rows={5} className={input} value={String(block.html ?? "")} onChange={(e) => onChange({ html: e.target.value })} />
+        <p className="mt-1 text-[10px] text-ink-3">Personalisation: {"{{first_name}}"}, {"{{customer_coupon.code}}"}</p>
+      </div>);
     case "columns":
       return (<div>
-        {t === "text" ? (<>
-          <span className={label}>Content</span>
-          {toolbar("html")}
-          <textarea rows={5} className={input} value={String(block.html ?? "")} onChange={(e) => onChange({ html: e.target.value })} />
-        </>) : (<>
-          <span className={label}>Left column HTML</span>
-          <textarea rows={3} className={input} value={String(block.left ?? "")} onChange={(e) => onChange({ left: e.target.value })} />
-          <span className={label}>Right column HTML</span>
-          <textarea rows={3} className={input} value={String(block.right ?? "")} onChange={(e) => onChange({ right: e.target.value })} />
-        </>)}
+        {([
+          { key: "leftBlocks" as const, legacy: "left" as const, title: "Left column" },
+          { key: "rightBlocks" as const, legacy: "right" as const, title: "Right column" },
+        ]).map((s) => (
+          <ColumnSide
+            key={s.key}
+            title={s.title}
+            legacyHtml={String(block[s.legacy] ?? "")}
+            nested={(block[s.key] as Block[] | undefined) ?? []}
+            resources={resources}
+            onLegacyChange={(html) => onChange({ [s.legacy]: html })}
+            onNestedChange={(list) => onChange({ [s.key]: list.length ? list : undefined })}
+          />
+        ))}
         <p className="mt-1 text-[10px] text-ink-3">Personalisation: {"{{first_name}}"}, {"{{customer_coupon.code}}"}</p>
       </div>);
     case "image":

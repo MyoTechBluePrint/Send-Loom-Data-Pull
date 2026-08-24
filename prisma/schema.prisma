@@ -399,6 +399,10 @@ model Campaign {
   subject          String?
   previewText      String?
   status           String         @default("draft") // draft | scheduled | sending | sent
+  /// Sent campaigns cannot be deleted — their send rows are the audit trail —
+  /// but they can leave the shelf. Archived campaigns keep every record and
+  /// simply stop appearing in the working list.
+  archivedAt       DateTime?
   // Which door this campaign leaves by. Email is the only wired provider
   // today; sms/whatsapp gate and count identically so the day a provider
   // lands nothing about eligibility has to change.

@@ -9,7 +9,11 @@ import { gbp, num, type Campaign } from "@/lib/data";
 
 type SendSummary = { sent: number; failed: number; skippedConsent: number; skippedSuppressed: number; skippedNoEmail: number; provider: string };
 
-export function CampaignsClient({ campaigns }: { campaigns: Campaign[] }) {
+// Rows from getCampaignsView: the base Campaign shape plus the automation an
+// automation shadow campaign belongs to, so its row links there.
+type CampaignRow = Campaign & { automationId?: string | null };
+
+export function CampaignsClient({ campaigns, archived = false }: { campaigns: CampaignRow[]; archived?: boolean }) {
   const router = useRouter();
   const [sending, setSending] = useState<string | null>(null);
   const [summary, setSummary] = useState<SendSummary | null>(null);
@@ -18,6 +22,11 @@ export function CampaignsClient({ campaigns }: { campaigns: Campaign[] }) {
   // "confirming" holds the audience numbers awaiting an explicit Confirm.
   const [checking, setChecking] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<{ id: string; eligible: number; total: number } | null>(null);
+  // Inline rename: the row being edited, and saved names layered over the
+  // server props so the list reads correctly before the refresh lands.
+  const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null);
+  const [renamed, setRenamed] = useState<Record<string, string>>({});
+  const [shelving, setShelving] = useState<string | null>(null);
 
   async function quickDraft() {
     const name = window.prompt("New draft campaign name", "Untitled campaign");
@@ -35,6 +44,49 @@ export function CampaignsClient({ campaigns }: { campaigns: Campaign[] }) {
     if (!window.confirm(`Delete draft '${name}'?`)) return;
     await fetch(`/api/campaigns/${id}`, { method: "DELETE" });
     router.refresh();
+  }
+
+  async function saveRename(currentName: string) {
+    if (!renaming) return;
+    const value = renaming.value.trim();
+    if (!value || value === currentName) {
+      setRenaming(null);
+      return;
+    }
+    setError(null);
+    try {
+      const res = await fetch(`/api/campaigns/${renaming.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: value }),
+      });
+      const json = await res.json();
+      if (json.ok) {
+        setRenamed((m) => ({ ...m, [renaming.id]: value }));
+        router.refresh();
+      } else {
+        setError(typeof json.error === "string" ? json.error : "Could not rename the campaign.");
+      }
+    } catch {
+      setError("Could not rename the campaign.");
+    } finally {
+      setRenaming(null);
+    }
+  }
+
+  async function setShelved(id: string, toArchived: boolean) {
+    setShelving(id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/campaigns/${id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ archived: toArchived }),
+      });
+      const json = await res.json();
+      if (!json.ok) setError(typeof json.error === "string" ? json.error : "Could not update the campaign.");
+      router.refresh();
+    } catch {
+      setError("Could not update the campaign.");
+    } finally {
+      setShelving(null);
+    }
   }
 
   async function askToSend(id: string) {
@@ -70,6 +122,9 @@ export function CampaignsClient({ campaigns }: { campaigns: Campaign[] }) {
     }
   }
 
+  const filterLink = (active: boolean) =>
+    `rounded-full px-3 py-1 text-xs font-semibold ${active ? "bg-[#ede9fe] text-brand" : "text-ink-3 hover:bg-[#f0efec] hover:text-ink-2"}`;
+
   return (
     <Shell
       title="Campaigns"
@@ -95,6 +150,11 @@ export function CampaignsClient({ campaigns }: { campaigns: Campaign[] }) {
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</div>
       )}
 
+      <div className="mb-3 flex items-center gap-1.5">
+        <Link href="/campaigns" className={filterLink(!archived)}>Working list</Link>
+        <Link href="/campaigns?filter=archived" className={filterLink(archived)}>Archived</Link>
+      </div>
+
       <Card>
         <div className="overflow-x-auto scroll-thin"><table className="w-full min-w-[900px]">
           <thead className="border-b border-line">
@@ -110,10 +170,48 @@ export function CampaignsClient({ campaigns }: { campaigns: Campaign[] }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {campaigns.map((c) => (
+            {campaigns.length === 0 && (
+              <tr>
+                <td colSpan={8} className="px-4 py-6 text-sm text-ink-3">
+                  {archived ? "No archived campaigns. Archiving a sent campaign moves it here without losing its history." : "No campaigns yet."}
+                </td>
+              </tr>
+            )}
+            {campaigns.map((c) => {
+              const name = renamed[c.id] ?? c.name;
+              return (
               <tr key={c.id} className="hover:bg-[#fafaf8]">
                 <Td>
-                  <Link href={`/campaigns/${c.id}`} className="font-medium hover:text-brand">{c.name}</Link>
+                  {renaming?.id === c.id ? (
+                    <input
+                      autoFocus
+                      value={renaming.value}
+                      maxLength={140}
+                      onChange={(e) => setRenaming({ id: c.id, value: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") void saveRename(name);
+                        if (e.key === "Escape") setRenaming(null);
+                      }}
+                      onBlur={() => void saveRename(name)}
+                      className="w-full max-w-[320px] rounded-md border border-line bg-surface px-2 py-1 text-sm font-medium outline-none focus:border-brand"
+                    />
+                  ) : (
+                    <span className="group inline-flex items-center gap-1.5">
+                      {c.automationId ? (
+                        <Link href={`/automations/${c.automationId}`} className="font-medium hover:text-brand">{name}</Link>
+                      ) : (
+                        <Link href={`/campaigns/${c.id}`} className="font-medium hover:text-brand">{name}</Link>
+                      )}
+                      <button
+                        onClick={() => setRenaming({ id: c.id, value: name })}
+                        className="text-[13px] text-ink-3 opacity-0 hover:text-ink-1 focus:opacity-100 group-hover:opacity-100"
+                        title="Rename"
+                        aria-label={`Rename ${name}`}
+                      >
+                        ✎
+                      </button>
+                    </span>
+                  )}
                   <p className="text-xs text-ink-3">{c.subject ? `“${c.subject}” · ` : ""}{c.sentAt}</p>
                 </Td>
                 <Td><Badge value={c.status} /></Td>
@@ -123,7 +221,11 @@ export function CampaignsClient({ campaigns }: { campaigns: Campaign[] }) {
                 <Td className="tabular text-right">{c.status === "sent" ? `${c.clickRate}%` : "–"}</Td>
                 <Td className="tabular text-right font-semibold">{c.status === "sent" && c.revenue > 0 ? gbp(c.revenue) : "–"}</Td>
                 <Td className="text-right">
-                  {c.status === "draft" ? (
+                  {c.automationId ? (
+                    <Link href={`/automations/${c.automationId}`} className="text-xs font-semibold text-ink-2 hover:text-brand" title="This email is part of an automation">
+                      View automation
+                    </Link>
+                  ) : c.status === "draft" ? (
                     <span className="inline-flex items-center gap-1.5">
                       {c.isDemo && <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-bold uppercase text-zinc-600" title="Template · no live sends yet">Template</span>}
                       {confirming?.id === c.id ? (
@@ -154,16 +256,37 @@ export function CampaignsClient({ campaigns }: { campaigns: Campaign[] }) {
                         </button>
                       )}
                       <button onClick={() => duplicate(c.id)} className="rounded-lg border border-line px-2 py-1.5 text-[11px] font-semibold text-ink-2 hover:bg-[#f0efec]" title="Duplicate">⧉</button>
-                      <button onClick={() => removeDraft(c.id, c.name)} className="rounded-lg border border-line px-2 py-1.5 text-[11px] font-semibold text-ink-3 hover:bg-red-50 hover:text-red-700" title="Delete draft">✕</button>
+                      <button onClick={() => removeDraft(c.id, name)} className="rounded-lg border border-line px-2 py-1.5 text-[11px] font-semibold text-ink-3 hover:bg-red-50 hover:text-red-700" title="Delete draft">✕</button>
                     </span>
                   ) : (
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${c.isDemo ? "bg-zinc-100 text-zinc-500" : "bg-emerald-50 text-emerald-700"}`}>
-                      {c.isDemo ? "Demo" : "Real"}
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${c.isDemo ? "bg-zinc-100 text-zinc-500" : "bg-emerald-50 text-emerald-700"}`}>
+                        {c.isDemo ? "Demo" : "Real"}
+                      </span>
+                      {archived ? (
+                        <button
+                          disabled={shelving === c.id}
+                          onClick={() => setShelved(c.id, false)}
+                          className="rounded-lg border border-line px-2.5 py-1.5 text-[11px] font-semibold text-ink-2 hover:bg-[#f0efec] disabled:opacity-50"
+                        >
+                          {shelving === c.id ? "…" : "Restore"}
+                        </button>
+                      ) : c.status === "sent" ? (
+                        <button
+                          disabled={shelving === c.id}
+                          onClick={() => setShelved(c.id, true)}
+                          className="rounded-lg border border-line px-2.5 py-1.5 text-[11px] font-semibold text-ink-3 hover:bg-[#f0efec] hover:text-ink-2 disabled:opacity-50"
+                          title="Archive · keeps every record, hides it from this list"
+                        >
+                          {shelving === c.id ? "…" : "Archive"}
+                        </button>
+                      ) : null}
                     </span>
                   )}
                 </Td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table></div>
         <p className="border-t border-line px-4 py-3 text-xs text-ink-3">

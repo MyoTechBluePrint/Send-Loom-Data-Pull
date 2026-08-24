@@ -8,7 +8,7 @@
 
 import { db } from "@/lib/server/db";
 import {
-  renderEmail, parseBlocks, DEFAULT_BRAND,
+  renderEmail, parseBlocks, flattenBlocks, DEFAULT_BRAND,
   type EmailBlock, type RenderContext, type BrandTokens,
 } from "./email-blocks";
 import { issueCoupon } from "./promotions";
@@ -76,6 +76,15 @@ const money = (n: number, currency = "GBP") =>
 export async function resolveFeeds(blocks: EmailBlock[], workspaceId: string, storeId?: string | null): Promise<EmailBlock[]> {
   const out: EmailBlock[] = [];
   for (const b of blocks) {
+    // Feeds inside column halves resolve the same way as top-level ones.
+    if (b.type === "columns" && (b.leftBlocks?.length || b.rightBlocks?.length)) {
+      out.push({
+        ...b,
+        leftBlocks: b.leftBlocks?.length ? await resolveFeeds(b.leftBlocks, workspaceId, storeId) : b.leftBlocks,
+        rightBlocks: b.rightBlocks?.length ? await resolveFeeds(b.rightBlocks, workspaceId, storeId) : b.rightBlocks,
+      });
+      continue;
+    }
     if (b.type !== "product_feed") { out.push(b); continue; }
     const limit = Math.min(b.limit ?? 4, 8);
     const where = {
@@ -83,11 +92,26 @@ export async function resolveFeeds(blocks: EmailBlock[], workspaceId: string, st
       ...(b.rule === "category" && b.value ? { categories: { contains: b.value } } : {}),
       ...(b.rule === "interest_tag" && b.value ? { tags: { contains: b.value } } : {}),
     };
-    const products = await db.product.findMany({
+    let products = await db.product.findMany({
       where,
       orderBy: b.rule === "newest" ? { updatedAt: "desc" } : { price: "desc" },
-      take: limit,
+      take: b.rule === "best_sellers" ? 200 : limit,
     });
+    if (b.rule === "best_sellers") {
+      // Best sellers means units actually sold, from recent order lines; the
+      // price ordering above stays as the fallback when there is no order
+      // history yet.
+      const sold = await unitsSold(workspaceId, storeId);
+      if (sold.size) {
+        const ranked = products
+          .map((p) => ({ p, units: sold.get(`${p.storeId}:${p.externalId}`) ?? 0 }))
+          .filter((x) => x.units > 0)
+          .sort((a, z) => z.units - a.units)
+          .map((x) => x.p);
+        if (ranked.length) products = ranked;
+      }
+      products = products.slice(0, limit);
+    }
     if (products.length) {
       out.push({ id: b.id, type: "product_grid", productIds: products.map((p) => p.id), columns: 2, cta: b.cta });
     }
@@ -96,10 +120,35 @@ export async function resolveFeeds(blocks: EmailBlock[], workspaceId: string, st
   return out;
 }
 
-/** Collect every product referenced by the blocks into render form. */
+/** Units sold per product, keyed `storeId:externalProductId`, from recent orders. */
+async function unitsSold(workspaceId: string, storeId?: string | null): Promise<Map<string, number>> {
+  const orders = await db.order.findMany({
+    where: {
+      store: { workspaceId, ...(storeId ? { id: storeId } : {}) },
+      status: { notIn: ["cancelled", "refunded", "failed"] },
+    },
+    orderBy: { placedAt: "desc" },
+    take: 300,
+    select: { storeId: true, items: true },
+  });
+  const sold = new Map<string, number>();
+  for (const o of orders) {
+    if (!o.items) continue;
+    try {
+      for (const line of JSON.parse(o.items) as { externalProductId?: string | number; qty?: number }[]) {
+        if (line.externalProductId === undefined || line.externalProductId === null) continue;
+        const key = `${o.storeId}:${line.externalProductId}`;
+        sold.set(key, (sold.get(key) ?? 0) + (Number(line.qty) || 1));
+      }
+    } catch { /* unreadable order lines are skipped */ }
+  }
+  return sold;
+}
+
+/** Collect every product referenced by the blocks (columns included) into render form. */
 async function productMap(blocks: EmailBlock[]): Promise<RenderContext["products"]> {
   const ids = new Set<string>();
-  for (const b of blocks) {
+  for (const b of flattenBlocks(blocks)) {
     if (b.type === "product") ids.add(b.productId);
     if (b.type === "product_grid") b.productIds.forEach((id) => ids.add(id));
   }
@@ -119,7 +168,7 @@ async function productMap(blocks: EmailBlock[]): Promise<RenderContext["products
 }
 
 async function globalsMap(blocks: EmailBlock[], workspaceId: string): Promise<RenderContext["globals"]> {
-  const ids = blocks.filter((b) => b.type === "global").map((b) => (b as { elementId: string }).elementId);
+  const ids = flattenBlocks(blocks).filter((b) => b.type === "global").map((b) => (b as { elementId: string }).elementId);
   const map: RenderContext["globals"] = new Map();
   if (!ids.length) return map;
   const rows = await db.globalElement.findMany({ where: { id: { in: ids }, workspaceId, archived: false } });
@@ -130,7 +179,7 @@ async function globalsMap(blocks: EmailBlock[], workspaceId: string): Promise<Re
 }
 
 async function pollsMap(blocks: EmailBlock[], workspaceId: string): Promise<RenderContext["polls"]> {
-  const ids = blocks.filter((b) => b.type === "poll").map((b) => (b as { pollId: string }).pollId);
+  const ids = flattenBlocks(blocks).filter((b) => b.type === "poll").map((b) => (b as { pollId: string }).pollId);
   const map: RenderContext["polls"] = new Map();
   if (!ids.length) return map;
   const rows = await db.poll.findMany({ where: { id: { in: ids }, workspaceId } });
@@ -159,7 +208,7 @@ export async function renderPreview(args: {
 
   // Promotions preview with a clearly fake code: previews must never mint.
   const coupons: RenderContext["coupons"] = new Map();
-  for (const b of blocks) {
+  for (const b of flattenBlocks(blocks)) {
     if (b.type === "coupon") {
       const promo = await db.promotion.findFirst({ where: { id: b.promotionId, workspaceId: args.workspaceId } });
       if (promo) {
@@ -205,7 +254,7 @@ export async function renderForRecipient(args: {
 
   const coupons: RenderContext["coupons"] = new Map();
   const couponVars: Record<string, string> = {};
-  for (const b of args.blocks) {
+  for (const b of flattenBlocks(args.blocks)) {
     if (b.type === "coupon") {
       const issued = await issueCoupon({
         promotionId: b.promotionId,

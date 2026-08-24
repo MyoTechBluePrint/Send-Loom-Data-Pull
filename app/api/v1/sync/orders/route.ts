@@ -5,23 +5,27 @@ import { readSignedBody } from "@/lib/server/apiAuth";
 import { eventIngestionService } from "@/lib/server/events";
 import { recordRedemption } from "@/lib/server/promotions";
 
+// Same boundary rule as product sync: WooCommerce sends null for absent
+// values (guest checkouts have no email, some gateways report no payment
+// method), and one such order must not 400 the whole batch. This exact
+// strictness kept MyoTech's order sync silently failing for a month.
 const OrderSchema = z.object({
   externalId: z.string(),
   number: z.string(),
   status: z.string(),
-  email: z.string().email().optional(),
-  total: z.number(),
-  tax: z.number().optional(),
-  shipping: z.number().optional(),
-  discount: z.number().optional(),
-  refunded: z.number().optional(),
-  coupon: z.string().optional(),
-  paymentMethod: z.string().optional(),
-  placedAt: z.string().optional(),
+  email: z.string().email().nullish().catch(null),
+  total: z.number().nullish(),
+  tax: z.number().nullish(),
+  shipping: z.number().nullish(),
+  discount: z.number().nullish(),
+  refunded: z.number().nullish(),
+  coupon: z.string().nullish(),
+  paymentMethod: z.string().nullish(),
+  placedAt: z.string().nullish(),
   items: z.array(z.object({
     externalProductId: z.string(), title: z.string(), qty: z.number(),
-    price: z.number().optional(), categories: z.array(z.string()).optional(),
-  })).optional(),
+    price: z.number().nullish(), categories: z.array(z.string()).nullish(),
+  })).nullish(),
 });
 
 const Body = z.object({ orders: z.array(OrderSchema).max(500) });
@@ -42,9 +46,9 @@ export async function POST(req: NextRequest) {
 
     const existing = await db.order.findUnique({ where: { storeId_externalId: { storeId: store.id, externalId: o.externalId } } });
     const data = {
-      number: o.number, status: o.status, total: o.total,
+      number: o.number, status: o.status, total: o.total ?? 0,
       tax: o.tax ?? 0, shipping: o.shipping ?? 0, discount: o.discount ?? 0, refunded: o.refunded ?? 0,
-      coupon: o.coupon, paymentMethod: o.paymentMethod,
+      coupon: o.coupon ?? null, paymentMethod: o.paymentMethod ?? null,
       items: o.items ? JSON.stringify(o.items) : null,
       placedAt: o.placedAt ? new Date(o.placedAt) : new Date(),
       contactId: contact?.id ?? null,
@@ -64,7 +68,7 @@ export async function POST(req: NextRequest) {
       if (contact?.email && (o.status === "completed" || o.status === "processing")) {
         await eventIngestionService.process({
           workspaceId: store.workspaceId, storeId: store.id, type: "purchase_completed",
-          email: contact.email, payload: { orderNumber: o.number, total: o.total },
+          email: contact.email, payload: { orderNumber: o.number, total: o.total ?? 0 },
           occurredAt: data.placedAt,
         });
       }

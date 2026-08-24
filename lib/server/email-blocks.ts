@@ -19,7 +19,14 @@ export type EmailBlock =
   | { id: string; type: "button"; label: string; href: string; align?: Align }
   | { id: string; type: "divider" }
   | { id: string; type: "spacer"; height?: number }
-  | { id: string; type: "columns"; left: string; right: string } // simple HTML halves
+  // Column halves are either simple HTML strings (legacy) or arrays of real
+  // blocks. When a side has blocks, they win over that side's string. Columns
+  // never nest inside columns; validation enforces it.
+  | { id: string; type: "columns"; left: string; right: string; leftBlocks?: EmailBlock[]; rightBlocks?: EmailBlock[] }
+  // Email-level settings, not a layout block: at most one per email, kept out
+  // of the editor's drag order. backgroundColor paints the outer canvas,
+  // cardColor the 600px card; both fall back to the brand tokens.
+  | { id: string; type: "style"; backgroundColor?: string; cardColor?: string }
   | { id: string; type: "logo"; url?: string; alt?: string; href?: string }
   | { id: string; type: "menu"; links: { label: string; url: string }[] }
   | { id: string; type: "social"; links: { label: string; url: string }[] }
@@ -88,10 +95,18 @@ const esc = (s: string) =>
 /** Strip tags for the plain-text fallback. */
 const toText = (html: string) => html.replace(/<br\s*\/?\s*>/gi, "\n").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").trim();
 
-function renderBlock(b: EmailBlock, ctx: RenderContext, text: string[]): string {
+// Only colour values a picker can produce reach the HTML; anything else
+// falls back to the brand token rather than being injected into a style
+// attribute.
+const isHexColor = (v: string | undefined): v is string =>
+  !!v && /^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(v);
+
+// padX narrows the horizontal gutter when a block renders inside a column
+// half; the block HTML itself is identical to a top-level render.
+function renderBlock(b: EmailBlock, ctx: RenderContext, text: string[], padX = 32): string {
   const { brand } = ctx;
   const p = ctx.personalise;
-  const pad = (inner: string, py = 12) => `<tr><td style="padding:${py}px 32px;">${inner}</td></tr>`;
+  const pad = (inner: string, py = 12) => `<tr><td style="padding:${py}px ${padX}px;">${inner}</td></tr>`;
 
   switch (b.type) {
     case "heading": {
@@ -118,11 +133,29 @@ function renderBlock(b: EmailBlock, ctx: RenderContext, text: string[]): string 
       return pad(`<hr style="border:none;border-top:1px solid #e7e6e1;margin:0;" />`, 8);
     case "spacer":
       return `<tr><td style="height:${b.height ?? 24}px;line-height:${b.height ?? 24}px;">&nbsp;</td></tr>`;
-    case "columns":
-      text.push(toText(p(b.left)), toText(p(b.right)), "");
+    case "columns": {
+      // A side with nested blocks renders them through the same block HTML as
+      // the top level (with a narrower gutter); otherwise the legacy HTML
+      // string renders untouched. Nested columns are dropped defensively even
+      // though validation refuses them.
+      const side = (html: string, nested?: EmailBlock[]) => {
+        if (nested?.length) {
+          const rows = nested.filter((n) => n.type !== "columns").map((n) => renderBlock(n, ctx, text, 12)).join("");
+          return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows}</table>`;
+        }
+        text.push(toText(p(html)));
+        return p(html);
+      };
+      const left = side(b.left, b.leftBlocks);
+      const right = side(b.right, b.rightBlocks);
+      text.push("");
       return pad(
-        `<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td width="48%" valign="top" style="font-family:${brand.bodyFont};font-size:14px;line-height:1.6;color:${brand.textColor};">${p(b.left)}</td><td width="4%">&nbsp;</td><td width="48%" valign="top" style="font-family:${brand.bodyFont};font-size:14px;line-height:1.6;color:${brand.textColor};">${p(b.right)}</td></tr></table>`
+        `<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td width="48%" valign="top" style="font-family:${brand.bodyFont};font-size:14px;line-height:1.6;color:${brand.textColor};">${left}</td><td width="4%">&nbsp;</td><td width="48%" valign="top" style="font-family:${brand.bodyFont};font-size:14px;line-height:1.6;color:${brand.textColor};">${right}</td></tr></table>`
       );
+    }
+    case "style":
+      // Email-level settings; consumed by renderEmail, nothing to render here.
+      return "";
     case "logo": {
       const url = b.url ?? ctx.brand.logoUrl;
       if (!url) return "";
@@ -154,8 +187,11 @@ function renderBlock(b: EmailBlock, ctx: RenderContext, text: string[]): string 
       const prod = ctx.products.get(b.productId);
       if (!prod) return pad(`<div style="font-family:${brand.bodyFont};font-size:13px;color:#898781;">[Product unavailable]</div>`);
       text.push(`${prod.title} — ${prod.salePrice ?? prod.price}${prod.url ? ` (${prod.url})` : ""}`, "");
+      // A product without an image renders text-only with no orphan gutter,
+      // and an image without a product URL is not wrapped in a dead link.
+      const img = prod.imageUrl ? `<img src="${esc(prod.imageUrl)}" alt="${esc(prod.title)}" width="170" style="display:block;width:170px;height:auto;border-radius:6px;" />` : "";
       return pad(
-        `<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>${prod.imageUrl ? `<td width="180" valign="top"><a href="${prod.url ? esc(ctx.urls.click(prod.url)) : "#"}"><img src="${esc(prod.imageUrl)}" alt="${esc(prod.title)}" width="170" style="display:block;width:170px;height:auto;border-radius:6px;" /></a></td>` : ""}<td valign="top" style="padding-left:16px;font-family:${brand.bodyFont};color:${brand.textColor};"><p style="margin:0 0 6px;font-size:16px;font-weight:bold;">${esc(prod.title)}</p>${b.showPrice !== false ? `<p style="margin:0 0 10px;font-size:15px;">${prod.salePrice ? `<strong>${esc(prod.salePrice)}</strong> <s style="color:#898781;">${esc(prod.price)}</s>` : esc(prod.price)}</p>` : ""}${prod.url ? `<a href="${esc(ctx.urls.click(prod.url))}" style="font-size:14px;font-weight:bold;color:${brand.primaryColor};">${esc(b.cta ?? "Shop now")} →</a>` : ""}</td></tr></table>`
+        `<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>${img ? `<td width="180" valign="top">${prod.url ? `<a href="${esc(ctx.urls.click(prod.url))}">${img}</a>` : img}</td>` : ""}<td valign="top" style="${img ? "padding-left:16px;" : ""}font-family:${brand.bodyFont};color:${brand.textColor};"><p style="margin:0 0 6px;font-size:16px;font-weight:bold;">${esc(prod.title)}</p>${b.showPrice !== false ? `<p style="margin:0 0 10px;font-size:15px;">${prod.salePrice ? `<strong>${esc(prod.salePrice)}</strong> <s style="color:#898781;">${esc(prod.price)}</s>` : esc(prod.price)}</p>` : ""}${prod.url ? `<a href="${esc(ctx.urls.click(prod.url))}" style="font-size:14px;font-weight:bold;color:${brand.primaryColor};">${esc(b.cta ?? "Shop now")} →</a>` : ""}</td></tr></table>`
       );
     }
     case "product_grid": {
@@ -164,9 +200,10 @@ function renderBlock(b: EmailBlock, ctx: RenderContext, text: string[]): string 
       const cols = b.columns ?? 2;
       const w = Math.floor(100 / cols);
       const cells = prods
-        .map(({ p: prod }) =>
-          `<td width="${w}%" valign="top" style="padding:8px;font-family:${brand.bodyFont};text-align:center;">${prod!.imageUrl ? `<a href="${prod!.url ? esc(ctx.urls.click(prod!.url)) : "#"}"><img src="${esc(prod!.imageUrl)}" alt="${esc(prod!.title)}" width="160" style="display:block;width:100%;max-width:160px;height:auto;margin:0 auto 8px;border-radius:6px;" /></a>` : ""}<p style="margin:0 0 4px;font-size:14px;font-weight:bold;color:${brand.textColor};">${esc(prod!.title)}</p><p style="margin:0 0 6px;font-size:13px;color:${brand.textColor};">${esc(prod!.salePrice ?? prod!.price)}</p>${prod!.url ? `<a href="${esc(ctx.urls.click(prod!.url))}" style="font-size:13px;font-weight:bold;color:${brand.primaryColor};">${esc(b.cta ?? "Shop")} →</a>` : ""}</td>`
-        );
+        .map(({ p: prod }) => {
+          const cellImg = prod!.imageUrl ? `<img src="${esc(prod!.imageUrl)}" alt="${esc(prod!.title)}" width="160" style="display:block;width:100%;max-width:160px;height:auto;margin:0 auto 8px;border-radius:6px;" />` : "";
+          return `<td width="${w}%" valign="top" style="padding:8px;font-family:${brand.bodyFont};text-align:center;">${cellImg ? (prod!.url ? `<a href="${esc(ctx.urls.click(prod!.url))}">${cellImg}</a>` : cellImg) : ""}<p style="margin:0 0 4px;font-size:14px;font-weight:bold;color:${brand.textColor};">${esc(prod!.title)}</p><p style="margin:0 0 6px;font-size:13px;color:${brand.textColor};">${esc(prod!.salePrice ?? prod!.price)}</p>${prod!.url ? `<a href="${esc(ctx.urls.click(prod!.url))}" style="font-size:13px;font-weight:bold;color:${brand.primaryColor};">${esc(b.cta ?? "Shop")} →</a>` : ""}</td>`;
+        });
       const rows: string[] = [];
       for (let i = 0; i < cells.length; i += cols) rows.push(`<tr>${cells.slice(i, i + cols).join("")}</tr>`);
       prods.forEach(({ p: prod }) => text.push(`${prod!.title} — ${prod!.salePrice ?? prod!.price}`));
@@ -219,11 +256,18 @@ function renderBlock(b: EmailBlock, ctx: RenderContext, text: string[]): string 
 export function renderEmail(blocks: EmailBlock[], ctx: RenderContext): { html: string; textBody: string } {
   const text: string[] = [];
   const body = blocks.map((b) => renderBlock(b, ctx, text)).join("\n");
+  // The style block overrides the canvas and card colours; brand tokens (and
+  // the white card) remain the defaults. First style block wins.
+  const style = blocks.find((b): b is Extract<EmailBlock, { type: "style" }> => b.type === "style");
+  const bgValue = style?.backgroundColor;
+  const cardValue = style?.cardColor;
+  const canvas = isHexColor(bgValue) ? bgValue : ctx.brand.backgroundColor;
+  const card = isHexColor(cardValue) ? cardValue : "#ffffff";
   const html = `<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title></title></head>
-<body style="margin:0;padding:0;background:${ctx.brand.backgroundColor};">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${ctx.brand.backgroundColor};"><tr><td align="center" style="padding:24px 12px;">
-<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;background:#ffffff;border-radius:12px;">
+<body style="margin:0;padding:0;background:${canvas};">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${canvas};"><tr><td align="center" style="padding:24px 12px;">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;background:${card};border-radius:12px;">
 ${body}
 </table>
 </td></tr></table>
@@ -241,14 +285,43 @@ export function validateBlocks(blocks: EmailBlock[]): ValidationIssue[] {
   if (!blocks.some((b) => b.type === "footer")) {
     issues.push({ level: "error", message: "Add a footer block: every email must carry an unsubscribe link." });
   }
+  if (blocks.filter((b) => b.type === "style").length > 1) {
+    issues.push({ level: "warning", message: "More than one email style entry; only the first applies." });
+  }
+  // The same per-block checks run at the top level and inside column halves,
+  // so a broken image or button cannot hide inside a column.
+  const checkBlock = (b: EmailBlock, ownerId: string) => {
+    if (b.type === "image" && !b.alt?.trim()) issues.push({ level: "warning", message: "Image has no alt text.", blockId: ownerId });
+    if (b.type === "image" && !/^https?:\/\//.test(b.url ?? "")) issues.push({ level: "error", message: "Image has no valid URL.", blockId: ownerId });
+    if (b.type === "button" && !/^(https?:\/\/|\{\{)/.test(b.href ?? "")) issues.push({ level: "error", message: `Button "${b.label}" has no valid link.`, blockId: ownerId });
+    if (b.type === "menu" && b.links.some((l) => !/^https?:\/\//.test(l.url))) issues.push({ level: "warning", message: "A menu link is not a full URL.", blockId: ownerId });
+    if (b.type === "heading" && !b.text?.trim()) issues.push({ level: "warning", message: "Heading is empty.", blockId: ownerId });
+  };
   for (const b of blocks) {
-    if (b.type === "image" && !b.alt?.trim()) issues.push({ level: "warning", message: "Image has no alt text.", blockId: b.id });
-    if (b.type === "image" && !/^https?:\/\//.test(b.url ?? "")) issues.push({ level: "error", message: "Image has no valid URL.", blockId: b.id });
-    if (b.type === "button" && !/^(https?:\/\/|\{\{)/.test(b.href ?? "")) issues.push({ level: "error", message: `Button "${b.label}" has no valid link.`, blockId: b.id });
-    if (b.type === "menu" && b.links.some((l) => !/^https?:\/\//.test(l.url))) issues.push({ level: "warning", message: "A menu link is not a full URL.", blockId: b.id });
-    if (b.type === "heading" && !b.text?.trim()) issues.push({ level: "warning", message: "Heading is empty.", blockId: b.id });
+    checkBlock(b, b.id);
+    if (b.type === "columns") {
+      for (const nested of [...(b.leftBlocks ?? []), ...(b.rightBlocks ?? [])]) {
+        if (nested.type === "columns") issues.push({ level: "error", message: "Columns cannot be nested inside columns.", blockId: b.id });
+        else checkBlock(nested, b.id);
+      }
+    }
   }
   return issues;
+}
+
+/**
+ * Top-level blocks plus every block nested inside column halves, so lookups
+ * (products, coupons, globals, polls) see the whole email in one pass.
+ */
+export function flattenBlocks(blocks: EmailBlock[]): EmailBlock[] {
+  const out: EmailBlock[] = [];
+  for (const b of blocks) {
+    out.push(b);
+    if (b.type === "columns") {
+      for (const side of [b.leftBlocks, b.rightBlocks]) if (side?.length) out.push(...side);
+    }
+  }
+  return out;
 }
 
 let counter = 0;

@@ -9,7 +9,7 @@ import { evaluateSegment } from "../lib/server/segments";
 import { createIntakeFromText, approveRecord } from "../lib/server/extract";
 import { touchCart, sweepAbandoned } from "../lib/server/carts";
 import { sendCampaign } from "../lib/server/sending";
-import { checkRateLimit } from "../lib/server/auth";
+import { checkRateLimit, createSessionToken, SESSION_COOKIE } from "../lib/server/auth";
 
 let passed = 0;
 let failed = 0;
@@ -256,6 +256,89 @@ async function main() {
   }
   const resent = await sendCampaign(camp.id, "test-script");
   check("double-send blocked", resent.ok === false);
+
+  console.log("Campaign lifecycle");
+  {
+    const { NextRequest } = await import("next/server");
+    const { PATCH: cPatch, DELETE: cDelete, POST: cDuplicate } = await import("../app/api/campaigns/[id]/route");
+    const { getCampaignsView } = await import("../lib/server/views");
+
+    // The lifecycle routes authenticate with the app's own session cookie; a
+    // throwaway user in the workspace stands in for a signed-in staff member.
+    const tester = await db.user.create({
+      data: { workspaceId: ws.id, email: `flows.${STAMP}@test.local`, name: "Flow Tester", role: "admin" },
+    });
+    const cookie = `${SESSION_COOKIE}=${createSessionToken(tester.email)}`;
+    const init = (method: string, body?: unknown, withCookie = true) =>
+      new NextRequest(`http://localhost/api/campaigns/x`, {
+        method,
+        headers: { ...(withCookie ? { cookie } : {}), "content-type": "application/json" },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      } as ConstructorParameters<typeof NextRequest>[1]);
+    const patch = (id: string, body: unknown, withCookie = true) => cPatch(init("PATCH", body, withCookie), { params: Promise.resolve({ id }) });
+    const del = (id: string) => cDelete(init("DELETE"), { params: Promise.resolve({ id }) });
+    const dup = (id: string) => cDuplicate(init("POST"), { params: Promise.resolve({ id }) });
+
+    // Rename: drafts and sent campaigns alike, and copy-suffixed mess names.
+    const draft = await db.campaign.create({
+      data: { workspaceId: ws.id, name: `Lifecycle ${STAMP} (copy) (copy)`, subject: "Life", status: "draft" },
+    });
+    let res = await patch(draft.id, { name: `Lifecycle renamed ${STAMP}` });
+    check("rename returns ok", res.status === 200 && (await res.json()).ok === true);
+    check("rename persists", (await db.campaign.findUnique({ where: { id: draft.id } }))?.name === `Lifecycle renamed ${STAMP}`);
+    res = await patch(camp.id, { name: `Send test renamed ${STAMP}` });
+    check("sent campaigns rename too", res.status === 200 && (await db.campaign.findUnique({ where: { id: camp.id } }))?.name === `Send test renamed ${STAMP}`);
+    res = await patch(draft.id, { name: "   " });
+    check("blank rename rejected", res.status === 400);
+    res = await patch(draft.id, { name: "x" }, false);
+    check("rename without a session rejected", res.status === 401);
+
+    // Duplicate naming: (copy), then (copy 2), and duplicating a copy strips
+    // the suffix instead of stacking another one.
+    const dupSrc = await db.campaign.create({
+      data: { workspaceId: ws.id, name: `Dup base ${STAMP}`, subject: "D", status: "draft" },
+    });
+    const d1 = await (await dup(dupSrc.id)).json();
+    const d2 = await (await dup(dupSrc.id)).json();
+    const d3 = await (await dup(d1.id)).json();
+    check("first duplicate is (copy)", d1.name === `Dup base ${STAMP} (copy)`, d1.name);
+    check("second duplicate is (copy 2)", d2.name === `Dup base ${STAMP} (copy 2)`, d2.name);
+    check("duplicating the copy yields (copy 3), not (copy) (copy)", d3.name === `Dup base ${STAMP} (copy 3)`, d3.name);
+
+    // Archive: sent only, hidden from the working list, restore brings it back.
+    res = await patch(camp.id, { archived: true });
+    check("sent campaign archives", res.status === 200 && (await db.campaign.findUnique({ where: { id: camp.id } }))?.archivedAt !== null);
+    let view = await getCampaignsView();
+    check("archived campaign hidden from the working list", !view.some((r) => r.id === camp.id));
+    view = await getCampaignsView({ archived: true });
+    check("archived filter shows it", view.some((r) => r.id === camp.id));
+    res = await patch(camp.id, { archived: false });
+    view = await getCampaignsView();
+    check("restore returns it to the working list", res.status === 200 && view.some((r) => r.id === camp.id));
+    res = await patch(draft.id, { archived: true });
+    check("draft archive refused", res.status === 409);
+
+    // Automation shadow campaigns get neither archive nor delete, and their
+    // row carries the automation to link to.
+    const shadow = await db.campaign.create({
+      data: { workspaceId: ws.id, name: `Lifecycle shadow ${STAMP}`, subject: "S", status: "automation", audienceType: "automation", audienceRef: "auto-missing" },
+    });
+    res = await patch(shadow.id, { archived: true });
+    check("shadow campaign archive refused", res.status === 409);
+    res = await del(shadow.id);
+    check("shadow campaign delete refused", res.status === 422);
+    view = await getCampaignsView();
+    check("shadow row links to its automation", view.find((r) => r.id === shadow.id)?.automationId === "auto-missing");
+
+    // Delete: drafts go, sent campaigns keep their history.
+    res = await del(draft.id);
+    check("draft delete still works", res.status === 200 && (await db.campaign.findUnique({ where: { id: draft.id } })) === null);
+    res = await del(camp.id);
+    check("sent campaign cannot be hard-deleted", res.status === 422 && (await db.campaign.findUnique({ where: { id: camp.id } })) !== null);
+
+    await db.campaign.delete({ where: { id: shadow.id } }).catch(() => {});
+    await db.user.delete({ where: { id: tester.id } });
+  }
 
   console.log("Overlap-safe delivery");
   {

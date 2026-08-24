@@ -143,10 +143,16 @@ export async function getImportBatchesView(): Promise<ImportBatch[]> {
   }));
 }
 
-export async function getCampaignsView(): Promise<Campaign[]> {
+// Automation shadow campaigns carry the automation they belong to, so the
+// list can link to the automation rather than a dangling campaign page.
+export type CampaignRow = Campaign & { automationId: string | null };
+
+export async function getCampaignsView(opts: { archived?: boolean } = {}): Promise<CampaignRow[]> {
   const wsId = await demoWorkspaceId();
   const campaigns = await db.campaign.findMany({
-    where: { workspaceId: wsId },
+    // Archived campaigns keep every send record but leave the working list;
+    // opts.archived flips the list to show only them.
+    where: { workspaceId: wsId, archivedAt: opts.archived ? { not: null } : null },
     include: { sends: true },
     orderBy: [{ status: "asc" }, { createdAt: "desc" }],
   });
@@ -158,6 +164,8 @@ export async function getCampaignsView(): Promise<Campaign[]> {
     segmentName.set(s.id, s.name);
     segmentName.set(s.name, s.name);
   }
+  const autos = await db.automation.findMany({ where: { workspaceId: wsId }, select: { id: true, name: true } });
+  const automationName = new Map(autos.map((a) => [a.id, a.name]));
   return campaigns.map((c) => {
     // The denominator must not shrink as the provider's delivery webhooks
     // flip rows sent -> delivered, or a fully delivered campaign reads 0%
@@ -169,10 +177,14 @@ export async function getCampaignsView(): Promise<Campaign[]> {
     ).length;
     const opened = c.sends.filter((s) => s.openedAt).length;
     const clicked = c.sends.filter((s) => s.clickedAt).length;
+    const automationId = c.audienceType === "automation" ? c.audienceRef : null;
     return {
       id: c.id, name: c.name, subject: c.subject ?? "",
       status: c.status as Campaign["status"],
-      audience: (c.audienceType === "segment" && c.audienceRef ? segmentName.get(c.audienceRef) : undefined) ?? c.audienceRef ?? "All contacts",
+      audience: automationId
+        ? `Automation · ${automationName.get(automationId) ?? "removed automation"}`
+        : (c.audienceType === "segment" && c.audienceRef ? segmentName.get(c.audienceRef) : undefined) ?? c.audienceRef ?? "All contacts",
+      automationId,
       recipients: c.audienceSnapshot,
       sentAt: c.sentAt ? dateStr(c.sentAt) : c.scheduledAt ? dateStr(c.scheduledAt) : "Not scheduled",
       openRate: c.isDemo ? c.openRate : delivered ? Math.round((opened / delivered) * 1000) / 10 : 0,
