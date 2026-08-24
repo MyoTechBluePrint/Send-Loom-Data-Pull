@@ -46,6 +46,22 @@ export function CampaignsClient({ campaigns, archived = false }: { campaigns: Ca
     router.refresh();
   }
 
+  async function removeForever(id: string, name: string, recipients: number | null) {
+    // The consequences in the dialog, not in a doc: erased stats, dead
+    // unsubscribe links in copies already delivered. Archive is the safe
+    // sibling and the dialog says so.
+    const detail = recipients
+      ? `its ${num(recipients)} send records and their open/click history are erased, and the unsubscribe links inside the already-delivered copies stop working`
+      : "its send records are erased";
+    if (!window.confirm(
+      `Permanently delete '${name}'?\n\nThis cannot be undone: ${detail}. Contacts who already unsubscribed stay unsubscribed.\n\nIf you only want it out of the list, Cancel and use Archive instead.`
+    )) return;
+    const res = await fetch(`/api/campaigns/${id}?permanent=1`, { method: "DELETE" });
+    const body = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+    if (!body.ok) window.alert(body.error ?? "The campaign could not be deleted.");
+    router.refresh();
+  }
+
   async function saveRename(currentName: string) {
     if (!renaming) return;
     const value = renaming.value.trim();
@@ -264,22 +280,40 @@ export function CampaignsClient({ campaigns, archived = false }: { campaigns: Ca
                         {c.isDemo ? "Demo" : "Real"}
                       </span>
                       {archived ? (
-                        <button
-                          disabled={shelving === c.id}
-                          onClick={() => setShelved(c.id, false)}
-                          className="rounded-lg border border-line px-2.5 py-1.5 text-[11px] font-semibold text-ink-2 hover:bg-[#f0efec] disabled:opacity-50"
-                        >
-                          {shelving === c.id ? "…" : "Restore"}
-                        </button>
+                        <>
+                          <button
+                            disabled={shelving === c.id}
+                            onClick={() => setShelved(c.id, false)}
+                            className="rounded-lg border border-line px-2.5 py-1.5 text-[11px] font-semibold text-ink-2 hover:bg-[#f0efec] disabled:opacity-50"
+                          >
+                            {shelving === c.id ? "…" : "Restore"}
+                          </button>
+                          <button
+                            onClick={() => removeForever(c.id, name, c.recipients)}
+                            className="rounded-lg border border-line px-2 py-1.5 text-[11px] font-semibold text-ink-3 hover:bg-red-50 hover:text-red-700"
+                            title="Delete forever · erases the campaign and its send history"
+                          >
+                            Delete
+                          </button>
+                        </>
                       ) : c.status === "sent" ? (
-                        <button
-                          disabled={shelving === c.id}
-                          onClick={() => setShelved(c.id, true)}
-                          className="rounded-lg border border-line px-2.5 py-1.5 text-[11px] font-semibold text-ink-3 hover:bg-[#f0efec] hover:text-ink-2 disabled:opacity-50"
-                          title="Archive · keeps every record, hides it from this list"
-                        >
-                          {shelving === c.id ? "…" : "Archive"}
-                        </button>
+                        <>
+                          <button
+                            disabled={shelving === c.id}
+                            onClick={() => setShelved(c.id, true)}
+                            className="rounded-lg border border-line px-2.5 py-1.5 text-[11px] font-semibold text-ink-3 hover:bg-[#f0efec] hover:text-ink-2 disabled:opacity-50"
+                            title="Archive · keeps every record, hides it from this list"
+                          >
+                            {shelving === c.id ? "…" : "Archive"}
+                          </button>
+                          <button
+                            onClick={() => removeForever(c.id, name, c.recipients)}
+                            className="rounded-lg border border-line px-2 py-1.5 text-[11px] font-semibold text-ink-3 hover:bg-red-50 hover:text-red-700"
+                            title="Delete forever · erases the campaign and its send history"
+                          >
+                            ✕
+                          </button>
+                        </>
                       ) : null}
                     </span>
                   )}

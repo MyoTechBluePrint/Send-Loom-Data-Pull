@@ -334,7 +334,23 @@ async function main() {
     res = await del(draft.id);
     check("draft delete still works", res.status === 200 && (await db.campaign.findUnique({ where: { id: draft.id } })) === null);
     res = await del(camp.id);
-    check("sent campaign cannot be hard-deleted", res.status === 422 && (await db.campaign.findUnique({ where: { id: camp.id } })) !== null);
+    check("sent campaign cannot be hard-deleted without confirming", res.status === 422 && (await db.campaign.findUnique({ where: { id: camp.id } })) !== null);
+
+    // Permanent delete: confirmed, owner-level only, takes the sends with it.
+    const delForever = (id: string, cookieOverride?: string) =>
+      cDelete(new NextRequest(`http://localhost/api/campaigns/${id}?permanent=1`, { method: "DELETE", headers: { cookie: cookieOverride ?? cookie } } as ConstructorParameters<typeof NextRequest>[1]), { params: Promise.resolve({ id }) });
+    res = await delForever(camp.id);
+    check("permanent delete refused below owner level", res.status === 403 && (await db.campaign.findUnique({ where: { id: camp.id } })) !== null);
+    const boss = await db.user.create({ data: { workspaceId: ws.id, email: `flows.owner.${STAMP}@test.local`, name: "Flow Owner", role: "owner" } });
+    const bossCookie = `${SESSION_COOKIE}=${createSessionToken(boss.email)}`;
+    await db.campaignSend.create({ data: { campaignId: camp.id, contactId: alice!.id, status: "simulated" } }).catch(() => {});
+    res = await delForever(camp.id, bossCookie);
+    const campGone = (await db.campaign.findUnique({ where: { id: camp.id } })) === null;
+    const sendsGone = (await db.campaignSend.count({ where: { campaignId: camp.id } })) === 0;
+    check("permanent delete erases campaign and sends for an owner", res.status === 200 && campGone && sendsGone);
+    res = await delForever(shadow.id, bossCookie);
+    check("automation shadow refuses permanent delete too", res.status === 422 && (await db.campaign.findUnique({ where: { id: shadow.id } })) !== null);
+    await db.user.delete({ where: { id: boss.id } });
 
     await db.campaign.delete({ where: { id: shadow.id } }).catch(() => {});
     await db.user.delete({ where: { id: tester.id } });

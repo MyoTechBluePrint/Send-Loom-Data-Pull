@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/server/db";
 import { audit } from "@/lib/server/audit";
 import { verifySessionToken, SESSION_COOKIE } from "@/lib/server/auth";
+import { can } from "@/lib/server/permissions";
 
 // The same session cookie currentUser() reads, taken from the request itself
 // so the handler works anywhere a NextRequest exists, including the flow tests.
@@ -137,10 +138,41 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
   const { id } = await ctx.params;
   const campaign = await db.campaign.findFirst({ where: { id, workspaceId: user.workspaceId } });
   if (!campaign) return Response.json({ ok: false, error: "Not found" }, { status: 404 });
-  if (campaign.status !== "draft") {
-    return Response.json({ ok: false, error: "Only drafts can be deleted; sent campaigns keep their history." }, { status: 422 });
+
+  // An automation's shadow campaign is workflow machinery: deleting it would
+  // orphan the step's design and its never-twice guarantee. The workflow
+  // owns its emails; delete the workflow to delete them.
+  if (campaign.status === "automation" || campaign.audienceType === "automation") {
+    return Response.json({ ok: false, error: "This email belongs to an automation. Delete the workflow to remove it." }, { status: 422 });
   }
-  await db.campaign.delete({ where: { id } });
-  await audit(campaign.workspaceId, verifySessionToken(req.cookies.get(SESSION_COOKIE)?.value) ?? "unknown", "campaign.draft_deleted", `'${campaign.name}'`);
-  return Response.json({ ok: true });
+
+  if (campaign.status === "draft") {
+    await db.campaign.delete({ where: { id } });
+    await audit(campaign.workspaceId, user.email, "campaign.draft_deleted", `'${campaign.name}'`);
+    return Response.json({ ok: true });
+  }
+
+  // Permanent deletion of a sent campaign, at the owner's explicit request.
+  // It takes the send history with it: stats stop existing, and the
+  // unsubscribe links baked into already-delivered copies of this email die
+  // (suppression and consent live in their own tables, so anyone who already
+  // unsubscribed stays unsubscribed). That is a call for people who can
+  // send, not for every login, and the client sends ?permanent=1 only from
+  // the confirm dialog that spells the consequences out.
+  if (req.nextUrl.searchParams.get("permanent") !== "1") {
+    return Response.json({ ok: false, error: "Deleting a sent campaign permanently erases its send history. Confirm the permanent delete, or archive it instead." }, { status: 422 });
+  }
+  if (!can(user.role, "enable_live_sending")) {
+    return Response.json({ ok: false, error: "Deleting sent campaigns requires an owner-level account." }, { status: 403 });
+  }
+  const sends = await db.campaignSend.count({ where: { campaignId: id } });
+  await db.$transaction([
+    db.campaignSend.deleteMany({ where: { campaignId: id } }),
+    db.campaign.delete({ where: { id } }),
+  ]);
+  await audit(
+    campaign.workspaceId, user.email, "campaign.permanently_deleted",
+    `'${campaign.name}' · ${sends} send records erased with it`
+  );
+  return Response.json({ ok: true, erasedSends: sends });
 }
