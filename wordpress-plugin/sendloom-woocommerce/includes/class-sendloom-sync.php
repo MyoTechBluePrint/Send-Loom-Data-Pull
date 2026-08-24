@@ -109,9 +109,14 @@ class Sendloom_Sync {
     }
 
     private static function sync_orders_page($page) {
-        $orders  = wc_get_orders(['limit' => self::BATCH, 'paged' => $page, 'orderby' => 'date', 'order' => 'DESC']);
+        // 'type' matters: without it wc_get_orders returns refund objects too,
+        // and a refund has no billing email method — one refund in the window
+        // fatals the whole sync. The instanceof guard covers any other
+        // non-order object a plugin slips into the query result.
+        $orders  = wc_get_orders(['type' => 'shop_order', 'limit' => self::BATCH, 'paged' => $page, 'orderby' => 'date', 'order' => 'DESC']);
         $payload = [];
         foreach ($orders as $order) {
+            if (!($order instanceof WC_Order)) { continue; }
             $payload[] = self::order_payload($order);
         }
         if (!$payload) { return ['ok' => true, 'upserted' => 0, 'count' => 0]; }
