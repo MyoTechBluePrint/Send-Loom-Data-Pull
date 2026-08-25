@@ -12,6 +12,8 @@
 
 import { db } from "../lib/server/db";
 import { enrolOnEvent, advanceDueRuns, ensureShadowCampaigns } from "../lib/server/automations";
+import { issueCoupon, recordRedemption } from "../lib/server/promotions";
+import { renderForRecipient } from "../lib/server/email-render";
 
 let passed = 0, failed = 0;
 const check = (name: string, ok: boolean, detail?: string) => {
@@ -346,6 +348,90 @@ async function main() {
   // which is not exported and sits behind an authenticated request; it is
   // covered by the UI agent's test, not reachable from here.
   console.log("  · 11th email step refusal: left to the UI agent's API test (validator not reachable from a script)");
+
+
+  console.log("\nDiscount reminder · spec scenarios A, C, D plus merge fields");
+  // The reminder guard from the spec: still no purchase, code unspent, code
+  // alive. Scenario B (purchase) and E (restart) are the generic scenarios
+  // above; these three are the discount-specific ones.
+  const DGUARD = {
+    match: "all",
+    conditions: [
+      { type: "not_purchased_since_entry" },
+      { type: "discount_not_used" },
+      { type: "discount_still_active" },
+    ],
+  };
+  const promo = await db.promotion.create({
+    data: { workspaceId: ws, name: `Seq promo ${STAMP}`, mode: "unique", prefix: "SQT", kind: "percent", amount: 10, expiryDays: 3 },
+  });
+  const discountSeq = async (tag: string) => {
+    const seq = await buildSequence(ws, `Seq ${tag} ${STAMP}`, `seq${tag}_${STAMP}`, 2);
+    await db.automationNode.updateMany({
+      where: { automationId: seq.auto.id, kind: "condition" },
+      data: { config: JSON.stringify(DGUARD) },
+    });
+    const who = await enrol(ws, `seq${tag}_${STAMP}`, seq.auto.id, `seq.${tag}.${STAMP}@example.com`);
+    const shadow = await db.campaign.findFirstOrThrow({
+      where: { audienceType: "automation", audienceRef: seq.auto.id },
+      orderBy: { createdAt: "asc" },
+    });
+    const issued = await issueCoupon({
+      promotionId: promo.id, workspaceId: ws, contactId: who.contact.id,
+      email: who.contact.email, source: `campaign:${shadow.id}`,
+    });
+    return { seq, who, shadow, issued };
+  };
+
+  // dA: nothing happens, the reminder goes out.
+  const dA = await discountSeq("dA");
+  check("code issued with a real expiry", dA.issued !== null && dA.issued.expiresAt !== null);
+  const dAIdem = await issueCoupon({
+    promotionId: promo.id, workspaceId: ws, contactId: dA.who.contact.id,
+    email: dA.who.contact.email, source: `campaign:${dA.shadow.id}`,
+  });
+  check("issue is idempotent: the follow-up shows the SAME code", dAIdem?.code === dA.issued?.code);
+  const dAAfter = await tickAfterWait(dA.who.run.id);
+  check("dA: run completed, reminder sent", dAAfter.status === "completed", dAAfter.status ?? "");
+  check("dA: two emails total", (await sendsFor(dA.seq.auto.id, dA.who.contact.id)).length === 2);
+
+  // dC: the code gets used, the reminder must not go.
+  const dC = await discountSeq("dC");
+  await recordRedemption(dC.issued!.code, `order-${STAMP}`, dC.who.contact.email);
+  const dCAfter = await tickAfterWait(dC.who.run.id);
+  check("dC: stopped when the code was used", dCAfter.status === "exited" && dCAfter.stoppedReason === "discount_used", `${dCAfter.status}/${dCAfter.stoppedReason}`);
+  check("dC: only the first email exists", (await sendsFor(dC.seq.auto.id, dC.who.contact.id)).length === 1);
+
+  // dD: the code expires early, the reminder must not go.
+  const dD = await discountSeq("dD");
+  await db.couponCode.update({
+    where: { id: dD.issued!.couponCodeId },
+    data: { expiresAt: new Date(Date.now() - 60_000) },
+  });
+  const dDAfter = await tickAfterWait(dD.who.run.id);
+  check("dD: stopped when the code expired", dDAfter.status === "exited" && dDAfter.stoppedReason === "discount_expired", `${dDAfter.status}/${dDAfter.stoppedReason}`);
+  check("dD: only the first email exists", (await sendsFor(dD.seq.auto.id, dD.who.contact.id)).length === 1);
+
+  // Merge fields fill from the issued code even with no coupon block in the
+  // email, which is how a plain-text reminder references the original code.
+  const merged = await renderForRecipient({
+    workspaceId: ws,
+    campaignId: dA.shadow.id,
+    sendId: `seqmerge-${STAMP}`,
+    contact: { id: dA.who.contact.id, email: dA.who.contact.email ?? "" },
+    blocks: [
+      { id: "m1", type: "text", html: "<p>Code {{discount_code}} ({{discount_value}}) expires {{discount_expiry}}.</p>" },
+      { id: "m2", type: "footer" },
+    ],
+  });
+  check("merge: the real code fills in", merged.html.includes(dA.issued!.code));
+  check("merge: the value fills in", merged.html.includes("10% off"));
+  check("merge: no unresolved fields remain", !merged.html.includes("{{"));
+
+  // Local cleanup: codes reference contacts, so they go before cleanup()
+  // deletes the contacts.
+  await db.couponCode.deleteMany({ where: { promotionId: promo.id } });
+  await db.promotion.delete({ where: { id: promo.id } });
 
   await cleanup();
   console.log(`\n${passed} passed, ${failed} failed`);

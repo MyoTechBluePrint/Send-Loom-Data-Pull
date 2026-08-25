@@ -41,7 +41,7 @@ export function promotionTerms(p: {
   ].filter(Boolean).join(" · ");
 }
 
-export type IssuedCoupon = { code: string; label: string; terms: string; couponCodeId: string };
+export type IssuedCoupon = { code: string; label: string; terms: string; couponCodeId: string; expiresAt: Date | null };
 
 /**
  * Issue a coupon for a contact. Shared promotions return the shared code;
@@ -82,14 +82,14 @@ export async function issueCoupon(args: {
       },
       update: {},
     });
-    return { code: promo.sharedCode, label, terms, couponCodeId: row.id };
+    return { code: promo.sharedCode, label, terms, couponCodeId: row.id, expiresAt: row.expiresAt };
   }
 
   // Unique mode. The upsert-on-unique makes repeat calls return the original.
   const existing = await db.couponCode.findUnique({
     where: { promotionId_contactId: { promotionId: promo.id, contactId: args.contactId } },
   });
-  if (existing) return { code: existing.code, label, terms, couponCodeId: existing.id };
+  if (existing) return { code: existing.code, label, terms, couponCodeId: existing.id, expiresAt: existing.expiresAt };
 
   // Retry on the astronomically-unlikely global code collision.
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -106,14 +106,14 @@ export async function issueCoupon(args: {
           expiresAt: promo.expiryDays ? new Date(Date.now() + promo.expiryDays * 86_400_000) : null,
         },
       });
-      return { code, label, terms, couponCodeId: row.id };
+      return { code, label, terms, couponCodeId: row.id, expiresAt: row.expiresAt };
     } catch (e) {
       // Unique violation: either the global code collided (retry with a new
       // code) or a concurrent call won the per-contact race (return theirs).
       const raced = await db.couponCode.findUnique({
         where: { promotionId_contactId: { promotionId: promo.id, contactId: args.contactId } },
       });
-      if (raced) return { code: raced.code, label, terms, couponCodeId: raced.id };
+      if (raced) return { code: raced.code, label, terms, couponCodeId: raced.id, expiresAt: raced.expiresAt };
     }
   }
   return null;

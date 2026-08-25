@@ -51,7 +51,46 @@ export const CONDITION_TYPES: { type: string; label: string; description: string
     description:
       "Passes while the contact has started no other workflow since this run began, so two sequences never talk over the same inbox.",
   },
+  {
+    type: "discount_not_used",
+    label: "Discount code has not been used",
+    description:
+      "Passes while the discount code issued in this workflow has not been redeemed on an order. Once the code is spent, reminding anybody to use it fails the check.",
+  },
+  {
+    type: "discount_still_active",
+    label: "Discount code is still active",
+    description:
+      "Passes while the code issued in this workflow has not expired. A reminder about a dead code is worse than silence, so expiry fails the check.",
+  },
 ];
+
+/**
+ * The codes this run is about: issued to this contact either since the run
+ * began, or by one of this workflow's own emails (the idempotent per-contact
+ * code means a re-entered contact keeps a code whose createdAt predates the
+ * new run, and it is still this workflow's code). Promotion-scoped to the
+ * workspace, because a contactId alone is not proof of tenancy here.
+ */
+async function couponsForRun(ctx: ConditionContext) {
+  const shadows = await db.campaign.findMany({
+    where: { audienceType: "automation", audienceRef: ctx.run.automationId },
+    select: { id: true },
+  });
+  return db.couponCode.findMany({
+    where: {
+      contactId: ctx.contactId,
+      promotion: { workspaceId: ctx.workspaceId },
+      OR: [
+        { createdAt: { gte: ctx.run.startedAt } },
+        ...(shadows.length
+          ? [{ source: { in: shadows.map((s) => `campaign:${s.id}`) } }]
+          : []),
+      ],
+    },
+    select: { id: true, redeemedAt: true, expiresAt: true },
+  });
+}
 
 const REGISTRY: Record<string, ConditionEvaluator> = {
   // A purchase can surface two ways: an Order row synced from the store, or
@@ -95,6 +134,29 @@ const REGISTRY: Record<string, ConditionEvaluator> = {
       select: { id: true },
     });
     if (other) return { pass: false, reason: "entered_other_workflow" };
+    return { pass: true };
+  },
+
+  // No code issued passes both discount checks: a workflow whose first email
+  // carries no coupon block has nothing to have used or expired, and the
+  // conditions must not strand it.
+  discount_not_used: async (ctx) => {
+    const coupons = await couponsForRun(ctx);
+    if (coupons.some((c) => c.redeemedAt !== null)) {
+      return { pass: false, reason: "discount_used" };
+    }
+    return { pass: true };
+  },
+
+  discount_still_active: async (ctx) => {
+    const coupons = await couponsForRun(ctx);
+    // Only codes that carry an expiry can expire; a code with none is
+    // active by definition. Every issued code being past its expiry is
+    // what makes the reminder pointless.
+    const dated = coupons.filter((c) => c.expiresAt !== null);
+    if (dated.length && dated.every((c) => (c.expiresAt as Date).getTime() <= Date.now())) {
+      return { pass: false, reason: "discount_expired" };
+    }
     return { pass: true };
   },
 };

@@ -653,7 +653,12 @@ function StepCard({
             />
             <p className="mt-1 text-[11px] text-ink-3">
               Plain sentences or simple HTML. Your brand logo and the legally
-              required unsubscribe footer are added automatically.
+              required unsubscribe footer are added automatically. Merge
+              fields: {"{{first_name}}"}, {"{{discount_code}}"},{" "}
+              {"{{discount_value}}"}, {"{{discount_expiry}}"},{" "}
+              {"{{store_url}}"}. Discount fields fill in when the email (or an
+              earlier one in this workflow) carries a discount block, and a
+              follow-up always shows the same code as the first email.
             </p>
           </div>
 

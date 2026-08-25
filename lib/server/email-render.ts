@@ -233,7 +233,7 @@ export async function renderPreview(args: {
       unsubscribe: `${origin()}/r/preview-unsubscribe`,
       pollAnswer: () => "#preview",
     },
-    personalise: personaliser({ first_name: "Alex", last_name: "Example", email: "alex@example.com", "customer_coupon.code": "PREVIEW-CODE" }),
+    personalise: personaliser({ first_name: "Alex", last_name: "Example", email: "alex@example.com", "customer_coupon.code": "PREVIEW-CODE", discount_code: "PREVIEW-CODE", discount_value: "10% off", discount_expiry: "26 August, 14:00", store_url: "https://example-store.com" }),
   };
   return renderEmail(blocks, ctx);
 }
@@ -265,8 +265,50 @@ export async function renderForRecipient(args: {
       });
       if (issued) {
         coupons.set(b.promotionId, issued);
+        // The discount as merge fields, so reminder copy can say
+        // "{{discount_code}} expires {{discount_expiry}}" without anybody
+        // hardcoding a value that belongs to the promotion. The idempotent
+        // issue means a follow-up email renders the SAME code the first
+        // email carried, never a fresh one.
         couponVars["customer_coupon.code"] = issued.code;
+        couponVars["discount_code"] = issued.code;
+        couponVars["discount_value"] = issued.label;
+        couponVars["discount_expiry"] = issued.expiresAt
+          ? new Intl.DateTimeFormat("en-GB", {
+              day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
+            }).format(issued.expiresAt)
+          : "";
       }
+    }
+  }
+
+  // A follow-up written as plain text ("your code {{discount_code}} expires
+  // soon") carries no coupon block of its own; the fields fill from the
+  // contact's most recently issued code instead, which the idempotent issue
+  // guarantees is the code their earlier email actually showed them.
+  if (!couponVars["discount_code"]) {
+    const latest = await db.couponCode.findFirst({
+      where: { contactId: args.contact.id, promotion: { workspaceId: args.workspaceId } },
+      orderBy: { createdAt: "desc" },
+      include: { promotion: true },
+    });
+    if (latest) {
+      const shared = latest.promotion.mode === "shared";
+      couponVars["discount_code"] = shared
+        ? latest.promotion.sharedCode ?? ""
+        : latest.code;
+      couponVars["customer_coupon.code"] ||= couponVars["discount_code"];
+      couponVars["discount_value"] =
+        latest.promotion.kind === "percent"
+          ? `${latest.promotion.amount}% off`
+          : latest.promotion.kind === "fixed"
+            ? `${money(latest.promotion.amount, latest.promotion.currency)} off`
+            : "Free shipping";
+      couponVars["discount_expiry"] = latest.expiresAt
+        ? new Intl.DateTimeFormat("en-GB", {
+            day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
+          }).format(latest.expiresAt)
+        : "";
     }
   }
 
@@ -291,6 +333,9 @@ export async function renderForRecipient(args: {
       first_name: args.contact.firstName ?? "",
       last_name: args.contact.lastName ?? "",
       email: args.contact.email,
+      // The shop the brand points at, so copy can link home without a URL
+      // pasted into every email.
+      store_url: brand?.websiteUrl ?? "",
       ...couponVars,
     }),
   };
