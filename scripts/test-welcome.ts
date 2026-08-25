@@ -7,6 +7,8 @@ import {
   ensureShadowCampaigns,
   adoptShadowContent,
   blocksFor,
+  enrolOnEvent,
+  advanceRun,
 } from "../lib/server/automations";
 import { eventIngestionService } from "../lib/server/events";
 
@@ -167,6 +169,157 @@ async function main() {
   check("source without designed content refused", refused.ok === false);
   const shadowStill = await db.campaign.findUniqueOrThrow({ where: { id: shadowId! } });
   check("refusal leaves the design untouched", (shadowStill.content ?? "").includes("Adopted design"));
+
+  console.log("\n6 · the sequence engine: conditions, waits and the run diary");
+  const trigType = `seq_test_${STAMP}`;
+  const seq = await db.automation.create({
+    data: { workspaceId: ws, name: `Sequence ${STAMP}`, trigger: "Test sequence", triggerEvent: trigType, status: "live" },
+  });
+  await db.automationNode.create({
+    data: { automationId: seq.id, kind: "trigger", label: "Trigger", position: 0 },
+  });
+  await db.automationNode.create({
+    data: {
+      automationId: seq.id, kind: "email", label: "Email 1", position: 1,
+      config: JSON.stringify({ subject: "One", html: "<p>One</p>" }),
+    },
+  });
+  await db.automationNode.create({
+    data: { automationId: seq.id, kind: "delay", label: "Wait", position: 2, config: JSON.stringify({ minutes: 30 }) },
+  });
+  await db.automationNode.create({
+    data: {
+      automationId: seq.id, kind: "condition", label: "Still shopping?", position: 3,
+      config: JSON.stringify({
+        match: "all",
+        conditions: [{ type: "not_purchased_since_entry" }, { type: "not_entered_other_workflow" }],
+      }),
+    },
+  });
+  await db.automationNode.create({
+    data: {
+      automationId: seq.id, kind: "email", label: "Email 2", position: 4,
+      config: JSON.stringify({ subject: "Two", html: "<p>Two</p>" }),
+    },
+  });
+
+  const enrolInSeq = async (contactEmail: string) => {
+    const c = await db.contact.create({
+      data: { workspaceId: ws, email: contactEmail, emailConsent: "granted" },
+    });
+    await enrolOnEvent(ws, trigType, c.id);
+    const run = await db.automationRun.findFirstOrThrow({
+      where: { automationId: seq.id, contactId: c.id },
+    });
+    return { contact: c, run };
+  };
+  const ripen = async (runId: string) => {
+    await db.automationRun.update({ where: { id: runId }, data: { nextDueAt: new Date(Date.now() - 1000) } });
+    await advanceRun(runId);
+    return db.automationRun.findUniqueOrThrow({ where: { id: runId } });
+  };
+  const seqSends = (contactId: string) =>
+    db.campaignSend.count({ where: { contactId, campaign: { audienceRef: seq.id } } });
+  const diary = (runId: string) =>
+    db.automationRunEvent.findMany({ where: { runId }, orderBy: [{ at: "asc" }, { id: "asc" }] });
+
+  // (a) The pass path: nothing intervenes, so the condition holds and the
+  // follow-up sends. Also pins the minutes-based wait and the diary order.
+  const a = await enrolInSeq(`seq.pass.${STAMP}@example.com`);
+  const parked = await db.automationRun.findUniqueOrThrow({ where: { id: a.run.id } });
+  const dueIn = (parked.nextDueAt?.getTime() ?? 0) - Date.now();
+  check("minutes wait parks nextDueAt ~30 minutes out", dueIn > 29 * 60_000 && dueIn < 31 * 60_000, `${Math.round(dueIn / 1000)}s`);
+  const aAfter = await ripen(a.run.id);
+  check("condition pass completes the run", aAfter.status === "completed", aAfter.status);
+  check("email 2 sends after the condition passes", (await seqSends(a.contact.id)) === 2);
+  const aEvents = await diary(a.run.id);
+  check(
+    "run events written in order",
+    aEvents.map((e) => e.kind).join(",") === "started,email_sent,waiting,conditions_passed,email_sent,completed",
+    aEvents.map((e) => e.kind).join(","),
+  );
+  const aWaiting = aEvents.find((e) => e.kind === "waiting");
+  check("waiting detail carries the due moment", Boolean(aWaiting?.detail?.startsWith("until ")) && !Number.isNaN(Date.parse(aWaiting?.detail?.slice(6) ?? "")));
+  const aPassed = aEvents.find((e) => e.kind === "conditions_passed");
+  check(
+    "conditions_passed names each check",
+    Boolean(aPassed?.detail?.includes("not_purchased_since_entry") && aPassed?.detail?.includes("not_entered_other_workflow")),
+  );
+
+  // (b) A purchase after entry fails the condition at execution time: the
+  // run stops with the evaluator's reason and email 2 never leaves.
+  const store = await db.store.create({
+    data: { workspaceId: ws, name: `Seq store ${STAMP}`, url: `https://seq-${STAMP}.example.com`, apiKey: `seqkey_${STAMP}` },
+  });
+  const b = await enrolInSeq(`seq.buyer.${STAMP}@example.com`);
+  await db.order.create({
+    data: {
+      storeId: store.id, contactId: b.contact.id, externalId: `seq-o-${STAMP}`,
+      number: `#${STAMP}`, status: "completed", total: 49, placedAt: new Date(Date.now() + 1000),
+    },
+  });
+  const bAfter = await ripen(b.run.id);
+  check("purchase after entry stops the run", bAfter.status === "exited", bAfter.status);
+  check("stoppedReason says purchased", bAfter.stoppedReason === "purchased", bAfter.stoppedReason ?? "null");
+  check("email 2 never sent to the buyer", (await seqSends(b.contact.id)) === 1);
+  const bEvents = await diary(b.run.id);
+  check(
+    "diary shows which check failed and why",
+    bEvents.some((e) => e.kind === "conditions_failed" && (e.detail ?? "").includes("not_purchased_since_entry") && (e.detail ?? "").includes("purchased")),
+  );
+  check("diary shows the stop", bEvents.some((e) => e.kind === "stopped"));
+
+  // (c) Entering another workflow after this one fails the other check.
+  const c = await enrolInSeq(`seq.wanderer.${STAMP}@example.com`);
+  const otherFlow = await db.automation.create({
+    data: { workspaceId: ws, name: `Other flow ${STAMP}`, trigger: "Other", status: "live" },
+  });
+  await db.automationRun.create({
+    data: { automationId: otherFlow.id, contactId: c.contact.id, status: "running", startedAt: new Date(Date.now() + 1000) },
+  });
+  const cAfter = await ripen(c.run.id);
+  check("other-workflow entry stops the run", cAfter.status === "exited" && cAfter.stoppedReason === "entered_other_workflow", cAfter.stoppedReason ?? cAfter.status);
+  check("email 2 never sent to the wanderer", (await seqSends(c.contact.id)) === 1);
+
+  // (d) An unknown condition type saved by a newer editor passes with a note
+  // instead of stranding the run on this server.
+  const mysteryTrig = `seq_mystery_${STAMP}`;
+  const mystery = await db.automation.create({
+    data: { workspaceId: ws, name: `Mystery ${STAMP}`, trigger: "Test", triggerEvent: mysteryTrig, status: "live" },
+  });
+  await db.automationNode.create({
+    data: { automationId: mystery.id, kind: "trigger", label: "Trigger", position: 0 },
+  });
+  await db.automationNode.create({
+    data: {
+      automationId: mystery.id, kind: "condition", label: "Future check", position: 1,
+      config: JSON.stringify({ conditions: [{ type: "clicked_special_offer_2029" }] }),
+    },
+  });
+  await db.automationNode.create({
+    data: {
+      automationId: mystery.id, kind: "email", label: "Offer", position: 2,
+      config: JSON.stringify({ subject: "Offer", html: "<p>Offer</p>" }),
+    },
+  });
+  const dContact = await db.contact.create({
+    data: { workspaceId: ws, email: `seq.future.${STAMP}@example.com`, emailConsent: "granted" },
+  });
+  await enrolOnEvent(ws, mysteryTrig, dContact.id);
+  const dRun = await db.automationRun.findFirstOrThrow({
+    where: { automationId: mystery.id, contactId: dContact.id },
+  });
+  check("unknown condition type does not strand the run", dRun.status === "completed", dRun.status);
+  const dSends = await db.campaignSend.count({
+    where: { contactId: dContact.id, campaign: { audienceRef: mystery.id } },
+  });
+  check("email still sends past the unknown check", dSends === 1);
+  const dEvents = await diary(dRun.id);
+  check(
+    "unknown type noted in the diary",
+    dEvents.some((e) => e.kind === "note" && (e.detail ?? "").includes("clicked_special_offer_2029")),
+  );
+  check("unknown type still counts as conditions_passed", dEvents.some((e) => e.kind === "conditions_passed"));
 
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed) process.exit(1);

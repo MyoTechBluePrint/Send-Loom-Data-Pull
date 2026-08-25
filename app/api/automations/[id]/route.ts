@@ -5,6 +5,7 @@ import { audit } from "@/lib/server/audit";
 import { demoWorkspaceId } from "@/lib/server/views";
 import { currentUser } from "@/lib/server/permissions";
 import { TRIGGER_EVENTS, ensureShadowCampaigns, adoptShadowContent } from "@/lib/server/automations";
+import { CONDITION_TYPES } from "@/lib/server/automation-conditions";
 import { parseBlocks } from "@/lib/server/email-blocks";
 
 // One automation, for the editor: read it, rename it, retrigger it, set it
@@ -96,6 +97,9 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
       nodes: await nodesPayload(automation.nodes),
     },
     triggerEvents: TRIGGER_EVENTS,
+    // The condition vocabulary lives server-side (its evaluators touch the
+    // database), so the editor is handed the menu rather than importing it.
+    conditionTypes: CONDITION_TYPES,
     sources: {
       campaigns: campaigns
         .filter((c) => parseBlocks(c.content).length > 0)
@@ -153,13 +157,60 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
 
 const NodeInput = z.object({
   id: z.string().optional(),
-  kind: z.enum(["trigger", "email", "delay", "exit"]),
+  kind: z.enum(["trigger", "email", "delay", "condition", "exit"]),
   label: z.string().min(1).max(140),
   detail: z.string().max(300).optional(),
   config: z.record(z.string(), z.unknown()).optional(),
 });
 
 const Put = z.object({ nodes: z.array(NodeInput).min(1).max(30) });
+
+// Waits are stored in minutes when the new field is present; hours stays
+// untouched so pre-minutes workflows round-trip byte for byte. One minute to
+// sixty days, the same clamp the engine applies at execution time.
+const MAX_WAIT_MINUTES = 60 * 24 * 60;
+
+// Loose on purpose: both configs may carry keys this route does not police
+// (disabled, machine-held ids). The shape check is about the keys it does.
+const DelayConfigInput = z.looseObject({
+  hours: z.number().finite().min(0).optional(),
+  minutes: z.number().finite().optional(),
+});
+
+const ConditionConfigInput = z.looseObject({
+  match: z.enum(["all", "any"]).optional(),
+  conditions: z
+    .array(z.looseObject({ type: z.string().min(1).max(80) }))
+    .max(20)
+    .optional(),
+});
+
+/**
+ * The checks a save must pass beyond raw shape. Returns a plain sentence for
+ * the editor to show, or null when the steps are sound.
+ */
+function stepProblem(nodes: z.infer<typeof NodeInput>[]): string | null {
+  const emails = nodes.filter((n) => n.kind === "email").length;
+  if (emails > 10) return "A workflow can have at most 10 email steps.";
+
+  const known = new Set(CONDITION_TYPES.map((c) => c.type));
+  for (const n of nodes) {
+    if (n.kind === "delay") {
+      const parsed = DelayConfigInput.safeParse(n.config ?? {});
+      if (!parsed.success) return `The wait step "${n.label}" needs its duration as a number.`;
+    }
+    if (n.kind === "condition") {
+      const parsed = ConditionConfigInput.safeParse(n.config ?? {});
+      if (!parsed.success) return `The check step "${n.label}" has conditions in a shape this server does not understand.`;
+      for (const check of parsed.data.conditions ?? []) {
+        if (!known.has(check.type)) {
+          return `The check step "${n.label}" uses an unknown condition "${check.type}". Refresh the editor and try again.`;
+        }
+      }
+    }
+  }
+  return null;
+}
 
 export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const user = await currentUser();
@@ -170,6 +221,9 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
 
   const parsed = Put.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return Response.json({ ok: false, error: parsed.error.flatten() }, { status: 400 });
+
+  const problem = stepProblem(parsed.data.nodes);
+  if (problem) return Response.json({ ok: false, error: problem }, { status: 422 });
 
   const keepIds = parsed.data.nodes.map((n) => n.id).filter(Boolean) as string[];
   const existing = new Map(automation.nodes.map((n) => [n.id, n]));
@@ -185,7 +239,13 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       const storedConfig = (() => {
         try { return JSON.parse(stored?.config ?? "{}"); } catch { return {}; }
       })();
-      const config = JSON.stringify({ ...storedConfig, ...(n.config ?? {}) });
+      const merged: Record<string, unknown> = { ...storedConfig, ...(n.config ?? {}) };
+      // Persist the wait already clamped, so what is stored is what will run.
+      // Hours-only delays are left alone: their round trip stays exact.
+      if (n.kind === "delay" && merged.minutes != null && Number.isFinite(Number(merged.minutes))) {
+        merged.minutes = Math.min(MAX_WAIT_MINUTES, Math.max(1, Math.round(Number(merged.minutes))));
+      }
+      const config = JSON.stringify(merged);
       if (stored) {
         await tx.automationNode.update({
           where: { id: stored.id },

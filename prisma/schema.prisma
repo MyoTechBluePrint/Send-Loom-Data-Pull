@@ -517,8 +517,26 @@ model AutomationRun {
   nextDueAt    DateTime?
   startedAt    DateTime   @default(now())
   endedAt      DateTime?
+  /// Why a run stopped short of completing, in the debugging vocabulary:
+  /// purchased | entered_other_workflow | condition_failed | unsubscribed |
+  /// email_unavailable | stopped_manually. Null while running or completed.
+  stoppedReason String?
+  events       AutomationRunEvent[]
 
   @@index([automationId, status])
+}
+
+/// The run's own diary: one row per thing that happened, so a stuck or
+/// stopped sequence can always answer "what happened and why".
+model AutomationRunEvent {
+  id     String        @id @default(cuid())
+  runId  String
+  run    AutomationRun @relation(fields: [runId], references: [id])
+  at     DateTime      @default(now())
+  kind   String // started | email_sent | email_failed | waiting | conditions_passed | conditions_failed | stopped | completed
+  detail String?
+
+  @@index([runId, at])
 }
 
 model EmailTemplate {

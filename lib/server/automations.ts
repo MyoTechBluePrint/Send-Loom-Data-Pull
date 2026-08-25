@@ -18,6 +18,10 @@ import { eligibleForChannel } from "./consent";
 import { renderForRecipient, resolveFeeds } from "./email-render";
 import { newBlockId, parseBlocks, type EmailBlock } from "./email-blocks";
 import { claimStamp, claimedAtFromStamp, STRANDED_SENDING_MS } from "./smart-send";
+import {
+  evaluateConditionNode,
+  type ConditionNodeConfig,
+} from "./automation-conditions";
 
 export const TRIGGER_EVENTS = [
   { value: "popup_submitted", label: "Popup or form signup" },
@@ -42,6 +46,10 @@ export interface EmailNodeConfig {
 
 export interface DelayNodeConfig {
   hours?: number;
+  /** Takes precedence over hours when set, so short waits do not have to be
+   *  fractions. Clamped to 1 minute .. 60 days. Hours stays untouched for
+   *  every workflow saved before minutes existed. */
+  minutes?: number;
 }
 
 const parseConfig = <T,>(raw: string | null): T => {
@@ -51,6 +59,44 @@ const parseConfig = <T,>(raw: string | null): T => {
     return {} as T;
   }
 };
+
+/**
+ * One line in a run's diary. Never throws: the diary explains delivery, it
+ * must not be able to kill delivery.
+ */
+async function logRunEvent(runId: string, kind: string, detail?: string) {
+  try {
+    await db.automationRunEvent.create({ data: { runId, kind, detail } });
+  } catch (error) {
+    console.error("[sendloom] run event write failed", error);
+  }
+}
+
+/**
+ * Stop one running run with a reason. The conditional update is the whole
+ * point: a run that already completed or was stopped by a parallel path
+ * keeps its first ending, and the diary gets exactly one "stopped" line.
+ * Also the manual stop used by admin.
+ */
+export async function stopRun(runId: string, reason: string, detail?: string): Promise<boolean> {
+  const stopped = await db.automationRun.updateMany({
+    where: { id: runId, status: "running" },
+    data: { status: "exited", endedAt: new Date(), nextDueAt: null, stoppedReason: reason },
+  });
+  if (stopped.count === 0) return false;
+  await logRunEvent(runId, "stopped", detail ?? reason);
+  return true;
+}
+
+/** The run a send belongs to right now, if it is still walking. Diary and
+ *  stop wiring in the delivery paths go through this because the retry path
+ *  arrives with no run in hand, only an automation and a contact. */
+async function runningRunFor(automationId: string, contactId: string) {
+  return db.automationRun.findFirst({
+    where: { automationId, contactId, status: "running" },
+    select: { id: true },
+  });
+}
 
 /**
  * Enrol a contact into every live automation listening for this event.
@@ -83,6 +129,7 @@ export async function enrolOnEvent(
     const run = await db.automationRun.create({
       data: { automationId: a.id, contactId, status: "running" },
     });
+    await logRunEvent(run.id, "started", `enrolled by ${eventType}`);
     await db.automation.update({
       where: { id: a.id },
       data: { entered: { increment: 1 } },
@@ -238,19 +285,76 @@ export async function advanceRun(runId: string) {
 
     if (node.kind === "delay") {
       const config = parseConfig<DelayNodeConfig>(node.config);
-      const hours = Math.max(0, Number(config.hours ?? 24));
+      // Minutes win when set, clamped to 1 minute .. 60 days. The hours arm
+      // is byte-for-byte the old behaviour so existing workflows park on
+      // exactly the moments they always did.
+      let waitMs: number;
+      if (config.minutes != null && Number.isFinite(Number(config.minutes))) {
+        const minutes = Math.min(60 * 24 * 60, Math.max(1, Number(config.minutes)));
+        waitMs = minutes * 60_000;
+      } else {
+        const hours = Math.max(0, Number(config.hours ?? 24));
+        waitMs = hours * 3600 * 1000;
+      }
+      const until = new Date(Date.now() + waitMs);
       await db.automationRun.update({
         where: { id: run.id },
-        data: {
-          currentNode: node.id,
-          nextDueAt: new Date(Date.now() + hours * 3600 * 1000),
-        },
+        data: { currentNode: node.id, nextDueAt: until },
       });
+      await logRunEvent(run.id, "waiting", `until ${until.toISOString()}`);
       return;
     }
 
+    if (node.kind === "condition") {
+      // Evaluated HERE, when the walker reaches the node after any wait has
+      // elapsed, never at enrolment: "has not purchased" must mean has not
+      // purchased by now, not as of three days ago.
+      const config = parseConfig<ConditionNodeConfig>(node.config);
+      const verdict = await evaluateConditionNode(
+        {
+          workspaceId: run.automation.workspaceId,
+          contactId: run.contactId,
+          run: { id: run.id, automationId: run.automationId, startedAt: run.startedAt },
+        },
+        config,
+      );
+      for (const t of verdict.unknownTypes) {
+        await logRunEvent(run.id, "note", `unknown condition type "${t}" passed permissively`);
+      }
+      if (!verdict.pass) {
+        await logRunEvent(run.id, "conditions_failed", verdict.detail);
+        await stopRun(run.id, verdict.reason ?? "condition_failed", verdict.detail);
+        return;
+      }
+      await logRunEvent(run.id, "conditions_passed", verdict.detail);
+      await db.automationRun.update({
+        where: { id: run.id },
+        data: { currentNode: node.id, nextDueAt: null },
+      });
+      index += 1;
+      continue;
+    }
+
     if (node.kind === "email") {
-      await deliverEmailNode(run.automation, node, run.contact);
+      // The nearest preceding condition node travels with the delivery so it
+      // can be re-checked against live data just before the email leaves: a
+      // run can sit queued between tick and delivery, and a purchase in that
+      // window must still win.
+      const guard = nodes
+        .slice(0, index)
+        .reverse()
+        .find(
+          (n) =>
+            n.kind === "condition" &&
+            !parseConfig<{ disabled?: boolean }>(n.config).disabled,
+        );
+      const outcome = await deliverEmailNode(run.automation, node, run.contact, {
+        runId: run.id,
+        automationId: run.automationId,
+        startedAt: run.startedAt,
+        guard: guard ?? null,
+      });
+      if (outcome === "stopped") return;
       await db.automationRun.update({
         where: { id: run.id },
         data: { currentNode: node.id, nextDueAt: null },
@@ -261,13 +365,17 @@ export async function advanceRun(runId: string) {
 
     if (node.kind === "exit") break;
 
-    index += 1; // condition/task/tag/webhook: pass through for now
+    index += 1; // task/tag/webhook: pass through for now
   }
 
-  await db.automationRun.update({
-    where: { id: run.id },
+  // Conditional completion: a run stopped by a parallel path (a purchase
+  // landing mid-walk) keeps its stop and its reason.
+  const completedNow = await db.automationRun.updateMany({
+    where: { id: run.id, status: "running" },
     data: { status: "completed", endedAt: new Date(), nextDueAt: null },
   });
+  if (completedNow.count === 0) return;
+  await logRunEvent(run.id, "completed");
   await db.automation.update({
     where: { id: run.automation.id },
     data: { completed: { increment: 1 } },
@@ -449,7 +557,21 @@ async function deliverEmailNode(
     emailConsent: string; smsConsent: string; whatsappConsent: string;
     doNotContact: boolean;
   },
-) {
+  runCtx: {
+    runId: string;
+    automationId: string;
+    startedAt: Date;
+    /** Nearest preceding condition node in the walk, re-checked below. */
+    guard: { label: string; config: string | null } | null;
+  },
+): Promise<"delivered" | "skipped" | "stopped"> {
+  // No address means this run can never do its job: stop it honestly rather
+  // than walking a contact through emails nobody can receive.
+  if (!contact.email) {
+    await stopRun(runCtx.runId, "email_unavailable", `"${node.label}" not sent: contact has no email address`);
+    return "stopped";
+  }
+
   const suppressed = new Set(
     (
       await db.suppressionRecord.findMany({
@@ -459,7 +581,36 @@ async function deliverEmailNode(
     ).map((s) => s.email.toLowerCase()),
   );
   const gate = eligibleForChannel(contact, "email", suppressed);
-  if (!gate.eligible || !contact.email) return;
+  if (!gate.eligible) {
+    if (gate.reason === "no_consent") {
+      // Merely pending: skip this email but let the walk continue. Consent
+      // may arrive before the next step; only a person saying no ends a run.
+      await logRunEvent(runCtx.runId, "email_skipped", `"${node.label}": consent not granted yet, not sent`);
+      return "skipped";
+    }
+    // do_not_contact, opted_out, suppressed: the person said stop.
+    await stopRun(runCtx.runId, "unsubscribed", `"${node.label}" not sent: ${gate.reason}`);
+    return "stopped";
+  }
+
+  // The second look the spec demands: the walker evaluated this condition
+  // when it reached the node, but the run can sit queued between tick and
+  // delivery. Live data decides again, immediately before the send exists.
+  if (runCtx.guard) {
+    const verdict = await evaluateConditionNode(
+      {
+        workspaceId: automation.workspaceId,
+        contactId: contact.id,
+        run: { id: runCtx.runId, automationId: runCtx.automationId, startedAt: runCtx.startedAt },
+      },
+      parseConfig<ConditionNodeConfig>(runCtx.guard.config),
+    );
+    if (!verdict.pass) {
+      await logRunEvent(runCtx.runId, "conditions_failed", `re-check before "${node.label}": ${verdict.detail}`);
+      await stopRun(runCtx.runId, verdict.reason ?? "condition_failed", verdict.detail);
+      return "stopped";
+    }
+  }
 
   const campaign = await shadowCampaign(automation, node);
 
@@ -471,10 +622,11 @@ async function deliverEmailNode(
       data: { campaignId: campaign.id, contactId: contact.id, status: "queued" },
     });
   } catch {
-    return; // already sent by an earlier walk
+    return "skipped"; // already sent by an earlier walk
   }
 
   await redeliverExisting(automation, node, contact, send.id);
+  return "delivered";
 }
 
 /** Render and deliver one email node against an existing send row. */
@@ -510,10 +662,23 @@ async function redeliverExisting(
       })
     ).map((s) => s.email.toLowerCase()),
   );
-  if (!eligibleForChannel(fresh, "email", suppressed).eligible) {
+  const freshGate = eligibleForChannel(fresh, "email", suppressed);
+  if (!freshGate.eligible) {
     // Truthfully parked, never retried: the row leaves the "failed" pool so
     // retryFailedSends stops picking it up.
     await db.campaignSend.update({ where: { id: sendId }, data: { status: "suppressed" } });
+    // And the run learns why. This path also serves retries, where the walk
+    // may be long over, so the run is looked up rather than passed in.
+    const running = await runningRunFor(automation.id, contact.id);
+    if (running) {
+      if (freshGate.reason === "no_consent") {
+        await logRunEvent(running.id, "email_skipped", `"${node.label}": consent not granted yet, not sent`);
+      } else if (freshGate.reason === "no_route") {
+        await stopRun(running.id, "email_unavailable", `"${node.label}" not sent: contact has no email address`);
+      } else {
+        await stopRun(running.id, "unsubscribed", `"${node.label}" not sent: ${freshGate.reason}`);
+      }
+    }
     return;
   }
 
@@ -555,6 +720,14 @@ async function redeliverExisting(
       campaignSendId: sendId,
     });
     const status = await recordSendOutcome(sendId, result);
+    const running = await runningRunFor(automation.id, contact.id);
+    if (running) {
+      await logRunEvent(
+        running.id,
+        status === "failed" ? "email_failed" : "email_sent",
+        `"${node.label}": ${status} via ${provider.name}`,
+      );
+    }
     await db.timelineItem.create({
       data: {
         contactId: contact.id,
@@ -580,6 +753,14 @@ async function redeliverExisting(
       where: { id: sendId },
       data: { status: "failed", attempts: { increment: 1 } },
     });
+    const running = await runningRunFor(automation.id, contact.id);
+    if (running) {
+      await logRunEvent(
+        running.id,
+        "email_failed",
+        `"${node.label}": ${error instanceof Error ? error.message.slice(0, 200) : "unknown error"}`,
+      );
+    }
     await audit(
       automation.workspaceId,
       "system:automation",
@@ -655,10 +836,9 @@ export async function stopRecoveryRunsOnPurchase(contactId: string) {
     select: { id: true },
   });
   if (!runs.length) return;
-  await db.automationRun.updateMany({
-    where: { id: { in: runs.map((r) => r.id) } },
-    data: { status: "exited", endedAt: new Date(), nextDueAt: null },
-  });
+  for (const r of runs) {
+    await stopRun(r.id, "purchased", "purchase ended the recovery chase");
+  }
 }
 
 /**
@@ -701,6 +881,7 @@ export async function sweepWinback(): Promise<number> {
       const run = await db.automationRun.create({
         data: { automationId: a.id, contactId: c.id, status: "running" },
       });
+      await logRunEvent(run.id, "started", "enrolled by customer_inactive sweep");
       await db.automation.update({ where: { id: a.id }, data: { entered: { increment: 1 } } });
       await advanceRun(run.id);
       enrolled += 1;

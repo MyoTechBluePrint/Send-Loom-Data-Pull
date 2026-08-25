@@ -6,6 +6,7 @@ import { gbp, num } from "@/lib/data";
 import { getAutomationsView } from "@/lib/server/views";
 import { db } from "@/lib/server/db";
 import { AutomationStatusButton } from "@/components/automation-status-button";
+import { RunsSection, type RunEventView, type RunView } from "./runs-section";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +33,49 @@ function Node({ n }: { n: { kind: string; label: string; detail: string; stats?:
   );
 }
 
+const fmt = (d: Date) =>
+  d.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+
+// The stoppedReason vocabulary from the engine, in plain English. Unknown
+// reasons fall back to the raw word rather than hiding the run.
+const stopReasons: Record<string, string> = {
+  purchased: "Purchased",
+  entered_other_workflow: "Entered another workflow",
+  condition_failed: "Conditions not met",
+  unsubscribed: "Unsubscribed",
+  email_unavailable: "No email address",
+  stopped_manually: "Stopped manually",
+};
+
+// One diary row as the timeline shows it. The kind carries the headline; the
+// detail column stays as muted context because the engine writes step labels
+// and provider names into it.
+function eventView(e: { id: string; at: Date; kind: string; detail: string | null }): RunEventView {
+  const when = fmt(e.at);
+  const detail = e.detail ?? undefined;
+  switch (e.kind) {
+    case "started": return { id: e.id, when, text: "Started", detail };
+    case "email_sent": return { id: e.id, when, text: "Email sent", detail };
+    case "email_failed": return { id: e.id, when, text: "Email failed", detail };
+    case "email_skipped": return { id: e.id, when, text: "Email skipped", detail };
+    case "waiting": {
+      // The engine writes "until <ISO>"; show the moment, not the ISO string.
+      const m = /^until (.+)$/.exec(e.detail ?? "");
+      const until = m ? new Date(m[1]) : null;
+      return {
+        id: e.id,
+        when,
+        text: until && !Number.isNaN(until.getTime()) ? `Waiting until ${fmt(until)}` : "Waiting",
+      };
+    }
+    case "conditions_passed": return { id: e.id, when, text: "Conditions passed", detail };
+    case "conditions_failed": return { id: e.id, when, text: e.detail ? `Conditions failed: ${e.detail}` : "Conditions failed" };
+    case "stopped": return { id: e.id, when, text: "Stopped", detail };
+    case "completed": return { id: e.id, when, text: "Completed" };
+    default: return { id: e.id, when, text: e.kind.replace(/_/g, " "), detail };
+  }
+}
+
 function Connector() {
   return (
     <div className="flex flex-col items-center py-0.5">
@@ -49,13 +93,22 @@ export default async function AutomationDetail({ params }: { params: Promise<{ i
 
   // The numbers a live workflow owes its owner: who is in it right now, what
   // has actually gone out, and what failed, all from real rows.
-  const [row, runningCount, sends] = await Promise.all([
+  const [row, runningCount, sends, totalRuns, runsRaw] = await Promise.all([
     db.automation.findUnique({ where: { id }, select: { triggerEvent: true, entered: true, completed: true } }),
     db.automationRun.count({ where: { automationId: id, status: "running" } }),
     db.campaignSend.groupBy({
       by: ["status"],
       where: { campaign: { audienceType: "automation", audienceRef: id } },
       _count: true,
+    }),
+    db.automationRun.count({ where: { automationId: id } }),
+    // The debugging table's rows: capped at the latest 100 so a big list
+    // cannot balloon the page. The header notes when the cap bites.
+    db.automationRun.findMany({
+      where: { automationId: id },
+      orderBy: { startedAt: "desc" },
+      take: 100,
+      include: { contact: { select: { email: true, firstName: true, lastName: true } } },
     }),
   ]);
   const sent = sends.filter((s) => ["sent", "delivered"].includes(s.status)).reduce((n, s) => n + s._count, 0);
@@ -69,6 +122,50 @@ export default async function AutomationDetail({ params }: { params: Promise<{ i
   const providerArmed =
     process.env.EMAIL_SENDING_ENABLED === "true" &&
     Boolean(process.env.RESEND_API_KEY || process.env.AWS_ACCESS_KEY_ID);
+
+  // Each run's diary, one query for all visible runs, oldest line first.
+  const events = runsRaw.length
+    ? await db.automationRunEvent.findMany({
+        where: { runId: { in: runsRaw.map((r) => r.id) } },
+        orderBy: { at: "asc" },
+      })
+    : [];
+  const eventsByRun = new Map<string, RunEventView[]>();
+  for (const e of events) {
+    const list = eventsByRun.get(e.runId) ?? [];
+    list.push(eventView(e));
+    eventsByRun.set(e.runId, list);
+  }
+
+  // currentNode is a node id; the reader needs the step's label. Branch
+  // steps are included so a run parked on one still names its step.
+  const labelById = new Map<string, string>();
+  for (const n of auto.nodes) labelById.set(n.id, n.label);
+  if (auto.branches) {
+    for (const n of [...auto.branches.yes, ...auto.branches.no]) labelById.set(n.id, n.label);
+  }
+
+  const runViews: RunView[] = runsRaw.map((r) => {
+    const status: RunView["status"] =
+      r.status === "running" ? "Running" : r.status === "completed" ? "Completed" : "Stopped";
+    const name = [r.contact.firstName, r.contact.lastName].filter(Boolean).join(" ");
+    return {
+      id: r.id,
+      contact: r.contact.email ?? (name || "Contact without email"),
+      status,
+      step: r.currentNode ? labelById.get(r.currentNode) ?? "Step removed from workflow" : "At start",
+      nextDue: r.status === "running" && r.nextDueAt ? fmt(r.nextDueAt) : undefined,
+      stoppedReason:
+        status === "Stopped"
+          ? r.stoppedReason
+            ? stopReasons[r.stoppedReason] ?? r.stoppedReason.replace(/_/g, " ")
+            : "Exited"
+          : undefined,
+      started: fmt(r.startedAt),
+      ended: r.endedAt ? fmt(r.endedAt) : undefined,
+      events: eventsByRun.get(r.id) ?? [],
+    };
+  });
 
   return (
     <Shell
@@ -153,6 +250,8 @@ export default async function AutomationDetail({ params }: { params: Promise<{ i
           )}
         </div>
       </Card>
+
+      {!isTemplate && <RunsSection automationId={id} runs={runViews} totalRuns={totalRuns} />}
     </Shell>
   );
 }
