@@ -43,6 +43,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
 const Rename = z.object({ name: z.string().trim().min(1).max(140) });
 const Archive = z.object({ archived: z.boolean() });
+const Restore = z.object({ deleted: z.literal(false) });
 const Audience = z.object({
   audienceType: z.literal("segment").nullable(),
   audienceRef: z.string().min(1).max(140).nullable(),
@@ -73,9 +74,27 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     return Response.json({ ok: true, name: parsed.data.name });
   }
 
+  // {deleted: false} restores a soft-deleted campaign to whichever list it
+  // lived on. Oversight-level only: the same people who can see the deleted
+  // list. The DeletionRecord stays in the ledger, marked restored.
+  if (body && typeof body === "object" && "deleted" in body) {
+    const parsed = Restore.safeParse(body);
+    if (!parsed.success) return Response.json({ ok: false, error: "Only {deleted: false} is accepted: deletion happens via DELETE." }, { status: 400 });
+    if (!can(user.role, "view_deleted")) {
+      return Response.json({ ok: false, error: "Restoring deleted campaigns requires an admin-level account." }, { status: 403 });
+    }
+    if (!campaign.deletedAt) return Response.json({ ok: true, restored: false });
+    const { restoreCampaign } = await import("@/lib/server/deletion");
+    await restoreCampaign(campaign, user.email);
+    return Response.json({ ok: true, restored: true });
+  }
+
   if (body && typeof body === "object" && "archived" in body) {
     const parsed = Archive.safeParse(body);
     if (!parsed.success) return Response.json({ ok: false, error: "archived must be true or false." }, { status: 400 });
+    if (campaign.deletedAt) {
+      return Response.json({ ok: false, error: "This campaign is deleted. Restore it before archiving or unarchiving." }, { status: 409 });
+    }
     if (campaign.status === "automation") {
       return Response.json({ ok: false, error: "This email belongs to an automation; manage it from the automation." }, { status: 409 });
     }
@@ -131,7 +150,13 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   return Response.json({ ok: true, audienceType, audienceRef, audienceName: label });
 }
 
-// Drafts only: sent campaigns keep their history.
+// Deletion never rewrites history. A draft that never sent anything is the
+// one case with no history to protect, so it hard-deletes; everything else
+// soft-deletes: the row leaves the working interface, its send records and
+// revenue stay counted in every historical metric, and a DeletionRecord
+// says who removed it and what its numbers were at that moment. The old
+// ?permanent=1 erase path is gone on purpose — nobody improves their
+// reported performance by deleting the unsuccessful tests.
 export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const user = await userFromRequest(req);
   if (!user) return Response.json({ ok: false, error: "Not signed in" }, { status: 401 });
@@ -146,33 +171,26 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
     return Response.json({ ok: false, error: "This email belongs to an automation. Delete the workflow to remove it." }, { status: 422 });
   }
 
-  if (campaign.status === "draft") {
-    await db.campaign.delete({ where: { id } });
-    await audit(campaign.workspaceId, user.email, "campaign.draft_deleted", `'${campaign.name}'`);
-    return Response.json({ ok: true });
+  if (campaign.deletedAt) {
+    return Response.json({ ok: false, error: "Already deleted. Its performance history remains in analytics." }, { status: 409 });
   }
 
-  // Permanent deletion of a sent campaign, at the owner's explicit request.
-  // It takes the send history with it: stats stop existing, and the
-  // unsubscribe links baked into already-delivered copies of this email die
-  // (suppression and consent live in their own tables, so anyone who already
-  // unsubscribed stays unsubscribed). That is a call for people who can
-  // send, not for every login, and the client sends ?permanent=1 only from
-  // the confirm dialog that spells the consequences out.
-  if (req.nextUrl.searchParams.get("permanent") !== "1") {
-    return Response.json({ ok: false, error: "Deleting a sent campaign permanently erases its send history. Confirm the permanent delete, or archive it instead." }, { status: 422 });
+  // A campaign mid-flight must stay visible while it is in play.
+  if (campaign.status === "scheduled" || campaign.status === "sending") {
+    return Response.json({ ok: false, error: "This campaign is scheduled or sending. Cancel the send before deleting it." }, { status: 409 });
   }
-  if (!can(user.role, "enable_live_sending")) {
-    return Response.json({ ok: false, error: "Deleting sent campaigns requires an owner-level account." }, { status: 403 });
-  }
+
   const sends = await db.campaignSend.count({ where: { campaignId: id } });
-  await db.$transaction([
-    db.campaignSend.deleteMany({ where: { campaignId: id } }),
-    db.campaign.delete({ where: { id } }),
-  ]);
-  await audit(
-    campaign.workspaceId, user.email, "campaign.permanently_deleted",
-    `'${campaign.name}' · ${sends} send records erased with it`
-  );
-  return Response.json({ ok: true, erasedSends: sends });
+  if (campaign.status === "draft" && sends === 0) {
+    await db.campaign.delete({ where: { id } });
+    await audit(campaign.workspaceId, user.email, "campaign.draft_deleted", `'${campaign.name}' · never sent, no history to keep`);
+    return Response.json({ ok: true, hardDeleted: true });
+  }
+
+  if (!can(user.role, "delete_records")) {
+    return Response.json({ ok: false, error: "Your role cannot delete campaigns." }, { status: 403 });
+  }
+  const { softDeleteCampaign } = await import("@/lib/server/deletion");
+  await softDeleteCampaign(campaign, user.email);
+  return Response.json({ ok: true, softDeleted: true, retainedSends: sends });
 }

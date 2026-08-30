@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Shell, GhostButton } from "@/components/shell";
+import { Shell } from "@/components/shell";
+import { CampaignDuplicateButton } from "@/components/campaign-duplicate-button";
 import { Card, CardHeader, Stat, Badge, HBarChart, Th, Td } from "@/components/ui";
 import { gbp, num } from "@/lib/data";
 import { db } from "@/lib/server/db";
@@ -84,7 +85,7 @@ export default async function CampaignReport({ params }: { params: Promise<{ id:
     <Shell
       title={c.name}
       subtitle={`${c.subject ? `“${c.subject}” · ` : ""}${audienceName}${c.sentAt ? ` · ${c.sentAt.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}` : ""}`}
-      actions={<GhostButton>Duplicate</GhostButton>}
+      actions={<CampaignDuplicateButton campaignId={c.id} />}
     >
       <div className="flex flex-wrap items-center gap-3">
         <Link href="/campaigns" className="text-xs font-semibold text-brand hover:underline">← All campaigns</Link>
@@ -93,6 +94,20 @@ export default async function CampaignReport({ params }: { params: Promise<{ id:
           {c.isDemo ? "Seeded demo data" : "Real sends"}
         </span>
       </div>
+
+      {c.deletedAt && (
+        <Card className="mt-3 border-line bg-zinc-50 px-5 py-3.5">
+          <p className="text-sm font-bold">
+            Deleted {c.deletedAt.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+            {c.deletedBy ? ` by ${c.deletedBy}` : ""}
+          </p>
+          <p className="mt-1 text-sm text-ink-2">
+            This campaign is hidden from the working lists, but every send,
+            open, click and pound of revenue below stays counted in historical
+            analytics. Admins can restore it from the Deleted list.
+          </p>
+        </Card>
+      )}
 
       {/* The email design attached to this campaign, and every way to work
           with it. Hidden for legacy demo rows, which have no real content. */}

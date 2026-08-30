@@ -5,6 +5,7 @@ import { Card, CardHeader, Badge, Stat } from "@/components/ui";
 import { gbp, num } from "@/lib/data";
 import { getAutomationsView } from "@/lib/server/views";
 import { db } from "@/lib/server/db";
+import { can, currentUser } from "@/lib/server/permissions";
 import { AutomationStatusButton } from "@/components/automation-status-button";
 import { RunsSection, type RunEventView, type RunView } from "./runs-section";
 
@@ -87,8 +88,13 @@ function Connector() {
 
 export default async function AutomationDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const auto = (await getAutomationsView()).find((a) => a.id === id);
+  const user = await currentUser();
+  const role = user?.role ?? "viewer";
+  const auto = (await getAutomationsView({ list: "all" })).find((a) => a.id === id);
   if (!auto) notFound();
+  // A deleted workflow's page is an oversight view: only people who can see
+  // the deleted list can open it.
+  if (auto.deletedAt && !can(role, "view_deleted")) notFound();
   const isTemplate = auto.status === "draft" && auto.isDemo;
 
   // The numbers a live workflow owes its owner: who is in it right now, what
@@ -173,10 +179,18 @@ export default async function AutomationDetail({ params }: { params: Promise<{ i
       subtitle={`Trigger: ${auto.trigger}`}
       actions={
         <>
-          <AutomationStatusButton automationId={id} status={auto.status} />
-          <Link href={`/automations/${id}/edit`}>
-            <PrimaryButton>Edit workflow</PrimaryButton>
-          </Link>
+          <AutomationStatusButton
+            automationId={id}
+            status={auto.status}
+            deleted={Boolean(auto.deletedAt)}
+            canDelete={can(role, "delete_records")}
+            canRestore={can(role, "view_deleted")}
+          />
+          {!auto.deletedAt && (
+            <Link href={`/automations/${id}/edit`}>
+              <PrimaryButton>Edit workflow</PrimaryButton>
+            </Link>
+          )}
         </>
       }
     >
@@ -186,6 +200,18 @@ export default async function AutomationDetail({ params }: { params: Promise<{ i
           ? <span className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-[11px] font-bold uppercase text-zinc-600">Template · no live sends yet</span>
           : <Badge value={auto.status} />}
       </div>
+
+      {auto.deletedAt && (
+        <Card className="mt-3 border-line bg-zinc-50 px-5 py-3.5">
+          <p className="text-sm font-bold">Deleted {auto.deletedAt}{auto.deletedBy ? ` by ${auto.deletedBy}` : ""}</p>
+          <p className="mt-1 text-sm text-ink-2">
+            This workflow no longer enrols contacts and is hidden from the
+            working list. Everything it did — runs, sent emails, opens, clicks
+            and revenue — remains in historical analytics and cannot be erased
+            from here. Restoring brings it back paused.
+          </p>
+        </Card>
+      )}
 
       {auto.status === "live" && !providerArmed && (
         <Card className="mt-3 border-amber-300 bg-amber-50 px-5 py-3.5">

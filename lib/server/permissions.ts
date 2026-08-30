@@ -19,17 +19,26 @@ export type Action =
   | "reset_demo_data"
   | "manage_users"
   | "enable_live_sending"
-  | "change_billing";
+  | "change_billing"
+  // Soft-delete campaigns, workflows and other test records from the working
+  // interface. Deletion never erases performance history — it archives the
+  // record out of sight and writes a DeletionRecord — so this is a working
+  // permission, not a destructive one.
+  | "delete_records"
+  // See deleted records, the deletion ledger, and restore. The oversight
+  // permission: whoever holds it can always answer "what was removed, by
+  // whom, and what were its numbers".
+  | "view_deleted";
 
 const GRANTS: Record<Role, Set<Action>> = {
-  owner: new Set(["view_app", "manage_demo_data", "review_intake", "submit_feedback", "triage_feedback", "view_admin", "download_plugin", "reset_demo_data", "manage_users", "enable_live_sending", "change_billing"]),
+  owner: new Set(["view_app", "manage_demo_data", "review_intake", "submit_feedback", "triage_feedback", "view_admin", "download_plugin", "reset_demo_data", "manage_users", "enable_live_sending", "change_billing", "delete_records", "view_deleted"]),
   // Full Access: every capability the owner has, under its own name so it can
   // be tuned separately later without touching the owner role.
-  full_access: new Set(["view_app", "manage_demo_data", "review_intake", "submit_feedback", "triage_feedback", "view_admin", "download_plugin", "reset_demo_data", "manage_users", "enable_live_sending", "change_billing"]),
-  admin: new Set(["view_app", "manage_demo_data", "review_intake", "submit_feedback", "triage_feedback", "view_admin", "download_plugin", "reset_demo_data"]),
-  operator: new Set(["view_app", "manage_demo_data", "review_intake", "submit_feedback", "view_admin"]),
-  ads_operator: new Set(["view_app", "manage_demo_data", "review_intake", "submit_feedback"]),
-  marketing: new Set(["view_app", "manage_demo_data", "review_intake", "submit_feedback"]),
+  full_access: new Set(["view_app", "manage_demo_data", "review_intake", "submit_feedback", "triage_feedback", "view_admin", "download_plugin", "reset_demo_data", "manage_users", "enable_live_sending", "change_billing", "delete_records", "view_deleted"]),
+  admin: new Set(["view_app", "manage_demo_data", "review_intake", "submit_feedback", "triage_feedback", "view_admin", "download_plugin", "reset_demo_data", "delete_records", "view_deleted"]),
+  operator: new Set(["view_app", "manage_demo_data", "review_intake", "submit_feedback", "view_admin", "delete_records"]),
+  ads_operator: new Set(["view_app", "manage_demo_data", "review_intake", "submit_feedback", "delete_records"]),
+  marketing: new Set(["view_app", "manage_demo_data", "review_intake", "submit_feedback", "delete_records"]),
   editor: new Set(["view_app", "manage_demo_data", "submit_feedback"]),
   viewer: new Set(["view_app", "submit_feedback"]),
 };

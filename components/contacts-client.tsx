@@ -163,19 +163,33 @@ export function ContactsClient({ contacts }: { contacts: Subscriber[] }) {
     setTimeout(() => setFlash(null), 2500);
   }
 
-  const rows = useMemo(
-    () =>
-      contacts.filter((s) => {
-        const matchesQ =
-          !q ||
-          s.name.toLowerCase().includes(q.toLowerCase()) ||
-          s.email.toLowerCase().includes(q.toLowerCase()) ||
-          s.tags.some((t) => t.toLowerCase().includes(q.toLowerCase()));
-        const matchesF = filter === "All" || s.consent === filter.toLowerCase();
-        return matchesQ && matchesF && matchesChannelFilter(s, channelFilter);
-      }),
-    [contacts, q, filter, channelFilter]
-  );
+  // Date Added: sort direction (null keeps the server's most-recent-activity
+  // order) and an optional added-between range. Comparison uses the ISO
+  // timestamp, so "same day" boundaries behave as a human expects.
+  const [dateSort, setDateSort] = useState<"newest" | "oldest" | null>(null);
+  const [addedFrom, setAddedFrom] = useState("");
+  const [addedTo, setAddedTo] = useState("");
+
+  const rows = useMemo(() => {
+    const filtered = contacts.filter((s) => {
+      const matchesQ =
+        !q ||
+        s.name.toLowerCase().includes(q.toLowerCase()) ||
+        s.email.toLowerCase().includes(q.toLowerCase()) ||
+        s.tags.some((t) => t.toLowerCase().includes(q.toLowerCase()));
+      const matchesF = filter === "All" || s.consent === filter.toLowerCase();
+      const day = s.addedAtIso?.slice(0, 10);
+      const matchesDates =
+        (!addedFrom && !addedTo) ||
+        (Boolean(day) && (!addedFrom || day! >= addedFrom) && (!addedTo || day! <= addedTo));
+      return matchesQ && matchesF && matchesDates && matchesChannelFilter(s, channelFilter);
+    });
+    if (!dateSort) return filtered;
+    return [...filtered].sort((a, b) => {
+      const cmp = (a.addedAtIso ?? "").localeCompare(b.addedAtIso ?? "");
+      return dateSort === "newest" ? -cmp : cmp;
+    });
+  }, [contacts, q, filter, channelFilter, dateSort, addedFrom, addedTo]);
 
   // The consent overview, from the rows already in hand: click a number and
   // the list underneath becomes those people.
@@ -251,6 +265,30 @@ export function ContactsClient({ contacts }: { contacts: Subscriber[] }) {
             </button>
           ))}
         </div>
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <span className="text-xs font-semibold text-ink-3">Added between</span>
+        <input
+          type="date"
+          value={addedFrom}
+          onChange={(e) => setAddedFrom(e.target.value)}
+          aria-label="Added from date"
+          className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs outline-none focus:border-brand"
+        />
+        <span className="text-xs text-ink-3">and</span>
+        <input
+          type="date"
+          value={addedTo}
+          onChange={(e) => setAddedTo(e.target.value)}
+          aria-label="Added to date"
+          className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs outline-none focus:border-brand"
+        />
+        {(addedFrom || addedTo) && (
+          <button onClick={() => { setAddedFrom(""); setAddedTo(""); }} className="text-xs font-semibold text-ink-3 hover:text-brand">
+            Clear dates
+          </button>
+        )}
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -337,6 +375,15 @@ export function ContactsClient({ contacts }: { contacts: Subscriber[] }) {
                 />
               </Th>
               <Th>Contact</Th>
+              <Th>
+                <button
+                  onClick={() => setDateSort(dateSort === "newest" ? "oldest" : "newest")}
+                  className="inline-flex items-center gap-1 font-semibold hover:text-brand"
+                  title="Sort by the date each contact was first added"
+                >
+                  Date added {dateSort === "newest" ? "↓" : dateSort === "oldest" ? "↑" : "↕"}
+                </button>
+              </Th>
               <Th>Consent</Th>
               <Th className="text-right">Score</Th>
               <Th>Tags</Th>
@@ -355,6 +402,9 @@ export function ContactsClient({ contacts }: { contacts: Subscriber[] }) {
                 <Td>
                   <Link href={`/subscribers/${s.id}`} className="font-medium hover:text-brand">{s.name}</Link>
                   <p className="text-xs text-ink-3">{s.email}</p>
+                </Td>
+                <Td className="whitespace-nowrap text-xs text-ink-2">
+                  <span title={s.addedAtIso ? `First added ${new Date(s.addedAtIso).toLocaleString("en-GB")}` : undefined}>{s.signup}</span>
                 </Td>
                 <Td><ChannelChips s={s} /></Td>
                 <Td className="text-right">
@@ -379,7 +429,7 @@ export function ContactsClient({ contacts }: { contacts: Subscriber[] }) {
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-4 py-10 text-center text-sm text-ink-3">No contacts match.</td>
+                <td colSpan={10} className="px-4 py-10 text-center text-sm text-ink-3">No contacts match.</td>
               </tr>
             )}
           </tbody>

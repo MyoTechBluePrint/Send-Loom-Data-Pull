@@ -68,6 +68,10 @@ export async function getContactsView(): Promise<Subscriber[]> {
       consentUpdatedBy: c.consentUpdatedBy ?? undefined,
       confidence: c.confidence,
       signup: dateStr(c.createdAt),
+      // The true original creation moment, machine-readable, for sorting and
+      // date-range filtering. createdAt is stamped once at first insert and
+      // survives every merge/re-import, so it is the honest "date added".
+      addedAtIso: c.createdAt.toISOString(),
       tags: c.tags.map((t) => t.tag.name),
       lists: [],
       orders: c.ordersCount,
@@ -145,14 +149,23 @@ export async function getImportBatchesView(): Promise<ImportBatch[]> {
 
 // Automation shadow campaigns carry the automation they belong to, so the
 // list can link to the automation rather than a dangling campaign page.
-export type CampaignRow = Campaign & { automationId: string | null };
+export type CampaignRow = Campaign & { automationId: string | null; deletedAt?: string; deletedBy?: string };
 
-export async function getCampaignsView(opts: { archived?: boolean } = {}): Promise<CampaignRow[]> {
+export type CampaignList = "working" | "archived" | "deleted" | "all";
+
+export async function getCampaignsView(opts: { list?: CampaignList } = {}): Promise<CampaignRow[]> {
   const wsId = await demoWorkspaceId();
+  const list = opts.list ?? "working";
+  // Archived campaigns keep every send record but leave the working list.
+  // Deleted campaigns keep every send record too — soft deletion only ever
+  // changes which list shows a row, never what the analytics count.
+  const listWhere =
+    list === "working" ? { archivedAt: null, deletedAt: null }
+    : list === "archived" ? { archivedAt: { not: null }, deletedAt: null }
+    : list === "deleted" ? { deletedAt: { not: null } }
+    : {};
   const campaigns = await db.campaign.findMany({
-    // Archived campaigns keep every send record but leave the working list;
-    // opts.archived flips the list to show only them.
-    where: { workspaceId: wsId, archivedAt: opts.archived ? { not: null } : null },
+    where: { workspaceId: wsId, ...listWhere },
     include: { sends: true },
     orderBy: [{ status: "asc" }, { createdAt: "desc" }],
   });
@@ -192,14 +205,69 @@ export async function getCampaignsView(opts: { archived?: boolean } = {}): Promi
       revenue: c.revenue,
       isDemo: c.isDemo,
       delivered, opened, clicked,
+      deletedAt: c.deletedAt ? dateStr(c.deletedAt) : undefined,
+      deletedBy: c.deletedBy ?? undefined,
     };
   });
 }
 
-export async function getAutomationsView() {
+export type PerformanceScope = {
+  campaigns: number;
+  sends: number;
+  delivered: number;
+  opened: number;
+  clicked: number;
+  revenue: number;
+};
+
+/**
+ * The anti-survivorship-bias numbers: every real campaign that ever sent,
+ * whatever list it sits on now. "all" is the truthful account history —
+ * archived and deleted campaigns included — and is the default lens for
+ * judging performance; "visible" is just the working list, shown alongside
+ * so the difference is in the open instead of quietly flattering.
+ */
+export async function getPerformanceSummary(): Promise<{
+  all: PerformanceScope;
+  visible: PerformanceScope;
+  archivedCount: number;
+  deletedCount: number;
+}> {
   const wsId = await demoWorkspaceId();
+  const rows = await db.campaign.findMany({
+    where: { workspaceId: wsId, isDemo: false, sends: { some: {} } },
+    select: {
+      revenue: true, archivedAt: true, deletedAt: true,
+      sends: { select: { status: true, openedAt: true, clickedAt: true } },
+    },
+  });
+  const fold = (subset: typeof rows): PerformanceScope => {
+    const sends = subset.flatMap((r) => r.sends);
+    return {
+      campaigns: subset.length,
+      sends: sends.length,
+      delivered: sends.filter((s) => ["sent", "delivered", "bounced", "complained"].includes(s.status)).length,
+      opened: sends.filter((s) => s.openedAt).length,
+      clicked: sends.filter((s) => s.clickedAt).length,
+      revenue: subset.reduce((sum, r) => sum + r.revenue, 0),
+    };
+  };
+  return {
+    all: fold(rows),
+    visible: fold(rows.filter((r) => !r.deletedAt && !r.archivedAt)),
+    archivedCount: rows.filter((r) => r.archivedAt && !r.deletedAt).length,
+    deletedCount: rows.filter((r) => r.deletedAt).length,
+  };
+}
+
+export async function getAutomationsView(opts: { list?: "working" | "deleted" | "all" } = {}) {
+  const wsId = await demoWorkspaceId();
+  const list = opts.list ?? "working";
   const autos = await db.automation.findMany({
-    where: { workspaceId: wsId },
+    where: {
+      workspaceId: wsId,
+      ...(list === "working" ? { deletedAt: null } : list === "deleted" ? { deletedAt: { not: null } } : {}),
+    },
     include: { nodes: { orderBy: { position: "asc" } } },
     orderBy: { createdAt: "asc" },
   });
@@ -207,6 +275,8 @@ export async function getAutomationsView() {
     id: a.id, name: a.name, trigger: a.trigger,
     status: a.status as "live" | "paused" | "draft",
     isDemo: a.isDemo,
+    deletedAt: a.deletedAt ? dateStr(a.deletedAt) : undefined,
+    deletedBy: a.deletedBy ?? undefined,
     entered: a.entered, completed: a.completed, revenue: a.revenue, conversion: a.conversion,
     nodes: a.nodes.filter((n) => !n.branch).map((n) => ({ id: n.id, kind: n.kind, label: n.label, detail: n.detail ?? "", stats: n.stats ?? undefined })),
     branches: a.nodes.some((n) => n.branch)

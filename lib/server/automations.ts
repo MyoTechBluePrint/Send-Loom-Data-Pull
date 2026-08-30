@@ -111,7 +111,9 @@ export async function enrolOnEvent(
   contactId: string,
 ) {
   const automations = await db.automation.findMany({
-    where: { workspaceId, status: "live", triggerEvent: eventType },
+    // deletedAt guard is belt and braces: soft deletion also pauses, but a
+    // deleted workflow must never enrol whatever its status says.
+    where: { workspaceId, status: "live", triggerEvent: eventType, deletedAt: null },
     select: { id: true, allowReentry: true },
   });
   for (const a of automations) {
@@ -783,7 +785,8 @@ async function redeliverExisting(
  */
 export async function ensureWelcomeFlow() {
   const flows = await db.automation.findMany({
-    where: { name: { contains: "Welcome" }, triggerEvent: null },
+    // A deleted recipe stays deleted: the boot heal never resurrects one.
+    where: { name: { contains: "Welcome" }, triggerEvent: null, deletedAt: null },
     include: { nodes: { orderBy: { position: "asc" } } },
   });
   for (const flow of flows) {
@@ -851,7 +854,7 @@ export async function stopRecoveryRunsOnPurchase(contactId: string) {
  */
 export async function sweepWinback(): Promise<number> {
   const automations = await db.automation.findMany({
-    where: { status: "live", triggerEvent: "customer_inactive" },
+    where: { status: "live", triggerEvent: "customer_inactive", deletedAt: null },
     include: { nodes: { where: { kind: "trigger" }, take: 1 } },
   });
   let enrolled = 0;

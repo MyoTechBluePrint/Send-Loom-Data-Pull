@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/server/db";
 import { audit } from "@/lib/server/audit";
 import { demoWorkspaceId } from "@/lib/server/views";
-import { currentUser } from "@/lib/server/permissions";
+import { can, currentUser } from "@/lib/server/permissions";
 import { TRIGGER_EVENTS, ensureShadowCampaigns, adoptShadowContent } from "@/lib/server/automations";
 import { CONDITION_TYPES } from "@/lib/server/automation-conditions";
 import { parseBlocks } from "@/lib/server/email-blocks";
@@ -116,6 +116,8 @@ const Patch = z.object({
   triggerEvent: z.string().max(60).nullable().optional(),
   allowReentry: z.boolean().optional(),
   status: z.enum(["live", "paused", "draft"]).optional(),
+  // Restore only: deletion happens via DELETE, never via PATCH.
+  deleted: z.literal(false).optional(),
 });
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -129,6 +131,23 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   if (!parsed.success) return Response.json({ ok: false, error: parsed.error.flatten() }, { status: 400 });
 
   const d = parsed.data;
+
+  if (d.deleted === false) {
+    if (!can(user.role, "view_deleted")) {
+      return Response.json({ ok: false, error: "Restoring deleted workflows requires an admin-level account." }, { status: 403 });
+    }
+    if (automation.deletedAt) {
+      const { restoreAutomation } = await import("@/lib/server/deletion");
+      await restoreAutomation({ id: automation.id, workspaceId, name: automation.name }, user.email);
+    }
+    return Response.json({ ok: true, status: "paused", restored: Boolean(automation.deletedAt) });
+  }
+
+  // A deleted workflow is read-only history until an admin restores it.
+  if (automation.deletedAt) {
+    return Response.json({ ok: false, error: "This workflow is deleted. Restore it before editing." }, { status: 409 });
+  }
+
   if (d.status === "live" && !(d.triggerEvent ?? automation.triggerEvent)) {
     return Response.json(
       { ok: false, error: "Choose what starts this workflow before setting it live." },
@@ -219,6 +238,10 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
   const { workspaceId, automation } = await owned(id);
   if (!automation) return Response.json({ ok: false }, { status: 404 });
 
+  if (automation.deletedAt) {
+    return Response.json({ ok: false, error: "This workflow is deleted. Restore it before editing." }, { status: 409 });
+  }
+
   const parsed = Put.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return Response.json({ ok: false, error: parsed.error.flatten() }, { status: 400 });
 
@@ -278,6 +301,44 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
     orderBy: { position: "asc" },
   });
   return Response.json({ ok: true, nodes: await nodesPayload(saved) });
+}
+
+// Delete a workflow. A recipe that never ran has no history to protect and
+// hard-deletes cleanly (nodes and empty shadow campaigns with it). Anything
+// that ever enrolled a contact or sent an email soft-deletes: paused, stamped,
+// its running contacts stopped, its shadow campaigns hidden alongside it, and
+// every run, diary and send row kept so historical analytics never change.
+export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const user = await currentUser();
+  if (!user) return Response.json({ ok: false }, { status: 401 });
+  if (!can(user.role, "delete_records")) {
+    return Response.json({ ok: false, error: "Your role cannot delete workflows." }, { status: 403 });
+  }
+  const { id } = await ctx.params;
+  const { workspaceId, automation } = await owned(id);
+  if (!automation) return Response.json({ ok: false }, { status: 404 });
+  if (automation.deletedAt) {
+    return Response.json({ ok: false, error: "Already deleted. Its performance history remains in analytics." }, { status: 409 });
+  }
+
+  const [runs, sends] = await Promise.all([
+    db.automationRun.count({ where: { automationId: automation.id } }),
+    db.campaignSend.count({ where: { campaign: { audienceType: "automation", audienceRef: automation.id } } }),
+  ]);
+
+  if (runs === 0 && sends === 0) {
+    await db.$transaction(async (tx) => {
+      await tx.automationNode.deleteMany({ where: { automationId: automation.id } });
+      await tx.campaign.deleteMany({ where: { audienceType: "automation", audienceRef: automation.id } });
+      await tx.automation.delete({ where: { id: automation.id } });
+    });
+    await audit(workspaceId, user.email, "automation.draft_deleted", `'${automation.name}' · never ran, no history to keep`);
+    return Response.json({ ok: true, hardDeleted: true });
+  }
+
+  const { softDeleteAutomation } = await import("@/lib/server/deletion");
+  await softDeleteAutomation({ id: automation.id, workspaceId, name: automation.name, createdAt: automation.createdAt }, user.email);
+  return Response.json({ ok: true, softDeleted: true, retainedRuns: runs, retainedSends: sends });
 }
 
 const Post = z.object({

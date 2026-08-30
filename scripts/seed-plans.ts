@@ -206,6 +206,19 @@ async function main() {
     data: { disabled: true },
   });
 
+  // More launch hygiene: the sequence-engine test workflow left paused on the
+  // live workspace (25 Aug) is soft-deleted on boot. Its runs and the proof
+  // emails it sent stay in historical analytics; it just leaves the working
+  // list. Idempotent — the deletedAt check keeps this a one-off.
+  const seqTest = await db.automation.findFirst({
+    where: { name: { contains: "SEQ TEST" }, deletedAt: null },
+  });
+  if (seqTest) {
+    const { softDeleteAutomation } = await import("../lib/server/deletion");
+    await softDeleteAutomation(seqTest, "system (boot cleanup)");
+    console.log(`  Soft-deleted leftover test workflow "${seqTest.name}" — history retained.`);
+  }
+
   await db.$disconnect();
 }
 

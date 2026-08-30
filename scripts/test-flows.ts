@@ -310,7 +310,7 @@ async function main() {
     check("sent campaign archives", res.status === 200 && (await db.campaign.findUnique({ where: { id: camp.id } }))?.archivedAt !== null);
     let view = await getCampaignsView();
     check("archived campaign hidden from the working list", !view.some((r) => r.id === camp.id));
-    view = await getCampaignsView({ archived: true });
+    view = await getCampaignsView({ list: "archived" });
     check("archived filter shows it", view.some((r) => r.id === camp.id));
     res = await patch(camp.id, { archived: false });
     view = await getCampaignsView();
@@ -330,30 +330,111 @@ async function main() {
     view = await getCampaignsView();
     check("shadow row links to its automation", view.find((r) => r.id === shadow.id)?.automationId === "auto-missing");
 
-    // Delete: drafts go, sent campaigns keep their history.
+    // Delete: a never-sent draft has no history and hard-deletes; anything
+    // with send history soft-deletes. Nothing in the API erases performance.
     res = await del(draft.id);
-    check("draft delete still works", res.status === 200 && (await db.campaign.findUnique({ where: { id: draft.id } })) === null);
-    res = await del(camp.id);
-    check("sent campaign cannot be hard-deleted without confirming", res.status === 422 && (await db.campaign.findUnique({ where: { id: camp.id } })) !== null);
+    check("never-sent draft hard-deletes", res.status === 200 && (await db.campaign.findUnique({ where: { id: draft.id } })) === null);
 
-    // Permanent delete: confirmed, owner-level only, takes the sends with it.
-    const delForever = (id: string, cookieOverride?: string) =>
-      cDelete(new NextRequest(`http://localhost/api/campaigns/${id}?permanent=1`, { method: "DELETE", headers: { cookie: cookieOverride ?? cookie } } as ConstructorParameters<typeof NextRequest>[1]), { params: Promise.resolve({ id }) });
-    res = await delForever(camp.id);
-    check("permanent delete refused below owner level", res.status === 403 && (await db.campaign.findUnique({ where: { id: camp.id } })) !== null);
-    const boss = await db.user.create({ data: { workspaceId: ws.id, email: `flows.owner.${STAMP}@test.local`, name: "Flow Owner", role: "owner" } });
-    const bossCookie = `${SESSION_COOKIE}=${createSessionToken(boss.email)}`;
+    const asUser = (method: string, id: string, cookieOverride: string, body?: unknown) =>
+      new NextRequest(`http://localhost/api/campaigns/${id}`, {
+        method,
+        headers: { cookie: cookieOverride, "content-type": "application/json" },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      } as ConstructorParameters<typeof NextRequest>[1]);
+    const restricted = await db.user.create({ data: { workspaceId: ws.id, email: `flows.viewer.${STAMP}@test.local`, name: "Flow Viewer", role: "viewer" } });
+    const viewerCookie = `${SESSION_COOKIE}=${createSessionToken(restricted.email)}`;
+
     await db.campaignSend.create({ data: { campaignId: camp.id, contactId: alice!.id, status: "simulated" } }).catch(() => {});
-    res = await delForever(camp.id, bossCookie);
-    const campGone = (await db.campaign.findUnique({ where: { id: camp.id } })) === null;
-    const sendsGone = (await db.campaignSend.count({ where: { campaignId: camp.id } })) === 0;
-    check("permanent delete erases campaign and sends for an owner", res.status === 200 && campGone && sendsGone);
-    res = await delForever(shadow.id, bossCookie);
-    check("automation shadow refuses permanent delete too", res.status === 422 && (await db.campaign.findUnique({ where: { id: shadow.id } })) !== null);
-    await db.user.delete({ where: { id: boss.id } });
+    const sendsBefore = await db.campaignSend.count({ where: { campaignId: camp.id } });
+    res = await cDelete(asUser("DELETE", camp.id, viewerCookie), { params: Promise.resolve({ id: camp.id }) });
+    check("delete refused for roles without delete_records", res.status === 403 && (await db.campaign.findUnique({ where: { id: camp.id } })) !== null);
 
+    res = await del(camp.id);
+    const softBody = (await res.json()) as { softDeleted?: boolean };
+    const softRow = await db.campaign.findUnique({ where: { id: camp.id } });
+    check("sent campaign soft-deletes, row survives", res.status === 200 && softBody.softDeleted === true && softRow?.deletedAt != null);
+    check("send history survives deletion", (await db.campaignSend.count({ where: { campaignId: camp.id } })) === sendsBefore);
+    const ledger = await db.deletionRecord.findFirst({ where: { entityType: "campaign", entityId: camp.id } });
+    check("deletion ledger row written with actor and KPIs", ledger?.deletedBy === tester.email && JSON.parse(ledger?.metricsSnapshot ?? "{}").sends === sendsBefore);
+    view = await getCampaignsView();
+    check("deleted campaign off the working list", !view.some((r) => r.id === camp.id));
+    view = await getCampaignsView({ list: "deleted" });
+    check("deleted lens shows it stamped", view.some((r) => r.id === camp.id && r.deletedAt));
+    const { getPerformanceSummary } = await import("../lib/server/views");
+    const perf = await getPerformanceSummary();
+    check("all-time totals still count the deleted campaign", perf.deletedCount >= 1 && perf.all.sends >= perf.visible.sends + sendsBefore);
+    res = await del(camp.id);
+    check("double delete refused", res.status === 409);
+    res = await patch(camp.id, { archived: true });
+    check("archiving a deleted campaign refused", res.status === 409);
+
+    // Restore: oversight-level only; the ledger row stays, marked restored.
+    res = await cPatch(asUser("PATCH", camp.id, viewerCookie, { deleted: false }), { params: Promise.resolve({ id: camp.id }) });
+    check("restore refused below admin level", res.status === 403);
+    res = await patch(camp.id, { deleted: false });
+    view = await getCampaignsView();
+    const ledgerAfter = await db.deletionRecord.findFirst({ where: { entityType: "campaign", entityId: camp.id } });
+    check("restore returns the campaign to its list", res.status === 200 && view.some((r) => r.id === camp.id));
+    check("ledger row survives restore, marked restored", ledgerAfter?.restoredAt != null);
+
+    res = await del(shadow.id);
+    check("automation shadow still refuses delete", res.status === 422 && (await db.campaign.findUnique({ where: { id: shadow.id } })) !== null);
+
+    await db.deletionRecord.deleteMany({ where: { entityId: camp.id } });
+    await db.campaignSend.deleteMany({ where: { campaignId: camp.id } });
+    await db.campaign.delete({ where: { id: camp.id } }).catch(() => {});
     await db.campaign.delete({ where: { id: shadow.id } }).catch(() => {});
+    await db.user.delete({ where: { id: restricted.id } });
     await db.user.delete({ where: { id: tester.id } });
+  }
+
+  console.log("Workflow soft deletion");
+  {
+    const { softDeleteAutomation, restoreAutomation } = await import("../lib/server/deletion");
+    const { enrolOnEvent } = await import("../lib/server/automations");
+    const { getAutomationsView } = await import("../lib/server/views");
+
+    const auto = await db.automation.create({
+      data: { workspaceId: ws.id, name: `Del flow ${STAMP}`, trigger: "Test trigger", triggerEvent: "popup_submitted", status: "live", entered: 3, revenue: 120 },
+    });
+    const shadowC = await db.campaign.create({
+      data: { workspaceId: ws.id, name: `Del flow shadow ${STAMP}`, status: "automation", audienceType: "automation", audienceRef: auto.id },
+    });
+    await db.campaignSend.create({ data: { campaignId: shadowC.id, contactId: alice!.id, status: "sent" } });
+    const run = await db.automationRun.create({ data: { automationId: auto.id, contactId: alice!.id, status: "running" } });
+
+    await softDeleteAutomation(auto, "flows@test.local");
+    const after = await db.automation.findUnique({ where: { id: auto.id } });
+    check("workflow soft delete pauses and stamps", after?.status === "paused" && after?.deletedAt != null);
+    check("running contact stopped at deletion", (await db.automationRun.findUnique({ where: { id: run.id } }))?.status !== "running");
+    check("shadow campaign hidden alongside its workflow", (await db.campaign.findUnique({ where: { id: shadowC.id } }))?.deletedAt != null);
+    check("workflow sends survive deletion", (await db.campaignSend.count({ where: { campaignId: shadowC.id } })) === 1);
+    const rec = await db.deletionRecord.findFirst({ where: { entityType: "automation", entityId: auto.id } });
+    const snap = rec ? JSON.parse(rec.metricsSnapshot) : null;
+    check("workflow ledger snapshots KPIs", snap?.entered === 3 && snap?.emailsSent === 1 && snap?.revenue === 120);
+    let autoView = await getAutomationsView();
+    check("deleted workflow off the working list", !autoView.some((a) => a.id === auto.id));
+    autoView = await getAutomationsView({ list: "deleted" });
+    check("deleted lens shows the workflow", autoView.some((a) => a.id === auto.id));
+
+    // Even forced live, a deleted workflow never enrols another contact.
+    await db.automation.update({ where: { id: auto.id }, data: { status: "live" } });
+    const runsBefore = await db.automationRun.count({ where: { automationId: auto.id } });
+    await enrolOnEvent(ws.id, "popup_submitted", alice!.id);
+    check("deleted workflow never enrols", (await db.automationRun.count({ where: { automationId: auto.id } })) === runsBefore);
+    await db.automation.update({ where: { id: auto.id }, data: { status: "paused" } });
+
+    await restoreAutomation({ id: auto.id, workspaceId: ws.id, name: auto.name }, "flows@test.local");
+    const restoredAuto = await db.automation.findUnique({ where: { id: auto.id } });
+    check("workflow restore comes back paused, never live", restoredAuto?.deletedAt === null && restoredAuto?.status === "paused");
+    check("shadow campaign restored with its workflow", (await db.campaign.findUnique({ where: { id: shadowC.id } }))?.deletedAt === null);
+
+    await db.automationRunEvent.deleteMany({ where: { runId: run.id } });
+    await db.automationRun.deleteMany({ where: { automationId: auto.id } });
+    await db.campaignSend.deleteMany({ where: { campaignId: shadowC.id } });
+    await db.campaign.delete({ where: { id: shadowC.id } });
+    await db.deletionRecord.deleteMany({ where: { entityId: auto.id } });
+    await db.automation.delete({ where: { id: auto.id } });
   }
 
   console.log("Overlap-safe delivery");

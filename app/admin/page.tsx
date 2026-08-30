@@ -4,6 +4,7 @@ import { num } from "@/lib/data";
 import { db } from "@/lib/server/db";
 import { getAuditView, getImportBatchesView, getProvidersView } from "@/lib/server/views";
 import { can, currentUser } from "@/lib/server/permissions";
+import { campaignMetrics, automationMetrics, type CampaignMetrics, type AutomationMetrics } from "@/lib/server/deletion";
 import { AdminFeedbackClient, type FeedbackView } from "@/components/admin-feedback-client";
 import { AdminAuditClient } from "@/components/admin-audit-client";
 import { AdminResetClient } from "@/components/admin-reset-client";
@@ -16,6 +17,86 @@ const provChip: Record<string, string> = {
   error: "bg-red-50 text-red-700",
   "not connected": "bg-zinc-100 text-zinc-600",
 };
+
+const when = (d: Date) => d.toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+
+// Snapshot and live metrics share one loose shape here: the kind tag picks
+// the sentence, and old snapshots missing fields fall back to zeros.
+type AnyMetrics = Partial<Omit<CampaignMetrics, "kind">> & Partial<Omit<AutomationMetrics, "kind">> & { kind?: string };
+
+// One deletion's KPIs as a sentence, snapshot or live.
+function kpiLine(m: AnyMetrics | null): string {
+  if (!m || Object.keys(m).length === 0) return "no metrics recorded";
+  if (m.kind === "automation") {
+    return `${num(m.entered ?? 0)} entered · ${num(m.emailsSent ?? 0)} emails · ${num(m.opened ?? 0)} opens · £${(m.revenue ?? 0).toFixed(2)}`;
+  }
+  return `${num(m.sends ?? 0)} sends · ${num(m.opened ?? 0)} opens · ${num(m.clicked ?? 0)} clicks · £${(m.revenue ?? 0).toFixed(2)}`;
+}
+
+/**
+ * The deletion ledger: what was removed from the working interface, by whom,
+ * with its numbers frozen at that moment — and the same numbers live now,
+ * because the underlying rows survive and later attribution keeps landing.
+ * Append-only: there is no API that edits or clears these rows, so deletion
+ * history cannot itself be deleted.
+ */
+async function DeletionLedger() {
+  const records = await db.deletionRecord.findMany({ orderBy: { deletedAt: "desc" }, take: 50 });
+  const rows = await Promise.all(
+    records.map(async (d) => {
+      let snapshot: AnyMetrics | null = null;
+      try { snapshot = JSON.parse(d.metricsSnapshot); } catch { snapshot = null; }
+      const current: AnyMetrics | null =
+        d.entityType === "campaign" ? await campaignMetrics(d.entityId) : await automationMetrics(d.entityId);
+      return { d, snapshot, current };
+    }),
+  );
+  return (
+    <Card className="mt-4">
+      <CardHeader
+        title="Deletion history"
+        subtitle="Everything removed from the working interface · performance stays counted in analytics, so results cannot be improved by deleting poor tests"
+      />
+      <div className="overflow-x-auto scroll-thin"><table className="w-full min-w-[860px]">
+        <thead className="border-b border-line">
+          <tr>
+            <Th>What</Th>
+            <Th>Deleted</Th>
+            <Th>Originally created</Th>
+            <Th>Metrics at deletion</Th>
+            <Th>Metrics now</Th>
+            <Th className="text-right">State</Th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-line">
+          {rows.map(({ d, snapshot, current }) => (
+            <tr key={d.id} className="hover:bg-[#fafaf8]">
+              <Td>
+                <p className="text-[13px] font-medium">{d.name}</p>
+                <p className="text-[11px] capitalize text-ink-3">{d.entityType}</p>
+              </Td>
+              <Td className="text-xs text-ink-2">
+                {when(d.deletedAt)}
+                <p className="text-[11px] text-ink-3">by {d.deletedBy}</p>
+              </Td>
+              <Td className="text-xs text-ink-2">{d.entityCreatedAt.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</Td>
+              <Td className="text-xs text-ink-2">{kpiLine(snapshot)}</Td>
+              <Td className="text-xs text-ink-2">{current ? kpiLine(current) : "record purged outside the app"}</Td>
+              <Td className="text-right">
+                <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${d.restoredAt ? "bg-emerald-50 text-emerald-700" : "bg-zinc-100 text-zinc-600"}`}>
+                  {d.restoredAt ? `Restored ${d.restoredAt.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}` : "Deleted"}
+                </span>
+              </Td>
+            </tr>
+          ))}
+          {rows.length === 0 && (
+            <tr><td colSpan={6} className="px-5 py-8 text-center text-sm text-ink-3">Nothing has been deleted yet.</td></tr>
+          )}
+        </tbody>
+      </table></div>
+    </Card>
+  );
+}
 
 export default async function AdminPage() {
   const user = await currentUser();
@@ -123,6 +204,8 @@ export default async function AdminPage() {
           </table></div>
         </Card>
       </div>
+
+      {can(role, "view_deleted") && <DeletionLedger />}
 
       <AdminFeedbackClient items={feedback} canTriage={can(role, "triage_feedback")} />
 

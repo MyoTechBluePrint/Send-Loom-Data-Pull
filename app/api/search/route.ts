@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
       },
       include: { score: true }, take: 5,
     }),
-    db.campaign.findMany({ where: { workspaceId: wsId, OR: [{ name: { contains: q } }, { subject: { contains: q } }] }, take: 4 }),
+    db.campaign.findMany({ where: { workspaceId: wsId, deletedAt: null, OR: [{ name: { contains: q } }, { subject: { contains: q } }] }, take: 4 }),
     db.segment.findMany({ where: { workspaceId: wsId, name: { contains: q } }, take: 4 }),
     db.salesTask.findMany({ where: { workspaceId: wsId, OR: [{ type: { contains: q } }, { contactLabel: { contains: q } }, { note: { contains: q } }] }, take: 4 }),
     db.keyword.findMany({ where: { workspaceId: wsId, term: { contains: q } }, take: 4 }),

@@ -403,6 +403,12 @@ model Campaign {
   /// but they can leave the shelf. Archived campaigns keep every record and
   /// simply stop appearing in the working list.
   archivedAt       DateTime?
+  /// Soft deletion. The row, its sends and its revenue stay on the books so
+  /// historical analytics can never be improved by deleting poor performers;
+  /// only the working interface stops showing it. Nothing in the UI erases
+  /// performance history.
+  deletedAt        DateTime?
+  deletedBy        String?
   // Which door this campaign leaves by. Email is the only wired provider
   // today; sms/whatsapp gate and count identically so the day a provider
   // lands nothing about eligibility has to change.
@@ -486,6 +492,11 @@ model Automation {
   completed    Int       @default(0)
   revenue      Float     @default(0)
   conversion   Float     @default(0)
+  /// Soft deletion, same contract as Campaign: runs, sends and stats stay
+  /// counted in historical analytics; the workflow just leaves the working
+  /// list and can never enrol another contact.
+  deletedAt    DateTime?
+  deletedBy    String?
   createdAt    DateTime  @default(now())
 
   nodes AutomationNode[]
@@ -1051,6 +1062,29 @@ model Feedback {
   createdAt    DateTime @default(now())
 
   @@index([workspaceId, createdAt])
+}
+
+/// The deletion ledger: one row per soft-deleted campaign or automation,
+/// written in the same transaction as the deletion itself. Append-only by
+/// design — no API updates or deletes rows here, so nobody can tidy away the
+/// record of what they removed. metricsSnapshot freezes the KPIs at the
+/// moment of deletion; because the underlying rows survive, the admin view
+/// can also compute the current historical numbers live and show drift as
+/// later attribution arrives.
+model DeletionRecord {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  entityType      String // campaign | automation
+  entityId        String
+  name            String
+  entityCreatedAt DateTime
+  deletedBy       String
+  deletedAt       DateTime @default(now())
+  metricsSnapshot String // JSON KPIs at deletion time
+  restoredAt      DateTime?
+  restoredBy      String?
+
+  @@index([workspaceId, deletedAt])
 }
 
 model AuditLog {

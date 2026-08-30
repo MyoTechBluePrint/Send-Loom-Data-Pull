@@ -56,6 +56,8 @@ export type Subscriber = {
   consentUpdatedBy?: string;
   confidence: number;
   signup: string;
+  /** ISO creation timestamp for sorting/filtering; display uses `signup`. */
+  addedAtIso?: string;
   tags: string[];
   lists: string[];
   orders: number;

@@ -6,14 +6,30 @@ import { useState } from "react";
 import { Shell, PrimaryButton, GhostButton } from "@/components/shell";
 import { Card, Badge, Th, Td } from "@/components/ui";
 import { gbp, num, type Campaign } from "@/lib/data";
+import type { CampaignList, PerformanceScope } from "@/lib/server/views";
 
 type SendSummary = { sent: number; failed: number; skippedConsent: number; skippedSuppressed: number; skippedNoEmail: number; provider: string };
 
 // Rows from getCampaignsView: the base Campaign shape plus the automation an
-// automation shadow campaign belongs to, so its row links there.
-type CampaignRow = Campaign & { automationId?: string | null };
+// automation shadow campaign belongs to, so its row links there, and the
+// deletion stamp when the row comes from the deleted or all lenses.
+type CampaignRow = Campaign & { automationId?: string | null; deletedAt?: string; deletedBy?: string };
 
-export function CampaignsClient({ campaigns, archived = false }: { campaigns: CampaignRow[]; archived?: boolean }) {
+type Summary = { all: PerformanceScope; visible: PerformanceScope; archivedCount: number; deletedCount: number };
+
+export function CampaignsClient({
+  campaigns,
+  list = "working",
+  canSeeDeleted = false,
+  perf,
+}: {
+  campaigns: CampaignRow[];
+  list?: CampaignList;
+  canSeeDeleted?: boolean;
+  perf?: Summary;
+}) {
+  const archived = list === "archived";
+  const deletedView = list === "deleted";
   const router = useRouter();
   const [sending, setSending] = useState<string | null>(null);
   const [summary, setSummary] = useState<SendSummary | null>(null);
@@ -46,19 +62,24 @@ export function CampaignsClient({ campaigns, archived = false }: { campaigns: Ca
     router.refresh();
   }
 
-  async function removeForever(id: string, name: string, recipients: number | null) {
-    // The consequences in the dialog, not in a doc: erased stats, dead
-    // unsubscribe links in copies already delivered. Archive is the safe
-    // sibling and the dialog says so.
-    const detail = recipients
-      ? `its ${num(recipients)} send records and their open/click history are erased, and the unsubscribe links inside the already-delivered copies stop working`
-      : "its send records are erased";
+  async function removeSent(id: string, name: string) {
+    // The truth in the dialog: deletion tidies the working view and never
+    // touches the numbers. Nobody deletes their way to a better report.
     if (!window.confirm(
-      `Permanently delete '${name}'?\n\nThis cannot be undone: ${detail}. Contacts who already unsubscribed stay unsubscribed.\n\nIf you only want it out of the list, Cancel and use Archive instead.`
+      `Delete '${name}'?\n\nIt disappears from the working lists, but its sends, opens, clicks and revenue stay in historical analytics permanently — deleting a campaign never improves reported performance. Admins can view and restore deleted campaigns.`
     )) return;
-    const res = await fetch(`/api/campaigns/${id}?permanent=1`, { method: "DELETE" });
+    const res = await fetch(`/api/campaigns/${id}`, { method: "DELETE" });
     const body = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
     if (!body.ok) window.alert(body.error ?? "The campaign could not be deleted.");
+    router.refresh();
+  }
+
+  async function restoreDeleted(id: string) {
+    const res = await fetch(`/api/campaigns/${id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ deleted: false }),
+    });
+    const body = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+    if (!body.ok) setError(body.error ?? "The campaign could not be restored.");
     router.refresh();
   }
 
@@ -166,9 +187,47 @@ export function CampaignsClient({ campaigns, archived = false }: { campaigns: Ca
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</div>
       )}
 
-      <div className="mb-3 flex items-center gap-1.5">
-        <Link href="/campaigns" className={filterLink(!archived)}>Working list</Link>
+      {perf && perf.all.sends > 0 && (
+        <Card className="mb-4 px-5 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-[13px] font-semibold">All-time performance · every campaign that ever sent</p>
+            <p className="text-[11px] text-ink-3">
+              includes {perf.archivedCount} archived and {perf.deletedCount} deleted · deletion never removes results from these totals
+            </p>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            {([
+              ["Campaigns", num(perf.all.campaigns)],
+              ["Sends", num(perf.all.sends)],
+              ["Delivered", num(perf.all.delivered)],
+              ["Opens", `${num(perf.all.opened)}${perf.all.delivered ? ` · ${Math.round((perf.all.opened / perf.all.delivered) * 1000) / 10}%` : ""}`],
+              ["Clicks", `${num(perf.all.clicked)}${perf.all.delivered ? ` · ${Math.round((perf.all.clicked / perf.all.delivered) * 1000) / 10}%` : ""}`],
+              ["Attributed revenue", gbp(perf.all.revenue)],
+            ] as [string, string][]).map(([k, v]) => (
+              <div key={k}>
+                <p className="text-[11px] font-medium text-ink-3">{k}</p>
+                <p className="tabular mt-0.5 text-sm font-semibold">{v}</p>
+              </div>
+            ))}
+          </div>
+          {(perf.deletedCount > 0 || perf.archivedCount > 0) && (
+            <p className="mt-3 border-t border-line pt-2.5 text-[11px] text-ink-3">
+              Working list alone: {num(perf.visible.sends)} sends · {num(perf.visible.opened)} opens · {gbp(perf.visible.revenue)} revenue.
+              Judge overall performance by the all-time row above — it is the complete, unedited history.
+            </p>
+          )}
+        </Card>
+      )}
+
+      <div className="mb-3 flex flex-wrap items-center gap-1.5">
+        <Link href="/campaigns" className={filterLink(list === "working")}>Working list</Link>
         <Link href="/campaigns?filter=archived" className={filterLink(archived)}>Archived</Link>
+        {canSeeDeleted && (
+          <>
+            <Link href="/campaigns?filter=deleted" className={filterLink(deletedView)}>Deleted</Link>
+            <Link href="/campaigns?filter=all" className={filterLink(list === "all")}>All</Link>
+          </>
+        )}
       </div>
 
       <Card>
@@ -189,7 +248,11 @@ export function CampaignsClient({ campaigns, archived = false }: { campaigns: Ca
             {campaigns.length === 0 && (
               <tr>
                 <td colSpan={8} className="px-4 py-6 text-sm text-ink-3">
-                  {archived ? "No archived campaigns. Archiving a sent campaign moves it here without losing its history." : "No campaigns yet."}
+                  {deletedView
+                    ? "No deleted campaigns. Deleting a campaign moves it here — its performance history always stays in analytics."
+                    : archived
+                      ? "No archived campaigns. Archiving a sent campaign moves it here without losing its history."
+                      : "No campaigns yet."}
                 </td>
               </tr>
             )}
@@ -279,7 +342,22 @@ export function CampaignsClient({ campaigns, archived = false }: { campaigns: Ca
                       <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${c.isDemo ? "bg-zinc-100 text-zinc-500" : "bg-emerald-50 text-emerald-700"}`}>
                         {c.isDemo ? "Demo" : "Real"}
                       </span>
-                      {archived ? (
+                      {c.deletedAt ? (
+                        <>
+                          <span className="text-[11px] text-ink-3" title={c.deletedBy ? `Deleted by ${c.deletedBy}` : undefined}>
+                            Deleted {c.deletedAt}
+                          </span>
+                          {canSeeDeleted && (
+                            <button
+                              onClick={() => restoreDeleted(c.id)}
+                              className="rounded-lg border border-line px-2.5 py-1.5 text-[11px] font-semibold text-ink-2 hover:bg-[#f0efec]"
+                              title="Restore · returns it to its list; the deletion stays in the audit ledger"
+                            >
+                              Restore
+                            </button>
+                          )}
+                        </>
+                      ) : archived ? (
                         <>
                           <button
                             disabled={shelving === c.id}
@@ -289,9 +367,9 @@ export function CampaignsClient({ campaigns, archived = false }: { campaigns: Ca
                             {shelving === c.id ? "…" : "Restore"}
                           </button>
                           <button
-                            onClick={() => removeForever(c.id, name, c.recipients)}
+                            onClick={() => removeSent(c.id, name)}
                             className="rounded-lg border border-line px-2 py-1.5 text-[11px] font-semibold text-ink-3 hover:bg-red-50 hover:text-red-700"
-                            title="Delete forever · erases the campaign and its send history"
+                            title="Delete · removes it from the lists; performance history stays in analytics"
                           >
                             Delete
                           </button>
@@ -307,9 +385,9 @@ export function CampaignsClient({ campaigns, archived = false }: { campaigns: Ca
                             {shelving === c.id ? "…" : "Archive"}
                           </button>
                           <button
-                            onClick={() => removeForever(c.id, name, c.recipients)}
+                            onClick={() => removeSent(c.id, name)}
                             className="rounded-lg border border-line px-2 py-1.5 text-[11px] font-semibold text-ink-3 hover:bg-red-50 hover:text-red-700"
-                            title="Delete forever · erases the campaign and its send history"
+                            title="Delete · removes it from the lists; performance history stays in analytics"
                           >
                             ✕
                           </button>
@@ -328,7 +406,9 @@ export function CampaignsClient({ campaigns, archived = false }: { campaigns: Ca
           contact through the workspace's provider, after consent, suppression
           and content checks. The confirm step shows exactly who will receive
           it; rows sent before the provider was armed were simulated and never
-          reached an inbox, which is why their opens read 0%.
+          reached an inbox, which is why their opens read 0%. Deleting a
+          campaign only removes it from the working lists — its results stay
+          in historical analytics permanently.
         </p>
       </Card>
     </Shell>
