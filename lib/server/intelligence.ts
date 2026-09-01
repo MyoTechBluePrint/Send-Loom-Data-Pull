@@ -225,9 +225,10 @@ export function renderEmail(
     // ways (bgcolor attribute, td style, anchor style) because dark-mode
     // clients recolour anything they are allowed to.
     const site = process.env.MYOTECH_ES_SITE ?? "https://myotech.es";
-    // The full-colour wordmark, so it needs a white band to sit on: the navy
-    // half of it would disappear straight into the ink ground below.
-    const logo = `${site}/images/myotech-logo-email.png`;
+    // The site header's own white wordmark, on the same ink ground it sits
+    // on there. The full-colour mark needs a white band and breaks the dark
+    // run of the email; this is the shop's actual masthead.
+    const logo = `${site}/images/myotech-logo-white.png`;
     const WA_GREEN = "#25D366";
     const font = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif";
     const shopCta = es ? "Ver la gama de Marbella" : "See the Marbella range";
@@ -242,9 +243,9 @@ export function renderEmail(
       text: `${heading}\n\n${bodyLine}\n\n${codeLabel}: ${code}\n\n${waCta}: ${waUrl}\n\n${ukLine}\n\n${nextLine}\n\n${site}\n\n${footer}`,
       html: `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="#0d1b2a" style="background-color:#0d1b2a;margin:0;padding:0"><tr><td align="center" style="padding:26px 12px">
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="520" style="width:520px;max-width:520px;background-color:#111d2b;border:1px solid #1a2940;border-radius:16px;overflow:hidden">
-<tr><td align="center" bgcolor="#ffffff" style="background-color:#ffffff;padding:22px 24px 18px">
-<img src="${esc(logo)}" width="168" height="39" alt="MyoTech" style="display:block;width:168px;height:39px;border:0;outline:none;text-decoration:none">
-<div style="margin:9px 0 0;font-family:${font};font-size:10px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;color:#0d1b2a">Marbella</div>
+<tr><td align="center" bgcolor="#0d1b2a" style="background-color:#0d1b2a;padding:24px 24px 18px;border-bottom:1px solid #1a2940">
+<img src="${esc(logo)}" width="168" height="38" alt="MyoTech" style="display:block;width:168px;height:38px;border:0;outline:none;text-decoration:none">
+<div style="margin:10px 0 0;font-family:${font};font-size:10px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;color:#00d4c8">Marbella</div>
 </td></tr>
 <tr><td style="padding:24px">
 <p style="margin:0 0 10px;font-family:${font};font-size:19px;font-weight:800;color:#ffffff;line-height:1.3">${esc(heading)}</p>
