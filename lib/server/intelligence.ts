@@ -165,7 +165,11 @@ async function upsertIntelligenceContact(workspaceId: string, evt: IntelligenceE
 // Generated from the contact's own structured answers: checklist, reference,
 // slot. Not an LLM; a deterministic personalisation engine. Every message
 // says exactly why it exists.
-export function renderEmail(kind: string, ctx: Record<string, unknown>, firstName: string | null): { subject: string; html: string } {
+export function renderEmail(
+  kind: string,
+  ctx: Record<string, unknown>,
+  firstName: string | null,
+): { subject: string; html: string; from?: string; replyTo?: string; text?: string } {
   const name = firstName || "there";
   const ref = String(ctx.refCode ?? "");
   const checklist = Array.isArray(ctx.checklist) ? (ctx.checklist as string[]) : [];
@@ -180,25 +184,50 @@ export function renderEmail(kind: string, ctx: Record<string, unknown>, firstNam
   // MyoTech ES speaks for its own brand, in the member's own language, and
   // never borrows the NITO wrapper with its private-client-manager footer.
   if (kind === "deals_welcome") {
-    const code = esc(String(ctx.discountCode ?? "MARBELLA10"));
+    const code = String(ctx.discountCode ?? "MARBELLA10");
     const es = String(ctx.locale ?? "") === "es";
+    // The shop's own WhatsApp number rides in with the event so this file
+    // never hardcodes a business line. Digits only: wa.me refuses anything
+    // else, and a broken link here is a dead call to action.
+    const wa = String(ctx.whatsappNumber ?? "34672598404").replace(/\D/g, "") || "34672598404";
+    // The message the member sends us, with their code already in it. One
+    // tap from the inbox to a WhatsApp order that names the discount, so
+    // nobody has to remember, copy or retype anything.
+    const waMessage = es
+      ? `Hola MyoTech ES, me he unido al club de ofertas. Mi código es ${code}. Quiero pedir:`
+      : `Hi MyoTech ES, I have joined the deals club. My code is ${code}. I would like to order:`;
+    const waUrl = `https://wa.me/${wa}?text=${encodeURIComponent(waMessage)}`;
+
     const subject = es
-      ? `Tu código MyoTech del 10% está aquí`
-      : `Your 10% MyoTech code is here`;
+      ? `Tu código MyoTech ES del 10% está aquí`
+      : `Your 10% MyoTech ES code is here`;
     const heading = es ? "Bienvenido al club de ofertas" : "Welcome to the deals club";
     const bodyLine = es
-      ? "Gracias por unirte al club de ofertas de MyoTech Marbella. Este es tu código de bienvenida del 10%: dilo en tu pedido de WhatsApp y lo aplicamos."
-      : "Thanks for joining the MyoTech Marbella deals club. This is your 10% welcome code: quote it in your WhatsApp order and we apply it.";
+      ? "Gracias por unirte al club de ofertas de MyoTech ES. Este es tu código de bienvenida del 10%: dilo en tu pedido de WhatsApp y lo aplicamos."
+      : "Thanks for joining the MyoTech ES deals club. This is your 10% welcome code: quote it in your WhatsApp order and we apply it.";
     const codeLabel = es ? "Tu código" : "Your code";
+    const waCta = es ? "Pedir por WhatsApp con mi código" : "Order on WhatsApp with my code";
+    // Sold out in Marbella is not sold out at all, and a member who thinks
+    // this list is Marbella-only never asks. Said in the welcome, once.
+    const ukLine = es
+      ? "Tenemos stock en Marbella y también enviamos a todo Reino Unido, por este mismo WhatsApp y con el mismo código. Si algo aparece agotado en Marbella, pregúntanos y sale desde Reino Unido."
+      : "We hold stock in Marbella and we ship across the UK too, on this same WhatsApp number and with the same code. If something shows as sold out in Marbella, just ask and it goes out from the UK.";
     const nextLine = es
-      ? "A partir de ahora las ofertas de Marbella y los avisos de reposición te llegan antes que a nadie."
-      : "From now on, Marbella deals and restock alerts reach you before anyone else.";
+      ? "A partir de ahora las ofertas y los avisos de reposición te llegan antes que a nadie."
+      : "From now on, deals and restock alerts reach you before anyone else.";
     const footer = es
       ? "Recibes este correo porque te apuntaste al club de ofertas en myotech.es. Para darte de baja, responde con la palabra BAJA."
       : "You are receiving this because you joined the deals club at myotech.es. To unsubscribe, reply with the word UNSUBSCRIBE.";
+
     return {
       subject,
-      html: `<div style="background:#0d1b2a;padding:28px 12px;font-family:-apple-system,'Segoe UI',Arial,sans-serif"><div style="max-width:520px;margin:0 auto;background:#111d2b;border-radius:14px;border:1px solid #1a2940;padding:24px"><p style="margin:0 0 10px;font-size:17px;font-weight:800;color:#ffffff">${esc(heading)}</p><p style="margin:0;font-size:13px;color:#c9d4de;line-height:1.6">${esc(bodyLine)}</p><div style="margin:16px 0;border:1px solid #00a89e;border-radius:12px;padding:14px;text-align:center;background:#0d1b2a"><p style="margin:0;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:#8195a5">${esc(codeLabel)}</p><p style="margin:6px 0 0;font-size:24px;font-weight:800;letter-spacing:2px;color:#00d4c8">${code}</p></div><p style="margin:0;font-size:13px;color:#c9d4de;line-height:1.6">${esc(nextLine)}</p><p style="margin:18px 0 0;font-size:10.5px;color:#5f7280;line-height:1.6">${esc(footer)}</p></div></div>`,
+      // A distinct sender name so the inbox separates Marbella from the UK
+      // shop at a glance. The address stays on the verified sending domain;
+      // MYOTECH_ES_FROM overrides it the day myotech.es is verified too.
+      from: process.env.MYOTECH_ES_FROM ?? "MyoTech ES <hello@news.myotech.store>",
+      replyTo: process.env.MYOTECH_ES_REPLY_TO ?? "hello@myotech.store",
+      text: `${heading}\n\n${bodyLine}\n\n${codeLabel}: ${code}\n\n${waCta}: ${waUrl}\n\n${ukLine}\n\n${nextLine}\n\n${footer}`,
+      html: `<div style="background:#0d1b2a;padding:28px 12px;font-family:-apple-system,'Segoe UI',Arial,sans-serif"><div style="max-width:520px;margin:0 auto;background:#111d2b;border-radius:14px;border:1px solid #1a2940;padding:24px"><p style="margin:0 0 10px;font-size:17px;font-weight:800;color:#ffffff">${esc(heading)}</p><p style="margin:0;font-size:13px;color:#c9d4de;line-height:1.6">${esc(bodyLine)}</p><div style="margin:16px 0;border:1px solid #00a89e;border-radius:12px;padding:14px;text-align:center;background:#0d1b2a"><p style="margin:0;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:#8195a5">${esc(codeLabel)}</p><p style="margin:6px 0 0;font-size:24px;font-weight:800;letter-spacing:2px;color:#00d4c8">${esc(code)}</p></div><table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 16px"><tr><td align="center" bgcolor="#25d366" style="border-radius:999px"><a href="${esc(waUrl)}" style="display:inline-block;padding:13px 22px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:999px">${esc(waCta)}</a></td></tr></table><p style="margin:0;font-size:13px;color:#c9d4de;line-height:1.6">${esc(ukLine)}</p><p style="margin:12px 0 0;font-size:13px;color:#c9d4de;line-height:1.6">${esc(nextLine)}</p><p style="margin:18px 0 0;font-size:10.5px;color:#5f7280;line-height:1.6">${esc(footer)}</p></div></div>`,
     };
   }
 
@@ -305,9 +334,17 @@ export async function processDueJourneySteps(workspaceId: string, now: Date = ne
       if (consent && consent.status !== "granted") {
         outcome = "skipped (email consent not granted)";
       } else {
-        const { subject, html } = renderEmail(step.kind, ctx, contact.firstName);
+        const { subject, html, from, replyTo, text } = renderEmail(step.kind, ctx, contact.firstName);
         try {
-          const r = await provider.send({ to: contact.email, subject, html, campaignSendId: `journey:${en.id}:${en.stepIndex}` });
+          const r = await provider.send({
+            to: contact.email, subject, html,
+            campaignSendId: `journey:${en.id}:${en.stepIndex}`,
+            // A journey that speaks for its own brand sends under that
+            // brand's name; the rest fall back to the workspace sender.
+            ...(from ? { from } : {}),
+            ...(replyTo ? { replyTo } : {}),
+            ...(text ? { text } : {}),
+          });
           outcome = provider.name === "dev-log" ? `via dev-log (no real delivery)` : r.status === "sent" ? `sent via ${provider.name} (${r.providerId})` : `failed via ${provider.name}`;
         } catch { outcome = "failed (provider error)"; }
       }

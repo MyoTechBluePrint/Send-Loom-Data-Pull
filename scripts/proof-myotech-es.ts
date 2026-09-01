@@ -58,7 +58,7 @@ const emailLeg = (email: string) => ({
   },
   tags: ["myotech-es", "myotech-es:deals"],
   attributes: { site: "myotech.es", locale: "es" },
-  data: { discountCode: "MARBELLA10", locale: "es" },
+  data: { discountCode: "MARBELLA10", locale: "es", whatsappNumber: "34672598404" },
 });
 
 const whatsappLeg = (email: string) => ({
@@ -164,13 +164,45 @@ async function main() {
   );
 
   console.log("Welcome email content");
-  const es = renderEmail("deals_welcome", { discountCode: "MARBELLA10", locale: "es" }, null);
-  check("spanish subject", es.subject.includes("10%") && es.subject.includes("MyoTech"));
+  const ctx = { discountCode: "MARBELLA10", locale: "es", whatsappNumber: "34672598404" };
+  const es = renderEmail("deals_welcome", ctx, null);
+  check("spanish subject names MyoTech ES", es.subject.includes("10%") && es.subject.includes("MyoTech ES"));
   check("spanish body carries the code", es.html.includes("MARBELLA10"));
   check("spanish unsubscribe line", es.html.includes("BAJA"));
-  const en = renderEmail("deals_welcome", { discountCode: "MARBELLA10", locale: "en" }, null);
+  const en = renderEmail("deals_welcome", { ...ctx, locale: "en" }, null);
+  check("english subject names MyoTech ES", en.subject.includes("MyoTech ES"));
   check("english body carries the code", en.html.includes("MARBELLA10") && en.html.includes("UNSUBSCRIBE"));
   check("no NITO wording leaks in", !en.html.includes("private client manager") && !es.html.includes("manager"));
+
+  // Sender identity: distinct display name from the UK shop's "MyoTech",
+  // on the verified sending domain.
+  check("sender name is MyoTech ES", (en.from ?? "").startsWith("MyoTech ES <"), en.from);
+  check("sender stays on the verified domain", (en.from ?? "").includes("news.myotech.store"), en.from);
+  check("reply-to set", Boolean(en.replyTo), en.replyTo);
+  check("plain-text part exists and carries the code", (en.text ?? "").includes("MARBELLA10"));
+
+  // The one-tap WhatsApp order button: right number, code pre-written into
+  // the message, and the same link in the text part.
+  const waMatch = /href="(https:\/\/wa\.me\/[^"]+)"/.exec(en.html);
+  const waUrl = waMatch ? waMatch[1] : "";
+  check("whatsapp button present", Boolean(waUrl), en.html.slice(0, 80));
+  check("whatsapp link uses the number the site sent", waUrl.startsWith("https://wa.me/34672598404?text="));
+  const decoded = decodeURIComponent(waUrl.split("text=")[1] ?? "");
+  check("prefilled message contains the discount code", decoded.includes("MARBELLA10"), decoded);
+  check("prefilled message names MyoTech ES", decoded.includes("MyoTech ES"), decoded);
+  const esDecoded = decodeURIComponent((/href="https:\/\/wa\.me\/[^?]+\?text=([^"]+)"/.exec(es.html)?.[1]) ?? "");
+  check("spanish prefilled message is spanish", esDecoded.includes("Hola") && esDecoded.includes("MARBELLA10"), esDecoded);
+  check("text part carries the same whatsapp link", (en.text ?? "").includes("https://wa.me/34672598404"));
+
+  // UK availability, said in both languages.
+  check("english mentions UK shipping", /ship across the UK/i.test(en.html));
+  check("spanish mentions UK shipping", /Reino Unido/.test(es.html));
+
+  // A missing or malformed number must never produce a broken wa.me link.
+  const fallback = renderEmail("deals_welcome", { discountCode: "X10", locale: "en" }, null);
+  check("falls back to the shop number when none is sent", fallback.html.includes("https://wa.me/34672598404"));
+  const messy = renderEmail("deals_welcome", { discountCode: "X10", locale: "en", whatsappNumber: "+34 672 598 404" }, null);
+  check("formatted numbers are normalised to digits", messy.html.includes("https://wa.me/34672598404"));
 
   console.log("Idempotency");
   const linesBefore = await db.timelineItem.count({ where: { contactId: contact.id } });
