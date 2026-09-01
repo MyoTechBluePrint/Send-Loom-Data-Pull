@@ -207,6 +207,11 @@ export function renderEmail(
       : "Thanks for joining the MyoTech ES deals club. This is your 10% welcome code: quote it in your WhatsApp order and we apply it.";
     const codeLabel = es ? "Tu código" : "Your code";
     const waCta = es ? "Pedir por WhatsApp con mi código" : "Order on WhatsApp with my code";
+    // The button is the fast path; the number underneath is the one that
+    // still works when a mail app swallows the button or the reader is at
+    // a desktop with no WhatsApp on it.
+    const orElse = es ? "O escríbenos al" : "Or message us on";
+    const waNumberLabel = `+${wa.replace(/^(\d{2})(\d{3})(\d{3})(\d{3})$/, "$1 $2 $3 $4")}`;
     // Sold out in Marbella is not sold out at all, and a member who thinks
     // this list is Marbella-only never asks. Said in the welcome, once.
     const ukLine = es
@@ -245,7 +250,7 @@ export function renderEmail(
       // MYOTECH_ES_FROM overrides it the day myotech.es is verified too.
       from: process.env.MYOTECH_ES_FROM ?? "MyoTech ES <hello@news.myotech.store>",
       replyTo: process.env.MYOTECH_ES_REPLY_TO ?? "hello@myotech.store",
-      text: `${heading}\n\n${bodyLine}\n\n${codeLabel}: ${code}\n\n${waCta}: ${waUrl}\n\n${ukLine}\n\n${nextLine}\n\n${site}\n\n${footer}`,
+      text: `${heading}\n\n${bodyLine}\n\n${codeLabel}: ${code}\n\n${waCta}: ${waUrl}\n\n${orElse} ${waNumberLabel}\n\n${ukLine}\n\n${nextLine}\n\n${site}\n\n${footer}`,
       html: `<!DOCTYPE html><html lang="${es ? "es" : "en"}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <!-- Tell every client that respects the ask to leave these colours alone. -->
 <meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light">
@@ -265,9 +270,9 @@ export function renderEmail(
 <div style="margin-top:5px;font-family:${font};font-size:27px;font-weight:800;letter-spacing:3px;color:#00776f">${esc(code)}</div>
 </td></tr></table>
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 18px"><tr><td align="center" bgcolor="${WA_GREEN}" style="background-color:${WA_GREEN};border-radius:999px">
-<a href="${esc(waUrl)}" style="display:block;padding:15px 20px;font-family:${font};font-size:15px;font-weight:700;color:#ffffff!important;text-decoration:none;background-color:${WA_GREEN};border-radius:999px"><span style="color:#ffffff!important">${esc(waCta)}</span></a>
+<a href="${esc(waUrl)}" target="_blank" style="display:block;padding:15px 20px;font-family:${font};font-size:16px;font-weight:700;color:#ffffff;text-decoration:none;background-color:${WA_GREEN};border-radius:999px"><span style="color:#ffffff;text-decoration:none">${esc(waCta)}</span></a>
 </td></tr></table>
-<p style="margin:0;font-family:${font};font-size:13.5px;color:#46586b;line-height:1.65;text-align:center">${esc(ukLine)}</p>
+<p style="margin:0 0 16px;font-family:${font};font-size:13px;color:#5b7183;line-height:1.6;text-align:center">${esc(orElse)} <a href="${esc(waUrl)}" target="_blank" style="color:#00776f;font-weight:700;text-decoration:underline">${esc(waNumberLabel)}</a></p><p style="margin:0;font-family:${font};font-size:13.5px;color:#46586b;line-height:1.65;text-align:center">${esc(ukLine)}</p>
 <p style="margin:12px 0 0;font-family:${font};font-size:13.5px;color:#46586b;line-height:1.65;text-align:center">${esc(nextLine)}</p>
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:18px 0 0"><tr><td align="center" style="border-top:1px solid #eef2f7;padding-top:16px">
 <a href="${esc(site)}" style="font-family:${font};font-size:13px;font-weight:700;color:#00776f;text-decoration:none">${esc(shopCta)}</a>

@@ -213,7 +213,17 @@ async function main() {
   check("Marbella badge present", en.html.includes(">Marbella<"));
   check("navy heading on light", en.html.includes("color:#0d1b2a"));
   check("teal accent on the code", en.html.includes("#00776f"));
-  check("button text forced white against inversion", (en.html.match(/#ffffff!important/g) ?? []).length >= 2);
+  check("button text explicitly white", (en.html.match(/color:#ffffff/g) ?? []).length >= 2);
+  // No !important in inline styles: Gmail's sanitiser can drop the whole
+  // style attribute that contains one.
+  check("no !important for a sanitiser to choke on", !en.html.includes("!important"));
+  // Two ways through, always: the button and the number underneath it.
+  check(
+    "fallback whatsapp number link present",
+    /Or message us on/.test(en.html) && (en.html.match(/wa\.me/g) ?? []).length >= 2,
+  );
+  check("spanish fallback line", /O escríbenos al/.test(es.html));
+  check("number rendered readably", en.html.includes("+34 672 598 404"));
   check("links back to the shop", en.html.includes('href="https://myotech.es"'));
   // WhatsApp's own brand green, stated every way a dark-mode client might
   // otherwise override.
