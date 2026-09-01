@@ -201,9 +201,12 @@ async function main() {
   // Brand: the shop's wordmark and colours, not a generic card.
   check(
     "MyoTech logo embedded from an absolute https URL",
-    en.html.includes('src="https://myotech.es/images/myotech-logo-white.png"'),
+    en.html.includes('src="https://myotech.es/images/myotech-logo-email.png"'),
   );
   check("logo has alt text and fixed dimensions", /alt="MyoTech"/.test(en.html) && /width="168"/.test(en.html));
+  // The colour wordmark is navy on one half: it needs the white band, or it
+  // vanishes into the ink ground.
+  check("logo sits on a white header band", /bgcolor="#ffffff"[^>]*>\s*<img/.test(en.html));
   check("Marbella badge present", en.html.includes(">Marbella<"));
   check("ink navy ground", en.html.includes("#0d1b2a"));
   check("teal accent on the code", en.html.includes("#00d4c8"));
