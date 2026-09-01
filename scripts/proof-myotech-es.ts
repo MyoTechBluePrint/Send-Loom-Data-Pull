@@ -198,6 +198,22 @@ async function main() {
   check("english mentions UK shipping", /ship across the UK/i.test(en.html));
   check("spanish mentions UK shipping", /Reino Unido/.test(es.html));
 
+  // Brand: the shop's wordmark and colours, not a generic card.
+  check(
+    "MyoTech logo embedded from an absolute https URL",
+    en.html.includes('src="https://myotech.es/images/myotech-logo-white.png"'),
+  );
+  check("logo has alt text and fixed dimensions", /alt="MyoTech"/.test(en.html) && /width="168"/.test(en.html));
+  check("Marbella badge present", en.html.includes(">Marbella<"));
+  check("ink navy ground", en.html.includes("#0d1b2a"));
+  check("teal accent on the code", en.html.includes("#00d4c8"));
+  check("links back to the shop", en.html.includes('href="https://myotech.es"'));
+  // WhatsApp's own brand green, stated every way a dark-mode client might
+  // otherwise override.
+  const greens = (en.html.match(/#25D366/g) ?? []).length;
+  check("WhatsApp button uses the real brand green in 3 places", greens >= 3, `${greens} occurrences`);
+  check("no off-brand green sneaks in", !/#2[0-9a-f]d3[0-9a-f]{2}/i.test(en.html.replace(/#25D366/g, "")));
+
   // A missing or malformed number must never produce a broken wa.me link.
   const fallback = renderEmail("deals_welcome", { discountCode: "X10", locale: "en" }, null);
   check("falls back to the shop number when none is sent", fallback.html.includes("https://wa.me/34672598404"));
