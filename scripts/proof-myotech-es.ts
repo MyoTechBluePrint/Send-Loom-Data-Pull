@@ -1,0 +1,217 @@
+// Proof: the myotech.es deals club pipeline, end to end on this database.
+//
+// Exercises exactly what the Marbella site sends (two intelligence events per
+// signup: the email leg with journey context, the WhatsApp leg with its own
+// consent) through the real route handler with a real minted key for the
+// myotech-es integration, and asserts every side effect Steve is relying on:
+// contact, tags, per-channel consent with evidence, the welcome journey
+// firing its one immediate step, the 10% code inside the rendered email in
+// both languages, idempotent replays, and the seeded segment catching the
+// member. Run: npx tsx scripts/proof-myotech-es.ts
+import { NextRequest } from "next/server";
+import { db } from "../lib/server/db";
+import { ensureCatalog, createApiKey } from "../lib/server/platform";
+import { renderEmail } from "../lib/server/intelligence";
+import { evaluateSegmentMembers, type Rule } from "../lib/server/segments";
+import { POST as intelligencePost } from "../app/api/v1/intelligence/route";
+
+let passed = 0;
+let failed = 0;
+function check(name: string, condition: boolean, detail?: string) {
+  if (condition) {
+    passed++;
+    console.log(`  ✓ ${name}`);
+  } else {
+    failed++;
+    console.error(`  ✗ ${name}${detail ? ` — ${detail}` : ""}`);
+  }
+}
+
+const STAMP = `t${Math.abs(Date.now() % 1_000_000)}`;
+const EMAIL = `deals.proof.${STAMP}@example.com`;
+const PHONE = "+34600111222";
+
+async function post(secretKey: string, body: Record<string, unknown>) {
+  const req = new NextRequest("http://localhost/api/v1/intelligence", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${secretKey}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(body),
+  } as ConstructorParameters<typeof NextRequest>[1]);
+  const res = await intelligencePost(req);
+  return { status: res.status, body: (await res.json()) as Record<string, unknown> };
+}
+
+// The exact payloads lib/sendloomPush.ts on the Marbella site builds. If the
+// site's wire format drifts from what this proof sends, update BOTH.
+const emailLeg = (email: string) => ({
+  requestId: `myotech-es:deals:email:${email}`,
+  eventType: "myotech-es.deals_signup",
+  platform: "myotech-es",
+  person: { email, phone: PHONE },
+  consent: {
+    channel: "email",
+    basis: "myotech.es deals club signup",
+    evidence: "Acepto recibir ofertas y novedades de MyoTech por correo electrónico, y por WhatsApp si he dejado mi número. Puedes darte de baja en cualquier momento. (myotech.es, es)",
+  },
+  tags: ["myotech-es", "myotech-es:deals"],
+  attributes: { site: "myotech.es", locale: "es" },
+  data: { discountCode: "MARBELLA10", locale: "es" },
+});
+
+const whatsappLeg = (email: string) => ({
+  requestId: `myotech-es:deals:whatsapp:${email}`,
+  eventType: "myotech-es.whatsapp_optin",
+  platform: "myotech-es",
+  person: { email, phone: PHONE },
+  consent: {
+    channel: "whatsapp",
+    basis: "myotech.es deals club WhatsApp opt-in",
+    evidence: "Acepto recibir ofertas y novedades de MyoTech por correo electrónico, y por WhatsApp si he dejado mi número. Puedes darte de baja en cualquier momento. (myotech.es, es)",
+  },
+  tags: ["myotech-es", "myotech-es:deals"],
+  attributes: { site: "myotech.es", locale: "es" },
+});
+
+async function main() {
+  const ws = await db.workspace.findFirstOrThrow();
+
+  console.log("Integration profile and key");
+  await ensureCatalog(ws.id);
+  const integration = await db.integration.findUnique({
+    where: { workspaceId_slug: { workspaceId: ws.id, slug: "myotech-es" } },
+  });
+  check("myotech-es integration exists as its own profile", Boolean(integration));
+  if (!integration) throw new Error("no integration");
+  const key = await createApiKey({
+    workspaceId: ws.id,
+    integrationId: integration.id,
+    name: `proof key ${STAMP}`,
+    permissions: ["contacts:write", "events:write"],
+  });
+  check("key minted for the myotech-es integration", key.secretKey.startsWith("sk_live_"));
+
+  console.log("Signup: email leg");
+  const r1 = await post(key.secretKey, emailLeg(EMAIL));
+  check("accepted", r1.status === 200 && r1.body.ok === true, JSON.stringify(r1.body));
+  check(
+    "enrolled in the deals welcome journey and nothing else",
+    Array.isArray(r1.body.enrolledJourneys) &&
+      (r1.body.enrolledJourneys as string[]).length === 1 &&
+      (r1.body.enrolledJourneys as string[])[0] === "myotech-es-deals-welcome",
+    JSON.stringify(r1.body.enrolledJourneys),
+  );
+
+  const contact = await db.contact.findFirst({
+    where: { workspaceId: ws.id, email: EMAIL },
+    include: { tags: { include: { tag: true } }, sources: true },
+  });
+  check("contact created", Boolean(contact));
+  if (!contact) throw new Error("no contact");
+  check("phone stored", contact.phone === PHONE);
+  check(
+    "tagged myotech-es and myotech-es:deals",
+    ["myotech-es", "myotech-es:deals"].every((n) => contact.tags.some((t) => t.tag.name === n)),
+  );
+  check(
+    "source is the api event from myotech-es",
+    contact.sources.some((s) => s.sourceType === "api" && s.source.startsWith("myotech-es:")),
+  );
+  check("email consent granted on the mirror", contact.emailConsent === "granted");
+
+  const emailConsent = await db.consentRecord.findFirst({
+    where: { contactId: contact.id, channel: "email" },
+    orderBy: { createdAt: "desc" },
+  });
+  check(
+    "email consent evidence is the ticked sentence",
+    Boolean(emailConsent && emailConsent.status === "granted" && (emailConsent.evidence ?? "").includes("Acepto recibir")),
+  );
+
+  console.log("Signup: WhatsApp leg");
+  const r2 = await post(key.secretKey, whatsappLeg(EMAIL));
+  check("accepted", r2.status === 200 && r2.body.ok === true, JSON.stringify(r2.body));
+  check(
+    "whatsapp leg enrols no journey",
+    Array.isArray(r2.body.enrolledJourneys) && (r2.body.enrolledJourneys as string[]).length === 0,
+  );
+  const after = await db.contact.findUniqueOrThrow({ where: { id: contact.id } });
+  check("whatsapp consent granted on the mirror", after.whatsappConsent === "granted");
+
+  console.log("Welcome journey step");
+  const enrolment = await db.journeyEnrolment.findFirst({
+    where: { contactId: contact.id, journey: { key: "myotech-es-deals-welcome" } },
+  });
+  check(
+    "one immediate step, then completed (no cron dependency)",
+    Boolean(enrolment && enrolment.status === "completed" && enrolment.stepIndex === 1),
+    enrolment ? `${enrolment.status} @ ${enrolment.stepIndex}` : "no enrolment",
+  );
+  const journeyLine = await db.timelineItem.findFirst({
+    where: { contactId: contact.id, type: "journey_email" },
+  });
+  check(
+    "welcome email step on the timeline",
+    Boolean(journeyLine && journeyLine.title.includes("10% welcome code")),
+    journeyLine?.title,
+  );
+  check(
+    "email step was not skipped for consent",
+    Boolean(journeyLine && !(journeyLine.detail ?? "").includes("skipped")),
+    journeyLine?.detail ?? "",
+  );
+
+  console.log("Welcome email content");
+  const es = renderEmail("deals_welcome", { discountCode: "MARBELLA10", locale: "es" }, null);
+  check("spanish subject", es.subject.includes("10%") && es.subject.includes("MyoTech"));
+  check("spanish body carries the code", es.html.includes("MARBELLA10"));
+  check("spanish unsubscribe line", es.html.includes("BAJA"));
+  const en = renderEmail("deals_welcome", { discountCode: "MARBELLA10", locale: "en" }, null);
+  check("english body carries the code", en.html.includes("MARBELLA10") && en.html.includes("UNSUBSCRIBE"));
+  check("no NITO wording leaks in", !en.html.includes("private client manager") && !es.html.includes("manager"));
+
+  console.log("Idempotency");
+  const linesBefore = await db.timelineItem.count({ where: { contactId: contact.id } });
+  const replay = await post(key.secretKey, emailLeg(EMAIL));
+  check("replayed email leg reports duplicate", replay.body.duplicate === true, JSON.stringify(replay.body));
+  const linesAfter = await db.timelineItem.count({ where: { contactId: contact.id } });
+  check("replay writes nothing", linesAfter === linesBefore, `${linesBefore} -> ${linesAfter}`);
+
+  console.log("Segment");
+  const segment = await db.segment.findFirst({
+    where: { workspaceId: ws.id, name: "MyoTech ES Deals Club" },
+    include: { rules: true },
+  });
+  check("MyoTech ES Deals Club segment exists (seed-plans)", Boolean(segment));
+  if (segment) {
+    const rules = segment.rules.map((r) => ({ field: r.field, operator: r.operator, value: r.value, exclude: r.exclude })) as Rule[];
+    const members = await evaluateSegmentMembers(ws.id, segment.match as "all" | "any", rules);
+    check("the new member is in it", members.includes(contact.id), `${members.length} members`);
+  }
+
+  console.log("Cleanup");
+  await db.journeyEnrolment.deleteMany({ where: { contactId: contact.id } });
+  await db.timelineItem.deleteMany({ where: { contactId: contact.id } });
+  await db.consentRecord.deleteMany({ where: { contactId: contact.id } });
+  await db.contactTag.deleteMany({ where: { contactId: contact.id } });
+  await db.contactSource.deleteMany({ where: { contactId: contact.id } });
+  await db.leadScore.deleteMany({ where: { contactId: contact.id } });
+  await db.contact.delete({ where: { id: contact.id } });
+  // Scoped to THIS run's stamped email, so the proof can never eat another
+  // producer's idempotency ledger if it is ever pointed at shared data.
+  await db.integrationRequest.deleteMany({ where: { id: { endsWith: `:${EMAIL}` } } });
+  await db.apiKey.delete({ where: { id: key.keyId } });
+  console.log("  test rows removed");
+
+  console.log(`\n${passed} passed, ${failed} failed`);
+  await db.$disconnect();
+  if (failed > 0) process.exit(1);
+}
+
+main().catch(async (e) => {
+  console.error(e);
+  await db.$disconnect();
+  process.exit(1);
+});

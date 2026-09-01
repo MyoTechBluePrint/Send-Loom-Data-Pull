@@ -219,6 +219,30 @@ async function main() {
     console.log(`  Soft-deleted leftover test workflow "${seqTest.name}" — history retained.`);
   }
 
+  // MyoTech ES deals club: the one-click audience for manual deal campaigns.
+  // Members arrive from myotech.es tagged "myotech-es" (tags land on every
+  // event, including for contacts the store already knew, which is why the
+  // rule is a tag rule and not a source rule). Created once per workspace
+  // that has real users; never touched again, so renames and rule edits by
+  // a human stand.
+  for (const ws of await db.workspace.findMany({ select: { id: true } })) {
+    const existing = await db.segment.findFirst({
+      where: { workspaceId: ws.id, rules: { some: { field: "Tag", value: "myotech-es" } } },
+      select: { id: true },
+    });
+    if (existing) continue;
+    await db.segment.create({
+      data: {
+        workspaceId: ws.id,
+        name: "MyoTech ES Deals Club",
+        description: "Everyone who joined the deals club on myotech.es. Target this for manual deals; the 10% welcome goes out automatically.",
+        match: "all",
+        rules: { create: [{ field: "Tag", operator: "contains", value: "myotech-es" }] },
+      },
+    });
+    console.log("  Created segment \"MyoTech ES Deals Club\" (Tag contains myotech-es).");
+  }
+
   await db.$disconnect();
 }
 

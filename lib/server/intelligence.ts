@@ -30,6 +30,8 @@ const EVENT_TITLES: Record<string, string> = {
   "brokerage.blueprint_saved": "Brokerage Blueprint saved",
   "brokerage.design_call_booked": "Design Session requested",
   "copy.follower_enrolled": "Copy Trading follower enrolled",
+  "myotech-es.deals_signup": "Joined the myotech.es deals club",
+  "myotech-es.whatsapp_optin": "WhatsApp opt-in (myotech.es)",
 };
 
 export function knownIntelligenceEvent(type: string): boolean {
@@ -78,6 +80,17 @@ const SEED_JOURNEYS: { key: string; name: string; platform: string; trigger: str
       { offsetHours: 0, channel: "email", kind: "meeting_confirm", title: "Design Session confirmation" },
       { offsetHours: -24, dueFrom: "slot", channel: "email", kind: "meeting_reminder", title: "24h reminder" },
       { offsetHours: 2, dueFrom: "slot", channel: "email", kind: "follow_up", title: "Post-session next steps" },
+    ],
+  },
+  // MyoTech ES (myotech.es deals club). One immediate step and nothing
+  // delayed, deliberately: with no cron, an offset-0 step is the only step
+  // guaranteed to fire, and it fires in the same request as the signup.
+  // The welcome email carries the standard 10% code from the event's own
+  // data (discountCode, locale), rendered bilingually by deals_welcome.
+  {
+    key: "myotech-es-deals-welcome", name: "MyoTech ES · deals welcome", platform: "myotech-es", trigger: "myotech-es.deals_signup",
+    steps: [
+      { offsetHours: 0, channel: "email", kind: "deals_welcome", title: "10% welcome code" },
     ],
   },
 ];
@@ -152,7 +165,7 @@ async function upsertIntelligenceContact(workspaceId: string, evt: IntelligenceE
 // Generated from the contact's own structured answers: checklist, reference,
 // slot. Not an LLM; a deterministic personalisation engine. Every message
 // says exactly why it exists.
-function renderEmail(kind: string, ctx: Record<string, unknown>, firstName: string | null): { subject: string; html: string } {
+export function renderEmail(kind: string, ctx: Record<string, unknown>, firstName: string | null): { subject: string; html: string } {
   const name = firstName || "there";
   const ref = String(ctx.refCode ?? "");
   const checklist = Array.isArray(ctx.checklist) ? (ctx.checklist as string[]) : [];
@@ -163,6 +176,32 @@ function renderEmail(kind: string, ctx: Record<string, unknown>, firstName: stri
     html: `<div style="background:#f4f5f7;padding:28px 12px;font-family:-apple-system,'Segoe UI',Arial,sans-serif"><div style="max-width:520px;margin:0 auto;background:#fff;border-radius:14px;border:1px solid #e5e7eb;padding:24px"><p style="margin:0 0 10px;font-size:16px;font-weight:800;color:#111827">${esc(title)}</p>${body}<p style="margin:18px 0 0;font-size:10.5px;color:#9ca3af">Reference ${esc(ref)}. You are receiving this because of your application; reply to reach your private client manager.</p></div></div>`,
   });
   const list = checklist.length ? `<ul style="margin:10px 0 0;padding-left:18px;font-size:13px;color:#374151">${checklist.map((c) => `<li style="margin:3px 0">${esc(c)}</li>`).join("")}</ul>` : "";
+
+  // MyoTech ES speaks for its own brand, in the member's own language, and
+  // never borrows the NITO wrapper with its private-client-manager footer.
+  if (kind === "deals_welcome") {
+    const code = esc(String(ctx.discountCode ?? "MARBELLA10"));
+    const es = String(ctx.locale ?? "") === "es";
+    const subject = es
+      ? `Tu código MyoTech del 10% está aquí`
+      : `Your 10% MyoTech code is here`;
+    const heading = es ? "Bienvenido al club de ofertas" : "Welcome to the deals club";
+    const bodyLine = es
+      ? "Gracias por unirte al club de ofertas de MyoTech Marbella. Este es tu código de bienvenida del 10%: dilo en tu pedido de WhatsApp y lo aplicamos."
+      : "Thanks for joining the MyoTech Marbella deals club. This is your 10% welcome code: quote it in your WhatsApp order and we apply it.";
+    const codeLabel = es ? "Tu código" : "Your code";
+    const nextLine = es
+      ? "A partir de ahora las ofertas de Marbella y los avisos de reposición te llegan antes que a nadie."
+      : "From now on, Marbella deals and restock alerts reach you before anyone else.";
+    const footer = es
+      ? "Recibes este correo porque te apuntaste al club de ofertas en myotech.es. Para darte de baja, responde con la palabra BAJA."
+      : "You are receiving this because you joined the deals club at myotech.es. To unsubscribe, reply with the word UNSUBSCRIBE.";
+    return {
+      subject,
+      html: `<div style="background:#0d1b2a;padding:28px 12px;font-family:-apple-system,'Segoe UI',Arial,sans-serif"><div style="max-width:520px;margin:0 auto;background:#111d2b;border-radius:14px;border:1px solid #1a2940;padding:24px"><p style="margin:0 0 10px;font-size:17px;font-weight:800;color:#ffffff">${esc(heading)}</p><p style="margin:0;font-size:13px;color:#c9d4de;line-height:1.6">${esc(bodyLine)}</p><div style="margin:16px 0;border:1px solid #00a89e;border-radius:12px;padding:14px;text-align:center;background:#0d1b2a"><p style="margin:0;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:#8195a5">${esc(codeLabel)}</p><p style="margin:6px 0 0;font-size:24px;font-weight:800;letter-spacing:2px;color:#00d4c8">${code}</p></div><p style="margin:0;font-size:13px;color:#c9d4de;line-height:1.6">${esc(nextLine)}</p><p style="margin:18px 0 0;font-size:10.5px;color:#5f7280;line-height:1.6">${esc(footer)}</p></div></div>`,
+    };
+  }
+
   switch (kind) {
     case "application_received":
       return wrap(`Thank you, ${name}. Your private review has begun.`, `<p style="font-size:13px;color:#374151;line-height:1.6">Your application (${esc(ref)}) is with your private client manager. To prepare your review, it would help to have:</p>${list}<p style="margin-top:12px;font-size:12px;color:#6b7280">Secure upload opens with your client room; nothing is needed before your first conversation.</p>`);

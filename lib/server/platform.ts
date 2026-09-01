@@ -71,6 +71,18 @@ export const CATALOG: CatalogEntry[] = [
     defaultPermissions: ["contacts:read", "contacts:write", "events:write", "segments:read", "webhooks:manage"],
     eventVocabulary: [],
   },
+  // Deliberately its own integration, not a key on Custom API: the Marbella
+  // site's signups stay separate from every other producer, with their own
+  // keys to rotate, their own event feed to read, and nothing shared with
+  // the WooCommerce store integrations.
+  {
+    slug: "myotech-es",
+    name: "MyoTech ES Website",
+    kind: "custom",
+    blurb: "The myotech.es Marbella site. Deals club signups arrive as intelligence events with per-channel consent; contacts are tagged myotech-es and targeted by tag.",
+    defaultPermissions: ["contacts:write", "events:write"],
+    eventVocabulary: ["myotech-es.deals_signup", "myotech-es.whatsapp_optin"],
+  },
 ];
 
 export async function ensureCatalog(workspaceId: string) {
