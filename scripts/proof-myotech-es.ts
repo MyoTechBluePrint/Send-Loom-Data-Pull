@@ -201,15 +201,19 @@ async function main() {
   // Brand: the shop's wordmark and colours, not a generic card.
   check(
     "MyoTech logo embedded from an absolute https URL",
-    en.html.includes('src="https://myotech.es/images/myotech-logo-white.png"'),
+    en.html.includes('src="https://myotech.es/images/myotech-logo-email.png"'),
   );
-  check("logo has alt text and fixed dimensions", /alt="MyoTech"/.test(en.html) && /width="168"/.test(en.html));
-  // The colour wordmark is navy on one half: it needs the white band, or it
-  // vanishes into the ink ground.
-  check("logo sits on the ink header band", /bgcolor="#0d1b2a"[^>]*>\s*<img/.test(en.html));
+  check("logo has alt text and fixed dimensions", /alt="MyoTech"/.test(en.html) && /width="176"/.test(en.html));
+  // Light artwork, so Gmail's dark mode has nothing to invert into
+  // invisibility, and the colour wordmark sits on the white it is drawn for.
+  check("logo sits on a white header band", /bgcolor="#ffffff"[^>]*>\s*<img/.test(en.html));
+  check("light ground", en.html.includes("#eef2f7") && en.html.includes("background-color:#ffffff"));
+  check("dark-mode opt-out declared", /name="color-scheme" content="light"/.test(en.html));
+  check("sent as a full document so the meta is honoured", en.html.startsWith("<!DOCTYPE html>"));
   check("Marbella badge present", en.html.includes(">Marbella<"));
-  check("ink navy ground", en.html.includes("#0d1b2a"));
-  check("teal accent on the code", en.html.includes("#00d4c8"));
+  check("navy heading on light", en.html.includes("color:#0d1b2a"));
+  check("teal accent on the code", en.html.includes("#00776f"));
+  check("button text forced white against inversion", (en.html.match(/#ffffff!important/g) ?? []).length >= 2);
   check("links back to the shop", en.html.includes('href="https://myotech.es"'));
   // WhatsApp's own brand green, stated every way a dark-mode client might
   // otherwise override.

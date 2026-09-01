@@ -225,10 +225,15 @@ export function renderEmail(
     // ways (bgcolor attribute, td style, anchor style) because dark-mode
     // clients recolour anything they are allowed to.
     const site = process.env.MYOTECH_ES_SITE ?? "https://myotech.es";
-    // The site header's own white wordmark, on the same ink ground it sits
-    // on there. The full-colour mark needs a white band and breaks the dark
-    // run of the email; this is the shop's actual masthead.
-    const logo = `${site}/images/myotech-logo-white.png`;
+    // Light by design, and deliberately so.
+    //
+    // Gmail's dark mode rewrites an email's colours rather than respecting
+    // them. A dark navy build came back inverted on Android: the ground went
+    // pale, the white wordmark vanished into it, and WhatsApp's green button
+    // turned forest green with dark text on top. Light artwork survives that
+    // treatment because every element is already dark-on-light, which is
+    // also what the full-colour wordmark is drawn for.
+    const logo = `${site}/images/myotech-logo-email.png`;
     const WA_GREEN = "#25D366";
     const font = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif";
     const shopCta = es ? "Ver la gama de Marbella" : "See the Marbella range";
@@ -241,33 +246,39 @@ export function renderEmail(
       from: process.env.MYOTECH_ES_FROM ?? "MyoTech ES <hello@news.myotech.store>",
       replyTo: process.env.MYOTECH_ES_REPLY_TO ?? "hello@myotech.store",
       text: `${heading}\n\n${bodyLine}\n\n${codeLabel}: ${code}\n\n${waCta}: ${waUrl}\n\n${ukLine}\n\n${nextLine}\n\n${site}\n\n${footer}`,
-      html: `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="#0d1b2a" style="background-color:#0d1b2a;margin:0;padding:0"><tr><td align="center" style="padding:26px 12px">
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="520" style="width:520px;max-width:520px;background-color:#111d2b;border:1px solid #1a2940;border-radius:16px;overflow:hidden">
-<tr><td align="center" bgcolor="#0d1b2a" style="background-color:#0d1b2a;padding:24px 24px 18px;border-bottom:1px solid #1a2940">
-<img src="${esc(logo)}" width="168" height="38" alt="MyoTech" style="display:block;width:168px;height:38px;border:0;outline:none;text-decoration:none">
-<div style="margin:10px 0 0;font-family:${font};font-size:10px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;color:#00d4c8">Marbella</div>
+      html: `<!DOCTYPE html><html lang="${es ? "es" : "en"}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<!-- Tell every client that respects the ask to leave these colours alone. -->
+<meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light">
+<style>:root{color-scheme:light;supported-color-schemes:light}</style>
+</head><body style="margin:0;padding:0;background-color:#eef2f7">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="#eef2f7" style="background-color:#eef2f7;margin:0;padding:0"><tr><td align="center" style="padding:24px 12px">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;max-width:520px;background-color:#ffffff;border:1px solid #dde4ec;border-radius:16px;overflow:hidden">
+<tr><td align="center" bgcolor="#ffffff" style="background-color:#ffffff;padding:26px 24px 18px;border-bottom:1px solid #eef2f7">
+<img src="${esc(logo)}" width="176" height="41" alt="MyoTech" style="display:block;width:176px;height:41px;border:0;outline:none;text-decoration:none">
+<div style="margin:11px 0 0;font-family:${font};font-size:10px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;color:#0d1b2a">Marbella</div>
 </td></tr>
-<tr><td style="padding:24px">
-<p style="margin:0 0 10px;font-family:${font};font-size:19px;font-weight:800;color:#ffffff;line-height:1.3">${esc(heading)}</p>
-<p style="margin:0;font-family:${font};font-size:14px;color:#c9d4de;line-height:1.65">${esc(bodyLine)}</p>
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:18px 0"><tr><td align="center" bgcolor="#0d1b2a" style="background-color:#0d1b2a;border:1px solid #00a89e;border-radius:12px;padding:15px 12px">
-<div style="font-family:${font};font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#8195a5">${esc(codeLabel)}</div>
-<div style="margin-top:5px;font-family:${font};font-size:26px;font-weight:800;letter-spacing:3px;color:#00d4c8">${esc(code)}</div>
+<tr><td align="center" bgcolor="#ffffff" style="background-color:#ffffff;padding:24px;text-align:center">
+<p style="margin:0 0 10px;font-family:${font};font-size:20px;font-weight:800;color:#0d1b2a;line-height:1.3;text-align:center">${esc(heading)}</p>
+<p style="margin:0;font-family:${font};font-size:14px;color:#46586b;line-height:1.65;text-align:center">${esc(bodyLine)}</p>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:18px 0"><tr><td align="center" bgcolor="#f2fbfa" style="background-color:#f2fbfa;border:1px solid #00a89e;border-radius:12px;padding:15px 12px">
+<div style="font-family:${font};font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#5b7183">${esc(codeLabel)}</div>
+<div style="margin-top:5px;font-family:${font};font-size:27px;font-weight:800;letter-spacing:3px;color:#00776f">${esc(code)}</div>
 </td></tr></table>
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 18px"><tr><td align="center" bgcolor="${WA_GREEN}" style="background-color:${WA_GREEN};border-radius:999px">
-<a href="${esc(waUrl)}" style="display:block;padding:14px 20px;font-family:${font};font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;background-color:${WA_GREEN};border-radius:999px">${esc(waCta)}</a>
+<a href="${esc(waUrl)}" style="display:block;padding:15px 20px;font-family:${font};font-size:15px;font-weight:700;color:#ffffff!important;text-decoration:none;background-color:${WA_GREEN};border-radius:999px"><span style="color:#ffffff!important">${esc(waCta)}</span></a>
 </td></tr></table>
-<p style="margin:0;font-family:${font};font-size:13.5px;color:#c9d4de;line-height:1.65">${esc(ukLine)}</p>
-<p style="margin:12px 0 0;font-family:${font};font-size:13.5px;color:#c9d4de;line-height:1.65">${esc(nextLine)}</p>
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:18px 0 0"><tr><td align="center" style="border-top:1px solid #1a2940;padding-top:16px">
-<a href="${esc(site)}" style="font-family:${font};font-size:13px;font-weight:700;color:#00d4c8;text-decoration:none">${esc(shopCta)}</a>
+<p style="margin:0;font-family:${font};font-size:13.5px;color:#46586b;line-height:1.65;text-align:center">${esc(ukLine)}</p>
+<p style="margin:12px 0 0;font-family:${font};font-size:13.5px;color:#46586b;line-height:1.65;text-align:center">${esc(nextLine)}</p>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:18px 0 0"><tr><td align="center" style="border-top:1px solid #eef2f7;padding-top:16px">
+<a href="${esc(site)}" style="font-family:${font};font-size:13px;font-weight:700;color:#00776f;text-decoration:none">${esc(shopCta)}</a>
 </td></tr></table>
 </td></tr>
-<tr><td bgcolor="#0d1b2a" style="background-color:#0d1b2a;padding:16px 24px;border-top:1px solid #1a2940">
-<p style="margin:0;font-family:${font};font-size:10.5px;color:#5f7280;line-height:1.6">${esc(footer)}</p>
+<tr><td align="center" bgcolor="#f7f9fc" style="background-color:#f7f9fc;padding:16px 24px;border-top:1px solid #eef2f7;text-align:center">
+<p style="margin:0;font-family:${font};font-size:10.5px;color:#7a8a99;line-height:1.6;text-align:center">${esc(footer)}</p>
 </td></tr>
 </table>
-</td></tr></table>`,
+</td></tr></table>
+</body></html>`,
     };
   }
 
