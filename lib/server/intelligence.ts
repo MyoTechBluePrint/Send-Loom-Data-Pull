@@ -82,25 +82,47 @@ const SEED_JOURNEYS: { key: string; name: string; platform: string; trigger: str
       { offsetHours: 2, dueFrom: "slot", channel: "email", kind: "follow_up", title: "Post-session next steps" },
     ],
   },
-  // MyoTech ES (myotech.es deals club). One immediate step and nothing
-  // delayed, deliberately: with no cron, an offset-0 step is the only step
-  // guaranteed to fire, and it fires in the same request as the signup.
-  // The welcome email carries the standard 10% code from the event's own
-  // data (discountCode, locale), rendered bilingually by deals_welcome.
+  // MyoTech ES (myotech.es deals club).
+  //
+  // The discount deliberately does NOT arrive at signup. Somebody who joins
+  // the club while they are already deciding to buy would be handed ten per
+  // cent off a sale that was going to happen anyway, which costs margin and
+  // buys nothing. So the code waits two days, by which point it is a reason
+  // to come back rather than a discount on a basket already in hand.
+  //
+  // The immediate step is a plain confirmation with no code in it. It exists
+  // because a signup that produces silence for two days reads as broken, and
+  // because a first send on day zero is what establishes the sender with the
+  // recipient's mailbox provider.
+  //
+  // The 48h step depends on the lifecycle tick calling runDueJourneys, which
+  // it now does every minute. Before that, a delayed step only advanced when
+  // an unrelated storefront event happened to arrive.
   {
     key: "myotech-es-deals-welcome", name: "MyoTech ES · deals welcome", platform: "myotech-es", trigger: "myotech-es.deals_signup",
     steps: [
-      { offsetHours: 0, channel: "email", kind: "deals_welcome", title: "10% welcome code" },
+      { offsetHours: 0, channel: "email", kind: "deals_joined", title: "Welcome to the deals club" },
+      { offsetHours: 48, channel: "email", kind: "deals_welcome", title: "10% welcome code" },
     ],
   },
 ];
 
 export async function ensureJourneys(workspaceId: string): Promise<void> {
   for (const j of SEED_JOURNEYS) {
+    // update, not {}: these journeys have no editor anywhere in the product,
+    // so the code is their only definition. Leaving update empty meant a
+    // change to a step here never reached a workspace that had already
+    // booted once, which is every workspace that matters.
+    const data = {
+      name: j.name,
+      platform: j.platform,
+      trigger: j.trigger,
+      steps: JSON.stringify(j.steps),
+    };
     await db.journey.upsert({
       where: { workspaceId_key: { workspaceId, key: j.key } },
-      update: {},
-      create: { workspaceId, key: j.key, name: j.name, platform: j.platform, trigger: j.trigger, steps: JSON.stringify(j.steps) },
+      update: data,
+      create: { workspaceId, key: j.key, ...data },
     });
   }
 }
@@ -183,7 +205,10 @@ export function renderEmail(
 
   // MyoTech ES speaks for its own brand, in the member's own language, and
   // never borrows the NITO wrapper with its private-client-manager footer.
-  if (kind === "deals_welcome") {
+  if (kind === "deals_welcome" || kind === "deals_joined") {
+    // Two emails, one card. "joined" goes out at signup and carries no
+    // discount; "welcome" follows two days later and carries the code.
+    const withCode = kind === "deals_welcome";
     const code = String(ctx.discountCode ?? "MARBELLA10");
     const es = String(ctx.locale ?? "") === "es";
     // The shop's own WhatsApp number rides in with the event so this file
@@ -193,20 +218,35 @@ export function renderEmail(
     // The message the member sends us, with their code already in it. One
     // tap from the inbox to a WhatsApp order that names the discount, so
     // nobody has to remember, copy or retype anything.
-    const waMessage = es
-      ? `Hola MyoTech ES, me he unido al club de ofertas. Mi código es ${code}. Quiero pedir:`
-      : `Hi MyoTech ES, I have joined the deals club. My code is ${code}. I would like to order:`;
+    const waMessage = withCode
+      ? (es
+        ? `Hola MyoTech ES, me he unido al club de ofertas. Mi código es ${code}. Quiero pedir:`
+        : `Hi MyoTech ES, I have joined the deals club. My code is ${code}. I would like to order:`)
+      : (es
+        ? "Hola MyoTech ES, me he unido al club de ofertas. Quiero preguntar por:"
+        : "Hi MyoTech ES, I have joined the deals club. I would like to ask about:");
     const waUrl = `https://wa.me/${wa}?text=${encodeURIComponent(waMessage)}`;
 
-    const subject = es
-      ? `Tu código MyoTech ES del 10% está aquí`
-      : `Your 10% MyoTech ES code is here`;
+    const subject = withCode
+      ? (es ? "Tu código MyoTech ES del 10% está aquí" : "Your 10% MyoTech ES code is here")
+      : (es ? "Ya eres miembro del Deals Club de MyoTech ES" : "You are in. Welcome to the MyoTech ES Deals Club");
     const heading = es ? "Bienvenido al club de ofertas" : "Welcome to the deals club";
-    const bodyLine = es
-      ? "Gracias por unirte al club de ofertas de MyoTech ES. Este es tu código de bienvenida del 10%: dilo en tu pedido de WhatsApp y lo aplicamos."
-      : "Thanks for joining the MyoTech ES deals club. This is your 10% welcome code: quote it in your WhatsApp order and we apply it.";
+    const bodyLine = withCode
+      ? (es
+        ? "Este es tu código de bienvenida del 10%: dilo en tu pedido de WhatsApp y lo aplicamos."
+        : "This is your 10% welcome code: quote it in your WhatsApp order and we apply it.")
+      : (es
+        ? "Gracias por unirte al club de ofertas de MyoTech ES. A partir de ahora te avisamos de las ofertas de Marbella y de las reposiciones antes que a nadie."
+        : "Thanks for joining the MyoTech ES deals club. From now on you hear about Marbella deals and restocks before anyone else.");
     const codeLabel = es ? "Tu código" : "Your code";
-    const waCta = es ? "Pedir por WhatsApp con mi código" : "Order on WhatsApp with my code";
+    // The confirmation says when the code lands rather than showing one,
+    // so nobody is left wondering whether they missed it.
+    const codeSoon = es
+      ? "Tu código de bienvenida del 10% te llega por correo en un par de días."
+      : "Your 10% welcome code arrives by email in a couple of days.";
+    const waCta = withCode
+      ? (es ? "Pedir por WhatsApp con mi código" : "Order on WhatsApp with my code")
+      : (es ? "Escríbenos por WhatsApp" : "Message us on WhatsApp");
     // The button is the fast path; the number underneath is the one that
     // still works when a mail app swallows the button or the reader is at
     // a desktop with no WhatsApp on it.
@@ -250,7 +290,7 @@ export function renderEmail(
       // MYOTECH_ES_FROM overrides it the day myotech.es is verified too.
       from: process.env.MYOTECH_ES_FROM ?? "MyoTech ES <hello@news.myotech.store>",
       replyTo: process.env.MYOTECH_ES_REPLY_TO ?? "hello@myotech.store",
-      text: `${heading}\n\n${bodyLine}\n\n${codeLabel}: ${code}\n\n${waCta}: ${waUrl}\n\n${orElse} ${waNumberLabel}\n\n${ukLine}\n\n${nextLine}\n\n${site}\n\n${footer}`,
+      text: `${heading}\n\n${bodyLine}\n\n${withCode ? `${codeLabel}: ${code}` : codeSoon}\n\n${waCta}: ${waUrl}\n\n${orElse} ${waNumberLabel}\n\n${ukLine}\n\n${nextLine}\n\n${site}\n\n${footer}`,
       html: `<!DOCTYPE html><html lang="${es ? "es" : "en"}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <!-- Tell every client that respects the ask to leave these colours alone. -->
 <meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light">
@@ -265,10 +305,12 @@ export function renderEmail(
 <tr><td align="center" bgcolor="#ffffff" style="background-color:#ffffff;padding:24px;text-align:center">
 <p style="margin:0 0 10px;font-family:${font};font-size:20px;font-weight:800;color:#0d1b2a;line-height:1.3;text-align:center">${esc(heading)}</p>
 <p style="margin:0;font-family:${font};font-size:14px;color:#46586b;line-height:1.65;text-align:center">${esc(bodyLine)}</p>
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:18px 0"><tr><td align="center" bgcolor="#f2fbfa" style="background-color:#f2fbfa;border:1px solid #00a89e;border-radius:12px;padding:15px 12px">
+${withCode ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:18px 0"><tr><td align="center" bgcolor="#f2fbfa" style="background-color:#f2fbfa;border:1px solid #00a89e;border-radius:12px;padding:15px 12px">
 <div style="font-family:${font};font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#5b7183">${esc(codeLabel)}</div>
 <div style="margin-top:5px;font-family:${font};font-size:27px;font-weight:800;letter-spacing:3px;color:#00776f">${esc(code)}</div>
-</td></tr></table>
+</td></tr></table>` : `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:18px 0"><tr><td align="center" bgcolor="#f2fbfa" style="background-color:#f2fbfa;border:1px solid #cfe6e3;border-radius:12px;padding:14px 12px">
+<div style="font-family:${font};font-size:13.5px;font-weight:600;color:#00776f;line-height:1.5">${esc(codeSoon)}</div>
+</td></tr></table>`}
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 18px"><tr><td align="center" bgcolor="${WA_GREEN}" style="background-color:${WA_GREEN};border-radius:999px">
 <a href="${esc(waUrl)}" target="_blank" style="display:block;padding:15px 20px;font-family:${font};font-size:16px;font-weight:700;color:#ffffff;text-decoration:none;background-color:${WA_GREEN};border-radius:999px"><span style="color:#ffffff;text-decoration:none">${esc(waCta)}</span></a>
 </td></tr></table>
@@ -353,19 +395,40 @@ export async function ingestIntelligenceEvent(workspaceId: string, evt: Intellig
 // enough to ride live event traffic (MyoTech tracking alone provides a
 // steady pulse), throttled to once per 5 minutes per process. A cron on
 // /api/v1/journeys/run remains the deterministic production trigger.
+//
+// This one is opportunistic: it rides on incoming tracked events and is
+// throttled so a busy store cannot make every event pay for a sweep. It is
+// a bonus, never the guarantee. The guarantee is runDueJourneys() below,
+// which the platform tick calls every minute.
 let lastJourneySweep = 0;
 export async function sweepDueJourneys(): Promise<void> {
   if (Date.now() - lastJourneySweep < 5 * 60_000) return;
   lastJourneySweep = Date.now();
-  const workspaces = await db.journeyEnrolment.findMany({
+  await runDueJourneys().catch(() => undefined);
+}
+
+/**
+ * Every journey step that is due, across every workspace.
+ *
+ * Called from the lifecycle tick, so a delayed step fires within about a
+ * minute of falling due whether or not any other traffic happens to arrive.
+ * Before this existed the only thing that advanced a delayed step was an
+ * unrelated storefront event wandering in, which meant a two day wait could
+ * silently become a week on a quiet site, or never on a site with no store
+ * tracker at all.
+ */
+export async function runDueJourneys(): Promise<number> {
+  const pending = await db.journeyEnrolment.findMany({
     where: { status: "active", nextDueAt: { lte: new Date() } },
     select: { journey: { select: { workspaceId: true } } },
-    distinct: ["journeyId"],
-    take: 10,
+    take: 200,
   });
-  for (const w of new Set(workspaces.map((x) => x.journey.workspaceId))) {
-    await processDueJourneySteps(w).catch(() => undefined);
+  let executed = 0;
+  for (const w of new Set(pending.map((x) => x.journey.workspaceId))) {
+    const r = await processDueJourneySteps(w).catch(() => ({ executed: 0 }));
+    executed += r.executed;
   }
+  return executed;
 }
 
 export async function processDueJourneySteps(workspaceId: string, now: Date = new Date()): Promise<{ executed: number }> {

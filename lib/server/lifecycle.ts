@@ -10,6 +10,7 @@
 import { advanceAll } from "@/lib/server/billing/lifecycle";
 import { runDueBatches } from "@/lib/server/smart-send";
 import { advanceDueRuns, retryFailedSends, sweepWinback } from "@/lib/server/automations";
+import { runDueJourneys } from "@/lib/server/intelligence";
 
 export type LifecycleTickSummary = {
   changed: number;
@@ -18,6 +19,8 @@ export type LifecycleTickSummary = {
   automationRuns: number;
   winbackEnrolled: number;
   retriedSends: number;
+  /** Journey steps executed: the delayed half of the Comms OS sequences. */
+  journeySteps: number;
 };
 
 /** One tick. Extracted from the route so the ticker can run it without a request. */
@@ -38,6 +41,12 @@ export async function runLifecycleTick(opts: { origin?: string } = {}): Promise<
   const automationRuns = await advanceDueRuns();
   const winbackEnrolled = await sweepWinback();
   const retriedSends = await retryFailedSends();
+  // Journeys were the one time-driven thing not on this tick: a delayed step
+  // only advanced when an unrelated storefront event wandered in, so a two
+  // day wait could stretch indefinitely on a quiet site. Now it is a job like
+  // any other, and processDueJourneySteps only touches enrolments that are
+  // actually due, so running it every minute is cheap.
+  const journeySteps = await runDueJourneys();
 
   return {
     changed: actions.length,
@@ -46,6 +55,7 @@ export async function runLifecycleTick(opts: { origin?: string } = {}): Promise<
     automationRuns,
     winbackEnrolled,
     retriedSends,
+    journeySteps,
   };
 }
 

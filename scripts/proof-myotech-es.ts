@@ -144,24 +144,64 @@ async function main() {
   const enrolment = await db.journeyEnrolment.findFirst({
     where: { contactId: contact.id, journey: { key: "myotech-es-deals-welcome" } },
   });
+  // Step 1 fires in the signup request and carries NO code. Step 2 is the
+  // discount and is parked 48 hours out, so somebody who joined mid-purchase
+  // is not handed ten per cent off the basket they already had.
   check(
-    "one immediate step, then completed (no cron dependency)",
-    Boolean(enrolment && enrolment.status === "completed" && enrolment.stepIndex === 1),
+    "still enrolled after signup, waiting on the delayed step",
+    Boolean(enrolment && enrolment.status === "active" && enrolment.stepIndex === 1),
     enrolment ? `${enrolment.status} @ ${enrolment.stepIndex}` : "no enrolment",
+  );
+  const dueInHours = enrolment?.nextDueAt
+    ? (enrolment.nextDueAt.getTime() - Date.now()) / 3_600_000
+    : -1;
+  check(
+    "the discount is parked about 48 hours out",
+    dueInHours > 47 && dueInHours < 49,
+    `${dueInHours.toFixed(1)}h`,
   );
   const journeyLine = await db.timelineItem.findFirst({
     where: { contactId: contact.id, type: "journey_email" },
   });
   check(
-    "welcome email step on the timeline",
-    Boolean(journeyLine && journeyLine.title.includes("10% welcome code")),
+    "confirmation email step on the timeline, not the code",
+    Boolean(journeyLine && journeyLine.title.includes("Welcome to the deals club")),
     journeyLine?.title,
   );
+  const codeSentEarly = await db.timelineItem.findFirst({
+    where: { contactId: contact.id, type: "journey_email", title: { contains: "10% welcome code" } },
+  });
+  check("the 10% code did NOT go out at signup", codeSentEarly === null);
   check(
     "email step was not skipped for consent",
     Boolean(journeyLine && !(journeyLine.detail ?? "").includes("skipped")),
     journeyLine?.detail ?? "",
   );
+
+  console.log("The delayed step, once it falls due");
+  {
+    const { runDueJourneys } = await import("../lib/server/intelligence");
+    // Nothing is due yet, so a tick now must send nothing.
+    await runDueJourneys();
+    const early = await db.timelineItem.findFirst({
+      where: { contactId: contact.id, type: "journey_email", title: { contains: "10% welcome code" } },
+    });
+    check("a tick before it is due sends nothing", early === null);
+
+    // Wind the clock back on the enrolment rather than waiting two days.
+    await db.journeyEnrolment.update({
+      where: { id: enrolment!.id },
+      data: { nextDueAt: new Date(Date.now() - 60_000) },
+    });
+    const executed = await runDueJourneys();
+    check("the tick executes the due step", executed >= 1, `executed ${executed}`);
+    const codeLine = await db.timelineItem.findFirst({
+      where: { contactId: contact.id, type: "journey_email", title: { contains: "10% welcome code" } },
+    });
+    check("the 10% code goes out on the delayed step", codeLine !== null);
+    const done = await db.journeyEnrolment.findUnique({ where: { id: enrolment!.id } });
+    check("journey completed after the second step", done?.status === "completed", done?.status);
+  }
 
   console.log("Welcome email content");
   const ctx = { discountCode: "MARBELLA10", locale: "es", whatsappNumber: "34672598404" };
@@ -193,6 +233,20 @@ async function main() {
   const esDecoded = decodeURIComponent((/href="https:\/\/wa\.me\/[^?]+\?text=([^"]+)"/.exec(es.html)?.[1]) ?? "");
   check("spanish prefilled message is spanish", esDecoded.includes("Hola") && esDecoded.includes("MARBELLA10"), esDecoded);
   check("text part carries the same whatsapp link", (en.text ?? "").includes("https://wa.me/34672598404"));
+
+  // The confirmation: same card, no code anywhere in it.
+  const joined = renderEmail("deals_joined", { ...ctx, locale: "en" }, null);
+  check("confirmation names the club, not a discount", !joined.subject.includes("10%"), joined.subject);
+  check("confirmation contains no code", !joined.html.includes("MARBELLA10"));
+  check("confirmation says when the code arrives", /arrives by email in a couple of days/.test(joined.html));
+  check("confirmation still carries the WhatsApp button", joined.html.includes("wa.me/34672598404"));
+  const joinedWa = decodeURIComponent(
+    /href="https:\/\/wa\.me\/[^?]+\?text=([^"]+)"/.exec(joined.html)?.[1] ?? "",
+  );
+  check("confirmation prefill does not promise a code", !joinedWa.includes("My code is"), joinedWa);
+  const joinedEs = renderEmail("deals_joined", { ...ctx, locale: "es" }, null);
+  check("spanish confirmation has no code", !joinedEs.html.includes("MARBELLA10"));
+  check("spanish confirmation says when it arrives", /en un par de días/.test(joinedEs.html));
 
   // UK availability, said in both languages.
   check("english mentions UK shipping", /ship across the UK/i.test(en.html));
